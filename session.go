@@ -99,7 +99,6 @@ func (s *session) start(localMasterKey, localMasterSalt, remoteMasterKey, remote
 
 			if err = child.decrypt(b[:i]); err != nil {
 				fmt.Println(err)
-				return
 			}
 		}
 	}()
