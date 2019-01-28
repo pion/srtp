@@ -3,7 +3,7 @@
   Pion SRTP
   <br>
 </h1>
-<h4 align="center">A Go implementation of the SRTP</h4>
+<h4 align="center">A Go implementation of SRTP</h4>
 <p align="center">
   <a href="https://pion.ly"><img src="https://img.shields.io/badge/pion-srtp-gray.svg?longCache=true&colorB=brightgreen" alt="Pion SRTP"></a>
   <a href="https://sourcegraph.com/github.com/pions/srtp?badge"><img src="https://sourcegraph.com/github.com/pions/srtp/-/badge.svg" alt="Sourcegraph Widget"></a>

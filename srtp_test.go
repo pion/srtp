@@ -4,7 +4,7 @@ import (
 	"bytes"
 	"testing"
 
-	"github.com/pions/webrtc/pkg/rtp"
+	"github.com/pions/rtp"
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/assert"
 )

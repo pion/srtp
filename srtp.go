@@ -4,7 +4,7 @@ import (
 	"crypto/cipher"
 	"encoding/binary"
 
-	"github.com/pions/webrtc/pkg/rtp"
+	"github.com/pions/rtp"
 	"github.com/pkg/errors"
 )
 

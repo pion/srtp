@@ -6,7 +6,7 @@ import (
 	"io"
 	"net"
 
-	"github.com/pions/webrtc/pkg/rtcp"
+	"github.com/pions/rtcp"
 )
 
 // SessionSRTCP implements io.ReadWriteCloser and provides a bi-directional SRTCP session

@@ -3,7 +3,7 @@ package srtp
 import (
 	"fmt"
 
-	"github.com/pions/webrtc/pkg/rtp"
+	"github.com/pions/rtp"
 )
 
 type readResultSRTP struct {
