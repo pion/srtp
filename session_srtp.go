@@ -16,12 +16,29 @@ type SessionSRTP struct {
 	writeStream *WriteStreamSRTP
 }
 
-// CreateSessionSRTP creates a new SessionSRTP
-func CreateSessionSRTP() *SessionSRTP {
-	s := &SessionSRTP{}
+// NewSessionSRTP creates a SRTP session using conn as the underlying transport.
+func NewSessionSRTP(conn net.Conn, config *Config) (*SessionSRTP, error) {
+	s := &SessionSRTP{
+		session: session{
+			nextConn:    conn,
+			readStreams: map[uint32]readStream{},
+			newStream:   make(chan readStream),
+			started:     make(chan interface{}),
+			closed:      make(chan interface{}),
+		},
+	}
 	s.writeStream = &WriteStreamSRTP{s}
-	s.session.initalize()
-	return s
+
+	err := s.session.start(
+		config.Keys.LocalMasterKey, config.Keys.LocalMasterSalt,
+		config.Keys.RemoteMasterKey, config.Keys.RemoteMasterSalt,
+		config.Profile,
+		s,
+	)
+	if err != nil {
+		return nil, err
+	}
+	return s, nil
 }
 
 // Start initializes any crypto context and allows reading/writing to begin

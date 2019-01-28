@@ -18,18 +18,29 @@ type SessionSRTCP struct {
 	writeStream *WriteStreamSRTCP
 }
 
-// CreateSessionSRTCP creates a new SessionSRTCP
-func CreateSessionSRTCP() *SessionSRTCP {
-	s := &SessionSRTCP{}
+// NewSessionSRTCP creates a SRTCP session using conn as the underlying transport.
+func NewSessionSRTCP(conn net.Conn, config *Config) (*SessionSRTCP, error) {
+	s := &SessionSRTCP{
+		session: session{
+			nextConn:    conn,
+			readStreams: map[uint32]readStream{},
+			newStream:   make(chan readStream),
+			started:     make(chan interface{}),
+			closed:      make(chan interface{}),
+		},
+	}
 	s.writeStream = &WriteStreamSRTCP{s}
-	s.session.initalize()
-	return s
-}
 
-// Start initializes any crypto context and allows reading/writing to begin
-func (s *SessionSRTCP) Start(localMasterKey, localMasterSalt, remoteMasterKey, remoteMasterSalt []byte, profile ProtectionProfile, nextConn net.Conn) error {
-	s.session.nextConn = nextConn
-	return s.session.start(localMasterKey, localMasterSalt, remoteMasterKey, remoteMasterSalt, profile, s)
+	err := s.session.start(
+		config.Keys.LocalMasterKey, config.Keys.LocalMasterSalt,
+		config.Keys.RemoteMasterKey, config.Keys.RemoteMasterSalt,
+		config.Profile,
+		s,
+	)
+	if err != nil {
+		return nil, err
+	}
+	return s, nil
 }
 
 // OpenWriteStream returns the global write stream for the Session
