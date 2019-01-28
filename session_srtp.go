@@ -43,7 +43,7 @@ func (s *SessionSRTP) OpenReadStream(SSRC uint32) (*ReadStreamSRTP, error) {
 	if readStream, ok := r.(*ReadStreamSRTP); ok {
 		return readStream, nil
 	}
-	return nil, fmt.Errorf("Failed to open ReadStreamSRCTP, type assertion failed")
+	return nil, fmt.Errorf("failed to open ReadStreamSRCTP, type assertion failed")
 }
 
 // AcceptStream returns a stream to handle RTCP for a single SSRC
@@ -96,7 +96,7 @@ func (s *SessionSRTP) decrypt(buf []byte) error {
 
 	readStream, ok := r.(*ReadStreamSRTP)
 	if !ok {
-		return fmt.Errorf("Failed to get/create ReadStreamSRTP")
+		return fmt.Errorf("failed to get/create ReadStreamSRTP")
 	}
 
 	readBuf := <-readStream.readCh
@@ -104,7 +104,7 @@ func (s *SessionSRTP) decrypt(buf []byte) error {
 	if err != nil {
 		return err
 	} else if len(decrypted) > len(readBuf) {
-		return fmt.Errorf("Input buffer was not long enough to contain decrypted RTP")
+		return fmt.Errorf("input buffer was not long enough to contain decrypted RTP")
 	}
 
 	readStream.readRetCh <- readResultSRTP{
