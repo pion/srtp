@@ -28,6 +28,23 @@ type session struct {
 	nextConn net.Conn
 }
 
+// Config is used to configure a session.
+// You can provide either a KeyingMaterialExporter to export keys
+// or directly pass the keys themselves.
+// After a Config is passed to a session it must not be modified.
+type Config struct {
+	Keys    SessionKeys
+	Profile ProtectionProfile
+}
+
+// SessionKeys bundles the keys required to setup an SRTP session
+type SessionKeys struct {
+	LocalMasterKey   []byte
+	LocalMasterSalt  []byte
+	RemoteMasterKey  []byte
+	RemoteMasterSalt []byte
+}
+
 func (s *session) getOrCreateReadStream(ssrc uint32, child streamSession, proto readStream) (readStream, bool) {
 	s.readStreamsLock.Lock()
 	defer s.readStreamsLock.Unlock()
@@ -46,13 +63,6 @@ func (s *session) getOrCreateReadStream(ssrc uint32, child streamSession, proto 
 		return proto, true
 	}
 	return r, false
-}
-
-func (s *session) initalize() {
-	s.readStreams = map[uint32]readStream{}
-	s.newStream = make(chan readStream)
-	s.started = make(chan interface{})
-	s.closed = make(chan interface{})
 }
 
 func (s *session) close() error {
