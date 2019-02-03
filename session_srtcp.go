@@ -131,6 +131,10 @@ func (s *SessionSRTCP) decrypt(buf []byte) error {
 				return fmt.Errorf("failed to get/create ReadStreamSRTP")
 			}
 
+			// Ensure that readStream.Close() isn't called while in flight
+			readStream.mu.Lock()
+			defer readStream.mu.Unlock()
+
 			readBuf := <-readStream.readCh
 			if len(readBuf) < len(decrypted) {
 				return fmt.Errorf("input buffer was not long enough to contain decrypted RTCP")

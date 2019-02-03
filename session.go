@@ -65,6 +65,17 @@ func (s *session) getOrCreateReadStream(ssrc uint32, child streamSession, proto 
 	return r, false
 }
 
+func (s *session) removeReadStream(ssrc uint32) {
+	s.readStreamsLock.Lock()
+	defer s.readStreamsLock.Unlock()
+
+	if s.readStreamsClosed {
+		return
+	}
+
+	delete(s.readStreams, ssrc)
+}
+
 func (s *session) close() error {
 	if s.nextConn == nil {
 		return nil

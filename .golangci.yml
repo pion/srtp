@@ -11,6 +11,7 @@ linters:
     - dupl
     - gocritic
     - gochecknoglobals
+    - maligned
 
 issues:
   exclude-use-default: false
