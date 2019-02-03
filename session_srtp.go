@@ -116,6 +116,10 @@ func (s *SessionSRTP) decrypt(buf []byte) error {
 		return fmt.Errorf("failed to get/create ReadStreamSRTP")
 	}
 
+	// Ensure that readStream.Close() isn't called while in flight
+	readStream.mu.Lock()
+	defer readStream.mu.Unlock()
+
 	readBuf := <-readStream.readCh
 	decrypted, err := s.remoteContext.decryptRTP(readBuf, buf, h)
 	if err != nil {
