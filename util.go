@@ -2,6 +2,17 @@ package srtp
 
 import "bytes"
 
+// Grow the buffer size to the given number of bytes.
+func growBufferSize(buf []byte, size int) []byte {
+	if size <= cap(buf) {
+		return buf[:size]
+	}
+
+	buf2 := make([]byte, size)
+	copy(buf2, buf)
+	return buf2
+}
+
 // Check if buffers match, if not allocate a new buffer and return it
 func allocateIfMismatch(dst, src []byte) []byte {
 	if dst == nil {

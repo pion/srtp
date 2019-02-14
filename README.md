@@ -37,6 +37,7 @@ Check out the **[contributing wiki](https://github.com/pions/webrtc/wiki/Contrib
 * [Michiel De Backker](https://github.com/backkem) - *io.Writer interfaces*
 * [Tobias Fridén](https://github.com/tobiasfriden) *SRTP authentication verification*
 * [chenkaiC4](https://github.com/chenkaiC4) - *Fix GolangCI Linter*
+* [Luke Curley](https://github.com/kixelated) - *Performance*
 
 ### License
 MIT License - see [LICENSE](LICENSE) for full text
