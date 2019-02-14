@@ -122,6 +122,7 @@ func (w *WriteStreamSRTP) WriteRTP(header *rtp.Header, payload []byte) (int, err
 		return 0, err
 	}
 
+	// TODO(@lcurley) This will cause one, potentially two, extra allocations.
 	return w.session.write(append(headerRaw, payload...))
 }
 

@@ -44,36 +44,62 @@ func (c *Context) DecryptRTP(dst, encrypted []byte, header *rtp.Header) ([]byte,
 	return c.decryptRTP(dst, encrypted, header)
 }
 
-func (c *Context) encryptRTP(dst, decrypted []byte, header *rtp.Header) ([]byte, error) {
-	dst = allocateIfMismatch(dst, decrypted)
-
-	s := c.getSSRCState(header.SSRC)
-
-	c.updateRolloverCount(header.SequenceNumber, s)
-
-	stream := cipher.NewCTR(c.srtpBlock, c.generateCounter(header.SequenceNumber, s.rolloverCounter, s.ssrc, c.srtpSessionSalt))
-	stream.XORKeyStream(dst[header.PayloadOffset:], dst[header.PayloadOffset:])
-
-	dst = append(dst, make([]byte, 4)...)
-	binary.BigEndian.PutUint32(dst[len(dst)-4:], s.rolloverCounter)
-
-	authTag, err := c.generateAuthTag(dst, c.srtpSessionAuthTag)
-	if err != nil {
-		return nil, err
-	}
-
-	return append(dst[:len(dst)-4], authTag...), nil
-}
-
-// EncryptRTP Encrypts a RTP packet
-func (c *Context) EncryptRTP(dst, decrypted []byte, header *rtp.Header) ([]byte, error) {
+// EncryptRTP encrypts a plaintext RTP packet, writing to the dst buffer provided.
+// If the dst buffer does not have the capacity to hold `len(plaintext) + 10` bytes, a new one will be allocated.
+// If a rtp.Header is provided, it will be Unmarshaled using the plaintext.
+func (c *Context) EncryptRTP(dst []byte, plaintext []byte, header *rtp.Header) ([]byte, error) {
+	// TODO(@lcurley) Potentially accept a *rtp.Packet to avoid this Unmarshal
 	if header == nil {
 		header = &rtp.Header{}
 	}
 
-	if err := header.Unmarshal(decrypted); err != nil {
+	err := header.Unmarshal(plaintext)
+	if err != nil {
 		return nil, err
 	}
 
-	return c.encryptRTP(dst, decrypted, header)
+	// Write to dst starting at this offset.
+	offset := 0
+
+	// Grow the given buffer to fit the output.
+	// authTag = 10 bytes
+	dst = growBufferSize(dst, len(plaintext)+10)
+
+	s := c.getSSRCState(header.SSRC)
+	c.updateRolloverCount(header.SequenceNumber, s)
+
+	// Copy the header unencrypted.
+	headerSize := header.PayloadOffset
+
+	// Skip the copy if the two slices share memory addresses.
+	if &dst[0] != &plaintext[0] {
+		copy(dst[offset:], plaintext[:headerSize])
+	}
+
+	offset += headerSize
+
+	// Encrypt the payload
+	counter := c.generateCounter(header.SequenceNumber, s.rolloverCounter, s.ssrc, c.srtpSessionSalt)
+	stream := cipher.NewCTR(c.srtpBlock, counter)
+	stream.XORKeyStream(dst[offset:], plaintext[headerSize:])
+	offset += len(plaintext) - headerSize
+
+	// Write the rollover counter just for computing the auth tag.
+	// We will overwrite it immediately afterwards.
+	binary.BigEndian.PutUint32(dst[offset:], s.rolloverCounter)
+	offset += 4
+
+	// Generate the auth tag.
+	authTag, err := c.generateAuthTag(dst[:offset], c.srtpSessionAuthTag)
+	if err != nil {
+		return nil, err
+	}
+
+	// Pop off the rollover counter.
+	offset -= 4
+
+	// Write the auth tag to the dest.
+	copy(dst[offset:], authTag)
+
+	return dst, nil
 }

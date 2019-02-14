@@ -122,23 +122,22 @@ func TestRolloverCount(t *testing.T) {
 	}
 }
 
-func buildTestContext(t *testing.T) *Context {
+func buildTestContext() (*Context, error) {
 	masterKey := []byte{0x0d, 0xcd, 0x21, 0x3e, 0x4c, 0xbc, 0xf2, 0x8f, 0x01, 0x7f, 0x69, 0x94, 0x40, 0x1e, 0x28, 0x89}
 	masterSalt := []byte{0x62, 0x77, 0x60, 0x38, 0xc0, 0x6d, 0xc9, 0x41, 0x9f, 0x6d, 0xd9, 0x43, 0x3e, 0x7c}
 
-	context, err := CreateContext(masterKey, masterSalt, cipherContextAlgo)
-	if err != nil {
-		t.Fatal(errors.Wrap(err, "CreateContext failed"))
-	}
-
-	return context
+	return CreateContext(masterKey, masterSalt, cipherContextAlgo)
 }
 
 func TestRTPInvalidAuth(t *testing.T) {
 	masterKey := []byte{0x0d, 0xcd, 0x21, 0x3e, 0x4c, 0xbc, 0xf2, 0x8f, 0x01, 0x7f, 0x69, 0x94, 0x40, 0x1e, 0x28, 0x89}
 	invalidSalt := []byte{0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00}
 
-	encryptContext := buildTestContext(t)
+	encryptContext, err := buildTestContext()
+	if err != nil {
+		t.Fatal(err)
+	}
+
 	invalidContext, err := CreateContext(masterKey, invalidSalt, cipherContextAlgo)
 	if err != nil {
 		t.Fatal(errors.Wrap(err, "CreateContext failed"))
@@ -189,8 +188,15 @@ var rtpTestCases = []rtpTestCase{
 func TestRTPLifecyleNewAlloc(t *testing.T) {
 	assert := assert.New(t)
 
-	encryptContext := buildTestContext(t)
-	decryptContext := buildTestContext(t)
+	encryptContext, err := buildTestContext()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	decryptContext, err := buildTestContext()
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	for _, testCase := range rtpTestCases {
 		decryptedPkt := &rtp.Packet{Payload: rtpTestCaseDecrypted, Header: rtp.Header{SequenceNumber: testCase.sequenceNumber}}
@@ -225,8 +231,15 @@ func TestRTPLifecyleNewAlloc(t *testing.T) {
 func TestRTPLifecyleInPlace(t *testing.T) {
 	assert := assert.New(t)
 
-	encryptContext := buildTestContext(t)
-	decryptContext := buildTestContext(t)
+	encryptContext, err := buildTestContext()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	decryptContext, err := buildTestContext()
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	for _, testCase := range rtpTestCases {
 		decryptHeader := &rtp.Header{}
@@ -244,13 +257,13 @@ func TestRTPLifecyleInPlace(t *testing.T) {
 		}
 
 		// Copy packet, asserts that everything was done in place
-		encryptInput := make([]byte, len(decryptedRaw))
+		encryptInput := make([]byte, len(decryptedRaw), len(decryptedRaw)+10)
 		copy(encryptInput, decryptedRaw)
 
 		actualEncrypted, err := encryptContext.EncryptRTP(encryptInput, encryptInput, encryptHeader)
 		if err != nil {
 			t.Fatal(err)
-		} else if !bytes.Equal(encryptInput, actualEncrypted[:len(actualEncrypted)-authTagSize]) {
+		} else if &encryptInput[0] != &actualEncrypted[0] {
 			t.Fatal("EncryptRTP failed to encrypt in place")
 		} else if encryptHeader.SequenceNumber != testCase.sequenceNumber {
 			t.Fatal("EncryptRTP failed to populate input rtp.Header")
@@ -264,11 +277,57 @@ func TestRTPLifecyleInPlace(t *testing.T) {
 		actualDecrypted, err := decryptContext.DecryptRTP(decryptInput, decryptInput, decryptHeader)
 		if err != nil {
 			t.Fatal(err)
-		} else if !bytes.Equal(decryptInput[:len(decryptInput)-authTagSize], actualDecrypted) {
+		} else if &decryptInput[0] != &actualDecrypted[0] {
 			t.Fatal("DecryptRTP failed to decrypt in place")
 		} else if decryptHeader.SequenceNumber != testCase.sequenceNumber {
 			t.Fatal("DecryptRTP failed to populate input rtp.Header")
 		}
 		assert.Equalf(actualDecrypted, decryptedRaw, "RTP packet with SeqNum invalid decryption: %d", testCase.sequenceNumber)
+	}
+}
+
+func BenchmarkEncryptRTP(b *testing.B) {
+	encryptContext, err := buildTestContext()
+	if err != nil {
+		b.Fatal(err)
+	}
+
+	pkt := &rtp.Packet{Payload: make([]byte, 100)}
+	pktRaw, err := pkt.Marshal()
+	if err != nil {
+		b.Fatal(err)
+	}
+
+	b.ResetTimer()
+
+	for i := 0; i < b.N; i++ {
+		_, err = encryptContext.EncryptRTP(nil, pktRaw, nil)
+		if err != nil {
+			b.Fatal(err)
+		}
+	}
+}
+
+func BenchmarkEncryptRTPInPlace(b *testing.B) {
+	encryptContext, err := buildTestContext()
+	if err != nil {
+		b.Fatal(err)
+	}
+
+	pkt := &rtp.Packet{Payload: make([]byte, 100)}
+	pktRaw, err := pkt.Marshal()
+	if err != nil {
+		b.Fatal(err)
+	}
+
+	buf := make([]byte, 0, len(pktRaw)+10)
+
+	b.ResetTimer()
+
+	for i := 0; i < b.N; i++ {
+		buf, err = encryptContext.EncryptRTP(buf[:0], pktRaw, nil)
+		if err != nil {
+			b.Fatal(err)
+		}
 	}
 }
