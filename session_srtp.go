@@ -27,7 +27,7 @@ func NewSessionSRTP(conn net.Conn, config *Config) (*SessionSRTP, error) {
 			closed:      make(chan interface{}),
 		},
 	}
-	s.writeStream = &WriteStreamSRTP{s}
+	s.writeStream = &WriteStreamSRTP{session: s}
 
 	err := s.session.start(
 		config.Keys.LocalMasterKey, config.Keys.LocalMasterSalt,
@@ -91,11 +91,12 @@ func (s *SessionSRTP) write(buf []byte) (int, error) {
 	s.session.localContextMutex.Lock()
 	defer s.session.localContextMutex.Unlock()
 
-	encrypted, err := s.localContext.EncryptRTP(nil, buf, nil)
+	buf, err := s.localContext.EncryptRTP(buf, buf, nil)
 	if err != nil {
 		return 0, err
 	}
-	return s.session.nextConn.Write(encrypted)
+
+	return s.session.nextConn.Write(buf)
 }
 
 func (s *SessionSRTP) decrypt(buf []byte) error {

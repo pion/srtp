@@ -69,7 +69,7 @@ type Context struct {
 // CreateContext creates a new SRTP Context
 func CreateContext(masterKey, masterSalt []byte, profile ProtectionProfile) (c *Context, err error) {
 	if masterKeyLen := len(masterKey); masterKeyLen != keyLen {
-		return c, errors.Errorf("SRTP Master Key must be len %d, got %d", masterKey, keyLen)
+		return c, errors.Errorf("SRTP Master Key must be len %d, got %d", masterKeyLen, keyLen)
 	} else if masterSaltLen := len(masterSalt); masterSaltLen != saltLen {
 		return c, errors.Errorf("SRTP Salt must be len %d, got %d", saltLen, masterSaltLen)
 	}

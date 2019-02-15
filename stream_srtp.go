@@ -113,17 +113,32 @@ func (r *ReadStreamSRTP) GetSSRC() uint32 {
 // WriteStreamSRTP is stream for a single Session that is used to encrypt RTP
 type WriteStreamSRTP struct {
 	session *SessionSRTP
+	buffer  []byte
 }
 
-// WriteRTP encrypts a RTP header and its payload to the nextConn
-func (w *WriteStreamSRTP) WriteRTP(header *rtp.Header, payload []byte) (int, error) {
-	headerRaw, err := header.Marshal()
+// WriteRTP encrypts a RTP packet and writes to the nextConn
+func (w *WriteStreamSRTP) WriteRTP(header *rtp.Header, payload []byte) (size int, err error) {
+	// Calculate the packet size and add 10 bytes for the auth key.
+	packetSize := header.PayloadOffset + len(payload) + 10
+
+	// Allocate the buffer if it's not large enough.
+	// After a period of sustained writes, the buffer will eventually be large enough.
+	if cap(w.buffer) < packetSize {
+		w.buffer = make([]byte, 0, packetSize)
+	}
+
+	// Reuse the buffer to marshal the header packet.
+	w.buffer, err = header.MarshalTo(w.buffer[:0])
 	if err != nil {
 		return 0, err
 	}
 
-	// TODO(@lcurley) This will cause one, potentially two, extra allocations.
-	return w.session.write(append(headerRaw, payload...))
+	// TODO(@lcurley) If write/EncryptRTP took a rtp.Packet, then we could avoid this append.
+	// The encrypted payload could be written to the byte slice directly.
+	w.buffer = append(w.buffer, payload...)
+
+	// w.buffer will has 10 bytes of capacity for the auth key.
+	return w.session.write(w.buffer)
 }
 
 // Write encrypts and writes a full RTP packets to the nextConn
