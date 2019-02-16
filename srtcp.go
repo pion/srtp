@@ -24,7 +24,8 @@ func (c *Context) decryptRTCP(dst, encrypted []byte) ([]byte, error) {
 	index := binary.BigEndian.Uint32(srtcpIndexBuffer)
 	ssrc := binary.BigEndian.Uint32(encrypted[4:])
 
-	stream := cipher.NewCTR(c.srtcpBlock, c.generateCounter(uint16(index&0xffff), index>>16, ssrc, c.srtcpSessionSalt))
+	counter := c.generateCounter(uint16(index&0xffff), index>>16, ssrc, c.srtcpSessionSalt)
+	stream := cipher.NewCTR(c.srtcpBlock, counter[:])
 	stream.XORKeyStream(out[8:], out[8:])
 
 	return out, nil
@@ -54,7 +55,8 @@ func (c *Context) encryptRTCP(dst, decrypted []byte) ([]byte, error) {
 	}
 
 	// Encrypt everything after header
-	stream := cipher.NewCTR(c.srtcpBlock, c.generateCounter(uint16(c.srtcpIndex&0xffff), c.srtcpIndex>>16, ssrc, c.srtcpSessionSalt))
+	counter := c.generateCounter(uint16(c.srtcpIndex&0xffff), c.srtcpIndex>>16, ssrc, c.srtcpSessionSalt)
+	stream := cipher.NewCTR(c.srtcpBlock, counter[:])
 	stream.XORKeyStream(out[8:], out[8:])
 
 	// Add SRTCP Index and set Encryption bit

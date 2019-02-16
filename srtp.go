@@ -25,7 +25,8 @@ func (c *Context) decryptRTP(dst, encrypted []byte, header *rtp.Header) ([]byte,
 		return nil, errors.Errorf("Failed to verify auth tag")
 	}
 
-	stream := cipher.NewCTR(c.srtpBlock, c.generateCounter(header.SequenceNumber, s.rolloverCounter, s.ssrc, c.srtpSessionSalt))
+	counter := c.generateCounter(header.SequenceNumber, s.rolloverCounter, s.ssrc, c.srtpSessionSalt)
+	stream := cipher.NewCTR(c.srtpBlock, counter[:])
 	stream.XORKeyStream(dst[header.PayloadOffset:], dst[header.PayloadOffset:])
 
 	return dst[:len(dst)-authTagSize], nil
@@ -80,7 +81,7 @@ func (c *Context) EncryptRTP(dst []byte, plaintext []byte, header *rtp.Header) (
 
 	// Encrypt the payload
 	counter := c.generateCounter(header.SequenceNumber, s.rolloverCounter, s.ssrc, c.srtpSessionSalt)
-	stream := cipher.NewCTR(c.srtpBlock, counter)
+	stream := cipher.NewCTR(c.srtpBlock, counter[:])
 	stream.XORKeyStream(dst[offset:], plaintext[headerSize:])
 	offset += len(plaintext) - headerSize
 
