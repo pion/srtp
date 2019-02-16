@@ -1,11 +1,11 @@
 package srtp
 
 import (
-	"bytes"
 	"crypto/aes"
 	"crypto/cipher"
 	"crypto/hmac"
 	"crypto/sha1" // #nosec
+	"crypto/subtle"
 	"encoding/binary"
 
 	"github.com/pkg/errors"
@@ -229,7 +229,12 @@ func (c *Context) verifyAuthTag(buf, actualAuthTag []byte) (bool, error) {
 	if err != nil {
 		return false, err
 	}
-	return bytes.Equal(actualAuthTag, expectedAuthTag), nil
+
+	// We use a constant time comparison to prevent timing attacks.
+	// If we compared each byte and broke out early, like bytes.Equal,
+	// then an attacker could measure the time it takes for the auth comparison to fail.
+	// The longer it takes, the more correct the forged auth tag.
+	return subtle.ConstantTimeCompare(actualAuthTag, expectedAuthTag) == 1, nil
 }
 
 // https://tools.ietf.org/html/rfc3550#appendix-A.1
