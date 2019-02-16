@@ -62,7 +62,7 @@ func (c *Context) encryptRTCP(dst, decrypted []byte) ([]byte, error) {
 	binary.BigEndian.PutUint32(out[len(out)-4:], c.srtcpIndex)
 	out[len(out)-4] |= 0x80
 
-	authTag, err := c.generateAuthTag(out, c.srtcpSessionAuthTag)
+	authTag, err := c.generateSrtcpAuthTag(out)
 	if err != nil {
 		return nil, err
 	}

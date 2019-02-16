@@ -2,33 +2,43 @@ package srtp
 
 import (
 	"crypto/cipher"
-	"encoding/binary"
+	"crypto/subtle"
 
 	"github.com/pions/rtp"
 	"github.com/pkg/errors"
 )
 
-func (c *Context) decryptRTP(dst, encrypted []byte, header *rtp.Header) ([]byte, error) {
-	dst = allocateIfMismatch(dst, encrypted)
+func (c *Context) decryptRTP(dst []byte, ciphertext []byte, header *rtp.Header) ([]byte, error) {
+	dst = growBufferSize(dst, len(ciphertext)-authTagSize)
 
 	s := c.getSSRCState(header.SSRC)
 	c.updateRolloverCount(header.SequenceNumber, s)
 
-	pktWithROC := append(append([]byte{}, dst[:len(dst)-authTagSize]...), make([]byte, 4)...)
-	binary.BigEndian.PutUint32(pktWithROC[len(pktWithROC)-4:], s.rolloverCounter)
+	// Split the auth tag and the cipher text into two parts.
+	actualTag := ciphertext[len(ciphertext)-authTagSize:]
+	ciphertext = ciphertext[:len(ciphertext)-authTagSize]
 
-	actualAuthTag := dst[len(dst)-authTagSize:]
-	verified, err := c.verifyAuthTag(pktWithROC, actualAuthTag)
+	// Generate the auth tag we expect to see from the ciphertext.
+	expectedTag, err := c.generateSrtpAuthTag(ciphertext, s.rolloverCounter)
 	if err != nil {
 		return nil, err
-	} else if !verified {
-		return nil, errors.Errorf("Failed to verify auth tag")
 	}
 
-	stream := cipher.NewCTR(c.srtpBlock, c.generateCounter(header.SequenceNumber, s.rolloverCounter, s.ssrc, c.srtpSessionSalt))
-	stream.XORKeyStream(dst[header.PayloadOffset:], dst[header.PayloadOffset:])
+	// See if the auth tag actually matches.
+	// We use a constant time comparison to prevent timing attacks.
+	if subtle.ConstantTimeCompare(actualTag, expectedTag) != 1 {
+		return nil, errors.Errorf("failed to verify auth tag")
+	}
 
-	return dst[:len(dst)-authTagSize], nil
+	// Write the plaintext header to the destination buffer.
+	copy(dst, ciphertext[:header.PayloadOffset])
+
+	// Decrypt the ciphertext for the payload.
+	counter := c.generateCounter(header.SequenceNumber, s.rolloverCounter, s.ssrc, c.srtpSessionSalt)
+	stream := cipher.NewCTR(c.srtpBlock, counter)
+	stream.XORKeyStream(dst[header.PayloadOffset:], ciphertext[header.PayloadOffset:])
+
+	return dst, nil
 }
 
 // DecryptRTP decrypts a RTP packet with an encrypted payload
@@ -84,19 +94,11 @@ func (c *Context) EncryptRTP(dst []byte, plaintext []byte, header *rtp.Header) (
 	stream.XORKeyStream(dst[offset:], plaintext[headerSize:])
 	offset += len(plaintext) - headerSize
 
-	// Write the rollover counter just for computing the auth tag.
-	// We will overwrite it immediately afterwards.
-	binary.BigEndian.PutUint32(dst[offset:], s.rolloverCounter)
-	offset += 4
-
 	// Generate the auth tag.
-	authTag, err := c.generateAuthTag(dst[:offset], c.srtpSessionAuthTag)
+	authTag, err := c.generateSrtpAuthTag(dst[:offset], s.rolloverCounter)
 	if err != nil {
 		return nil, err
 	}
-
-	// Pop off the rollover counter.
-	offset -= 4
 
 	// Write the auth tag to the dest.
 	copy(dst[offset:], authTag)

@@ -5,8 +5,8 @@ import (
 	"crypto/cipher"
 	"crypto/hmac"
 	"crypto/sha1" // #nosec
-	"crypto/subtle"
 	"encoding/binary"
+	"hash"
 
 	"github.com/pkg/errors"
 )
@@ -56,11 +56,13 @@ type Context struct {
 	ssrcStates         map[uint32]*ssrcState
 	srtpSessionKey     []byte
 	srtpSessionSalt    []byte
+	srtpSessionAuth    hash.Hash
 	srtpSessionAuthTag []byte
 	srtpBlock          cipher.Block
 
 	srtcpSessionKey     []byte
 	srtcpSessionSalt    []byte
+	srtcpSessionAuth    hash.Hash
 	srtcpSessionAuthTag []byte
 	srtcpIndex          uint32
 	srtcpBlock          cipher.Block
@@ -90,6 +92,8 @@ func CreateContext(masterKey, masterSalt []byte, profile ProtectionProfile) (c *
 		return nil, err
 	}
 
+	c.srtpSessionAuth = hmac.New(sha1.New, c.srtpSessionAuthTag)
+
 	if c.srtcpSessionKey, err = c.generateSessionKey(labelSRTCPEncryption); err != nil {
 		return nil, err
 	} else if c.srtcpSessionSalt, err = c.generateSessionSalt(labelSRTCPSalt); err != nil {
@@ -99,6 +103,8 @@ func CreateContext(masterKey, masterSalt []byte, profile ProtectionProfile) (c *
 	} else if c.srtcpBlock, err = aes.NewCipher(c.srtcpSessionKey); err != nil {
 		return nil, err
 	}
+
+	c.srtcpSessionAuth = hmac.New(sha1.New, c.srtcpSessionAuthTag)
 
 	return c, nil
 }
@@ -151,6 +157,7 @@ func (c *Context) generateSessionSalt(label byte) ([]byte, error) {
 	block.Encrypt(sessionSalt, sessionSalt)
 	return sessionSalt[0:saltLen], nil
 }
+
 func (c *Context) generateSessionAuthTag(label byte) ([]byte, error) {
 	// https://tools.ietf.org/html/rfc3711#appendix-B.3
 	// We now show how the auth key is generated.  The input block for AES-
@@ -199,7 +206,7 @@ func (c *Context) generateCounter(sequenceNumber uint16, rolloverCounter uint32,
 	return counter
 }
 
-func (c *Context) generateAuthTag(buf, sessionAuthTag []byte) ([]byte, error) {
+func (c *Context) generateSrtpAuthTag(buf []byte, roc uint32) ([]byte, error) {
 	// https://tools.ietf.org/html/rfc3711#section-4.2
 	// In the case of SRTP, M SHALL consist of the Authenticated
 	// Portion of the packet (as specified in Figure 1) concatenated with
@@ -214,27 +221,44 @@ func (c *Context) generateAuthTag(buf, sessionAuthTag []byte) ([]byte, error) {
 	// - Authenticated portion of the packet is everything BEFORE MKI
 	// - k_a is the session message authentication key
 	// - n_tag is the bit-length of the output authentication tag
-	// - ROC is already added by caller (to allow RTP + RTCP support)
-	mac := hmac.New(sha1.New, sessionAuthTag)
+	c.srtpSessionAuth.Reset()
 
-	if _, err := mac.Write(buf); err != nil {
+	if _, err := c.srtpSessionAuth.Write(buf); err != nil {
 		return nil, err
 	}
 
-	return mac.Sum(nil)[0:10], nil
-}
+	// For SRTP only, we need to hash the rollover counter as well.
+	rocRaw := [4]byte{}
+	binary.BigEndian.PutUint32(rocRaw[:], roc)
 
-func (c *Context) verifyAuthTag(buf, actualAuthTag []byte) (bool, error) {
-	expectedAuthTag, err := c.generateAuthTag(buf, c.srtpSessionAuthTag)
+	_, err := c.srtpSessionAuth.Write(rocRaw[:])
 	if err != nil {
-		return false, err
+		return nil, err
 	}
 
-	// We use a constant time comparison to prevent timing attacks.
-	// If we compared each byte and broke out early, like bytes.Equal,
-	// then an attacker could measure the time it takes for the auth comparison to fail.
-	// The longer it takes, the more correct the forged auth tag.
-	return subtle.ConstantTimeCompare(actualAuthTag, expectedAuthTag) == 1, nil
+	// Truncate the hash to the first 10 bytes.
+	return c.srtpSessionAuth.Sum(nil)[0:10], nil
+}
+
+func (c *Context) generateSrtcpAuthTag(buf []byte) ([]byte, error) {
+	// https://tools.ietf.org/html/rfc3711#section-4.2
+	//
+	// The pre-defined authentication transform for SRTP is HMAC-SHA1
+	// [RFC2104].  With HMAC-SHA1, the SRTP_PREFIX_LENGTH (Figure 3) SHALL
+	// be 0.  For SRTP (respectively SRTCP), the HMAC SHALL be applied to
+	// the session authentication key and M as specified above, i.e.,
+	// HMAC(k_a, M).  The HMAC output SHALL then be truncated to the n_tag
+	// left-most bits.
+	// - Authenticated portion of the packet is everything BEFORE MKI
+	// - k_a is the session message authentication key
+	// - n_tag is the bit-length of the output authentication tag
+	c.srtcpSessionAuth.Reset()
+
+	if _, err := c.srtcpSessionAuth.Write(buf); err != nil {
+		return nil, err
+	}
+
+	return c.srtcpSessionAuth.Sum(nil)[0:10], nil
 }
 
 // https://tools.ietf.org/html/rfc3550#appendix-A.1
