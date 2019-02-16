@@ -331,3 +331,34 @@ func BenchmarkEncryptRTPInPlace(b *testing.B) {
 		}
 	}
 }
+
+func BenchmarkDecryptRTP(b *testing.B) {
+	sequenceNumber := uint16(5000)
+	encrypted := []byte{0x6d, 0xd3, 0x7e, 0xd5, 0x99, 0xb7, 0x2d, 0x28, 0xb1, 0xf3, 0xa1, 0xf0, 0xc, 0xfb, 0xfd, 0x8}
+
+	encryptedPkt := &rtp.Packet{
+		Payload: encrypted,
+		Header: rtp.Header{
+			SequenceNumber: sequenceNumber,
+		},
+	}
+
+	encryptedRaw, err := encryptedPkt.Marshal()
+	if err != nil {
+		b.Fatal(err)
+	}
+
+	context, err := buildTestContext()
+	if err != nil {
+		b.Fatal(err)
+	}
+
+	b.ResetTimer()
+
+	for i := 0; i < b.N; i++ {
+		_, err := context.DecryptRTP(nil, encryptedRaw, nil)
+		if err != nil {
+			b.Fatal(err)
+		}
+	}
+}
