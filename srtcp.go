@@ -18,10 +18,9 @@ func (c *Context) decryptRTCP(dst, encrypted []byte) ([]byte, error) {
 		return out, nil
 	}
 
-	srtcpIndexBuffer := out[tailOffset : tailOffset+srtcpIndexSize]
-	srtcpIndexBuffer[0] &= 0x7f // unset Encryption bit
+	srtcpIndexBuffer := encrypted[tailOffset : tailOffset+srtcpIndexSize]
 
-	index := binary.BigEndian.Uint32(srtcpIndexBuffer)
+	index := binary.BigEndian.Uint32(srtcpIndexBuffer) &^ (1 << 31)
 	ssrc := binary.BigEndian.Uint32(encrypted[4:])
 
 	stream := cipher.NewCTR(c.srtcpBlock, c.generateCounter(uint16(index&0xffff), index>>16, ssrc, c.srtcpSessionSalt))

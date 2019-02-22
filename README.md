@@ -38,6 +38,7 @@ Check out the **[contributing wiki](https://github.com/pions/webrtc/wiki/Contrib
 * [Tobias Fridén](https://github.com/tobiasfriden) *SRTP authentication verification*
 * [chenkaiC4](https://github.com/chenkaiC4) - *Fix GolangCI Linter*
 * [Luke Curley](https://github.com/kixelated) - *Performance*
+* [Chris Hiszpanski](https://github.com/thinkski) - *Fix out-of-bounds access*
 
 ### License
 MIT License - see [LICENSE](LICENSE) for full text
