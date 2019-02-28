@@ -115,15 +115,9 @@ type WriteStreamSRTP struct {
 	session *SessionSRTP
 }
 
-// WriteRTP encrypts a RTP header and its payload to the nextConn
-func (w *WriteStreamSRTP) WriteRTP(header *rtp.Header, payload []byte) (int, error) {
-	headerRaw, err := header.Marshal()
-	if err != nil {
-		return 0, err
-	}
-
-	// TODO(@lcurley) This will cause one, potentially two, extra allocations.
-	return w.session.write(append(headerRaw, payload...))
+// WriteRTP encrypts a RTP packet and writes to the connection
+func (w *WriteStreamSRTP) WriteRTP(packets ...*rtp.Packet) error {
+	return w.session.writeRTP(packets...)
 }
 
 // Write encrypts and writes a full RTP packets to the nextConn

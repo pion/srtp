@@ -308,6 +308,24 @@ func BenchmarkEncryptRTP(b *testing.B) {
 	}
 }
 
+func BenchmarkEncryptRTPV2(b *testing.B) {
+	encryptContext, err := buildTestContext()
+	if err != nil {
+		b.Fatal(err)
+	}
+
+	pkt := &rtp.Packet{Payload: make([]byte, 100)}
+
+	b.ResetTimer()
+
+	for i := 0; i < b.N; i++ {
+		_, err = encryptContext.encryptRTP(nil, pkt)
+		if err != nil {
+			b.Fatal(err)
+		}
+	}
+}
+
 func BenchmarkEncryptRTPInPlace(b *testing.B) {
 	encryptContext, err := buildTestContext()
 	if err != nil {
@@ -326,6 +344,25 @@ func BenchmarkEncryptRTPInPlace(b *testing.B) {
 
 	for i := 0; i < b.N; i++ {
 		buf, err = encryptContext.EncryptRTP(buf[:0], pktRaw, nil)
+		if err != nil {
+			b.Fatal(err)
+		}
+	}
+}
+
+func BenchmarkEncryptRTPInPlaceV2(b *testing.B) {
+	encryptContext, err := buildTestContext()
+	if err != nil {
+		b.Fatal(err)
+	}
+
+	pkt := &rtp.Packet{Payload: make([]byte, 100)}
+	buf := make([]byte, 0, pkt.MarshalSize()+10)
+
+	b.ResetTimer()
+
+	for i := 0; i < b.N; i++ {
+		buf, err = encryptContext.encryptRTP(buf[:0], pkt)
 		if err != nil {
 			b.Fatal(err)
 		}

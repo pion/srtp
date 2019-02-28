@@ -22,7 +22,7 @@ type SessionSRTCP struct {
 func NewSessionSRTCP(conn net.Conn, config *Config) (*SessionSRTCP, error) {
 	s := &SessionSRTCP{
 		session: session{
-			nextConn:    conn,
+			nextConn:    newConnection(conn),
 			readStreams: map[uint32]readStream{},
 			newStream:   make(chan readStream),
 			started:     make(chan interface{}),

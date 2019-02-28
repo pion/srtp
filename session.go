@@ -2,7 +2,6 @@ package srtp
 
 import (
 	"fmt"
-	"net"
 	"sync"
 )
 
@@ -25,7 +24,7 @@ type session struct {
 	readStreams       map[uint32]readStream
 	readStreamsLock   sync.Mutex
 
-	nextConn net.Conn
+	nextConn connection
 }
 
 // Config is used to configure a session.

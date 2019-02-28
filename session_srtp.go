@@ -20,7 +20,7 @@ type SessionSRTP struct {
 func NewSessionSRTP(conn net.Conn, config *Config) (*SessionSRTP, error) {
 	s := &SessionSRTP{
 		session: session{
-			nextConn:    conn,
+			nextConn:    newConnection(conn),
 			readStreams: map[uint32]readStream{},
 			newStream:   make(chan readStream),
 			started:     make(chan interface{}),
@@ -43,7 +43,7 @@ func NewSessionSRTP(conn net.Conn, config *Config) (*SessionSRTP, error) {
 
 // Start initializes any crypto context and allows reading/writing to begin
 func (s *SessionSRTP) Start(localMasterKey, localMasterSalt, remoteMasterKey, remoteMasterSalt []byte, profile ProtectionProfile, nextConn net.Conn) error {
-	s.session.nextConn = nextConn
+	s.session.nextConn = newConnection(nextConn)
 	return s.session.start(localMasterKey, localMasterSalt, remoteMasterKey, remoteMasterSalt, profile, s)
 }
 
@@ -95,7 +95,42 @@ func (s *SessionSRTP) write(buf []byte) (int, error) {
 	if err != nil {
 		return 0, err
 	}
+
 	return s.session.nextConn.Write(encrypted)
+}
+
+func (s *SessionSRTP) writeRTP(packets ...*rtp.Packet) (err error) {
+	if _, ok := <-s.session.started; ok {
+		return fmt.Errorf("started channel used incorrectly, should only be closed")
+	}
+
+	// TODO do we really need the mutex this long?
+	s.session.localContextMutex.Lock()
+	defer s.session.localContextMutex.Unlock()
+
+	buffers := make([][]byte, len(packets))
+
+	for i, packet := range packets {
+		buffers[i], err = s.localContext.encryptRTP(nil, packet)
+		if err != nil {
+			return err
+		}
+	}
+
+	conn := s.session.nextConn
+
+	// Write all of the buffers in a single batch if possible.
+	// This will use sendmmsg on supported platforms (linux).
+	for i := 0; i < len(buffers); {
+		n, err := conn.WriteBatch(buffers[i:])
+		if err != nil {
+			return err
+		}
+
+		i += n
+	}
+
+	return nil
 }
 
 func (s *SessionSRTP) decrypt(buf []byte) error {
