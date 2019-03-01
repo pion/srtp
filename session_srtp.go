@@ -60,6 +60,7 @@ func (s *SessionSRTP) OpenReadStream(SSRC uint32) (*ReadStreamSRTP, error) {
 	if readStream, ok := r.(*ReadStreamSRTP); ok {
 		return readStream, nil
 	}
+
 	return nil, fmt.Errorf("failed to open ReadStreamSRCTP, type assertion failed")
 }
 
@@ -128,21 +129,14 @@ func (s *SessionSRTP) decrypt(buf []byte) error {
 		return fmt.Errorf("failed to get/create ReadStreamSRTP")
 	}
 
-	// Ensure that readStream.Close() isn't called while in flight
-	readStream.mu.Lock()
-	defer readStream.mu.Unlock()
-
-	readBuf := <-readStream.readCh
-	decrypted, err := s.remoteContext.decryptRTP(readBuf, buf, h)
+	decrypted, err := s.remoteContext.decryptRTP(buf, buf, h)
 	if err != nil {
 		return err
-	} else if len(decrypted) > len(readBuf) {
-		return fmt.Errorf("input buffer was not long enough to contain decrypted RTP")
 	}
 
-	readStream.readRetCh <- readResultSRTP{
-		len:    len(decrypted),
-		header: h,
+	_, err = readStream.write(decrypted)
+	if err != nil {
+		return err
 	}
 
 	return nil

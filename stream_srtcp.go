@@ -5,12 +5,11 @@ import (
 	"sync"
 
 	"github.com/pions/rtcp"
+	"github.com/pions/transport/packetio"
 )
 
-type readResultSRTCP struct {
-	len    int
-	header *rtcp.Header
-}
+// Limit the buffer size to 100KB
+const srtcpBufferSize = 100 * 1000
 
 // ReadStreamSRTCP handles decryption for a single RTCP SSRC
 type ReadStreamSRTCP struct {
@@ -19,10 +18,14 @@ type ReadStreamSRTCP struct {
 	isInited bool
 	isClosed chan bool
 
-	session   *SessionSRTCP
-	ssrc      uint32
-	readCh    chan []byte
-	readRetCh chan readResultSRTCP
+	session *SessionSRTCP
+	ssrc    uint32
+
+	buffer *packetio.Buffer
+}
+
+func (r *ReadStreamSRTCP) write(buf []byte) (n int, err error) {
+	return r.buffer.Write(buf)
 }
 
 // Used by getOrCreateReadStream
@@ -31,52 +34,38 @@ func newReadStreamSRTCP() readStream {
 }
 
 // ReadRTCP reads and decrypts full RTCP packet and its header from the nextConn
-func (r *ReadStreamSRTCP) ReadRTCP(payload []byte) (int, *rtcp.Header, error) {
-	select {
-	case <-r.session.closed:
-		return 0, nil, fmt.Errorf("SRTCP session is closed")
-	case r.readCh <- payload:
-	case <-r.isClosed:
-		return 0, nil, fmt.Errorf("SRTCP read stream is closed")
+func (r *ReadStreamSRTCP) ReadRTCP(buf []byte) (int, *rtcp.Header, error) {
+	n, err := r.Read(buf)
+	if err != nil {
+		return 0, nil, err
 	}
 
-	select {
-	case <-r.session.closed:
-		return 0, nil, fmt.Errorf("SRTCP session is closed")
-	case res, ok := <-r.readRetCh:
-		if !ok {
-			return 0, nil, fmt.Errorf("SRTCP read stream is closed")
-		}
-
-		return res.len, res.header, nil
+	header := &rtcp.Header{}
+	err = header.Unmarshal(buf[:n])
+	if err != nil {
+		return 0, nil, err
 	}
+
+	return n, header, nil
 }
 
 // Read reads and decrypts full RTCP packet from the nextConn
 func (r *ReadStreamSRTCP) Read(b []byte) (int, error) {
-	select {
-	case <-r.session.closed:
-		return 0, fmt.Errorf("SRTCP session is closed")
-	case r.readCh <- b:
-	case <-r.isClosed:
-		return 0, fmt.Errorf("SRTCP read stream is closed")
+	n, err := r.buffer.Read(b)
+
+	if err == packetio.ErrFull {
+		// Silently drop data when the buffer is full.
+		return len(b), nil
 	}
 
-	select {
-	case <-r.session.closed:
-		return 0, fmt.Errorf("SRTCP session is closed")
-	case res, ok := <-r.readRetCh:
-		if !ok {
-			return 0, fmt.Errorf("SRTCP read stream is closed")
-		}
-		return res.len, nil
-	}
+	return n, err
 }
 
 // Close removes the ReadStream from the session and cleans up any associated state
 func (r *ReadStreamSRTCP) Close() error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
+
 	if !r.isInited {
 		return fmt.Errorf("ReadStreamSRTCP has not been inited")
 	}
@@ -85,7 +74,11 @@ func (r *ReadStreamSRTCP) Close() error {
 	case <-r.isClosed:
 		return fmt.Errorf("ReadStreamSRTCP is already closed")
 	default:
-		close(r.readRetCh)
+		err := r.buffer.Close()
+		if err != nil {
+			return err
+		}
+
 		r.session.removeReadStream(r.ssrc)
 		return nil
 	}
@@ -104,10 +97,13 @@ func (r *ReadStreamSRTCP) init(child streamSession, ssrc uint32) error {
 
 	r.session = sessionSRTCP
 	r.ssrc = ssrc
-	r.readCh = make(chan []byte)
-	r.readRetCh = make(chan readResultSRTCP)
 	r.isInited = true
 	r.isClosed = make(chan bool)
+
+	// Create a buffer and limit it to 100KB
+	r.buffer = packetio.NewBuffer()
+	r.buffer.SetLimitSize(srtcpBufferSize)
+
 	return nil
 }
 
