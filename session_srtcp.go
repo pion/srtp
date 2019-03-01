@@ -7,6 +7,7 @@ import (
 	"net"
 
 	"github.com/pions/rtcp"
+	"github.com/pions/webrtc/pkg/logging"
 )
 
 // SessionSRTCP implements io.ReadWriteCloser and provides a bi-directional SRTCP session
@@ -17,6 +18,8 @@ type SessionSRTCP struct {
 	session
 	writeStream *WriteStreamSRTCP
 }
+
+var srtcpLog = logging.NewScopedLogger("srtcp")
 
 // NewSessionSRTCP creates a SRTCP session using conn as the underlying transport.
 func NewSessionSRTCP(conn net.Conn, config *Config) (*SessionSRTCP, error) {
@@ -117,6 +120,8 @@ func (s *SessionSRTCP) decrypt(buf []byte) error {
 		if err != nil {
 			return err
 		}
+
+		srtcpLog.Tracef("Receive rtcp: %+v, header: %+v", report, report.Header())
 
 		for _, ssrc := range report.DestinationSSRC() {
 			r, isNew := s.session.getOrCreateReadStream(ssrc, s, &ReadStreamSRTCP{})
