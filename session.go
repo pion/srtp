@@ -3,6 +3,8 @@ package srtp
 import (
 	"fmt"
 	"sync"
+
+	"github.com/pions/transport"
 )
 
 type streamSession interface {
@@ -24,7 +26,7 @@ type session struct {
 	readStreams       map[uint32]readStream
 	readStreamsLock   sync.Mutex
 
-	nextConn connection
+	nextConn transport.Conn
 }
 
 // Config is used to configure a session.

@@ -7,6 +7,7 @@ import (
 	"net"
 
 	"github.com/pions/rtcp"
+	"github.com/pions/transport"
 )
 
 // SessionSRTCP implements io.ReadWriteCloser and provides a bi-directional SRTCP session
@@ -22,7 +23,7 @@ type SessionSRTCP struct {
 func NewSessionSRTCP(conn net.Conn, config *Config) (*SessionSRTCP, error) {
 	s := &SessionSRTCP{
 		session: session{
-			nextConn:    newConnection(conn),
+			nextConn:    transport.NewConn(conn),
 			readStreams: map[uint32]readStream{},
 			newStream:   make(chan readStream),
 			started:     make(chan interface{}),

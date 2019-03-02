@@ -5,6 +5,7 @@ import (
 	"net"
 
 	"github.com/pions/rtp"
+	"github.com/pions/transport"
 )
 
 // SessionSRTP implements io.ReadWriteCloser and provides a bi-directional SRTP session
@@ -20,7 +21,7 @@ type SessionSRTP struct {
 func NewSessionSRTP(conn net.Conn, config *Config) (*SessionSRTP, error) {
 	s := &SessionSRTP{
 		session: session{
-			nextConn:    newConnection(conn),
+			nextConn:    transport.NewConn(conn),
 			readStreams: map[uint32]readStream{},
 			newStream:   make(chan readStream),
 			started:     make(chan interface{}),
@@ -43,7 +44,7 @@ func NewSessionSRTP(conn net.Conn, config *Config) (*SessionSRTP, error) {
 
 // Start initializes any crypto context and allows reading/writing to begin
 func (s *SessionSRTP) Start(localMasterKey, localMasterSalt, remoteMasterKey, remoteMasterSalt []byte, profile ProtectionProfile, nextConn net.Conn) error {
-	s.session.nextConn = newConnection(nextConn)
+	s.session.nextConn = transport.NewConn(nextConn)
 	return s.session.start(localMasterKey, localMasterSalt, remoteMasterKey, remoteMasterSalt, profile, s)
 }
 
@@ -108,10 +109,10 @@ func (s *SessionSRTP) writeRTP(packets ...*rtp.Packet) (err error) {
 	s.session.localContextMutex.Lock()
 	defer s.session.localContextMutex.Unlock()
 
-	buffers := make([][]byte, len(packets))
+	messages := make([]transport.Message, len(packets))
 
 	for i, packet := range packets {
-		buffers[i], err = s.localContext.encryptRTP(nil, packet)
+		messages[i].Buffer, err = s.localContext.encryptRTP(nil, packet)
 		if err != nil {
 			return err
 		}
@@ -119,10 +120,10 @@ func (s *SessionSRTP) writeRTP(packets ...*rtp.Packet) (err error) {
 
 	conn := s.session.nextConn
 
-	// Write all of the buffers in a single batch if possible.
+	// Write all of the messages in a single batch if possible.
 	// This will use sendmmsg on supported platforms (linux).
-	for i := 0; i < len(buffers); {
-		n, err := conn.WriteBatch(buffers[i:])
+	for i := 0; i < len(messages); {
+		n, err := conn.WriteBatch(messages[i:])
 		if err != nil {
 			return err
 		}
