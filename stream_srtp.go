@@ -25,6 +25,11 @@ type ReadStreamSRTP struct {
 	readRetCh chan readResultSRTP
 }
 
+// Used by getOrCreateReadStream
+func newReadStreamSRTP() readStream {
+	return &ReadStreamSRTP{}
+}
+
 // ReadRTP reads and decrypts full RTP packet and its header from the nextConn
 func (r *ReadStreamSRTP) ReadRTP(payload []byte) (int, *rtp.Header, error) {
 	select {

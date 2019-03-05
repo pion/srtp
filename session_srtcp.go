@@ -51,7 +51,7 @@ func (s *SessionSRTCP) OpenWriteStream() (*WriteStreamSRTCP, error) {
 // OpenReadStream opens a read stream for the given SSRC, it can be used
 // if you want a certain SSRC, but don't want to wait for AcceptStream
 func (s *SessionSRTCP) OpenReadStream(SSRC uint32) (*ReadStreamSRTCP, error) {
-	r, _ := s.session.getOrCreateReadStream(SSRC, s, &ReadStreamSRTCP{})
+	r, _ := s.session.getOrCreateReadStream(SSRC, s, newReadStreamSRTCP)
 
 	if readStream, ok := r.(*ReadStreamSRTCP); ok {
 		return readStream, nil
@@ -119,7 +119,7 @@ func (s *SessionSRTCP) decrypt(buf []byte) error {
 		}
 
 		for _, ssrc := range report.DestinationSSRC() {
-			r, isNew := s.session.getOrCreateReadStream(ssrc, s, &ReadStreamSRTCP{})
+			r, isNew := s.session.getOrCreateReadStream(ssrc, s, newReadStreamSRTCP)
 			if r == nil {
 				return nil // Session has been closed
 			} else if isNew {
