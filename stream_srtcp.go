@@ -25,6 +25,11 @@ type ReadStreamSRTCP struct {
 	readRetCh chan readResultSRTCP
 }
 
+// Used by getOrCreateReadStream
+func newReadStreamSRTCP() readStream {
+	return &ReadStreamSRTCP{}
+}
+
 // ReadRTCP reads and decrypts full RTCP packet and its header from the nextConn
 func (r *ReadStreamSRTCP) ReadRTCP(payload []byte) (int, *rtcp.Header, error) {
 	select {

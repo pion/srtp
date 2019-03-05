@@ -45,7 +45,7 @@ type SessionKeys struct {
 	RemoteMasterSalt []byte
 }
 
-func (s *session) getOrCreateReadStream(ssrc uint32, child streamSession, proto readStream) (readStream, bool) {
+func (s *session) getOrCreateReadStream(ssrc uint32, child streamSession, proto func() readStream) (readStream, bool) {
 	s.readStreamsLock.Lock()
 	defer s.readStreamsLock.Unlock()
 
@@ -54,15 +54,19 @@ func (s *session) getOrCreateReadStream(ssrc uint32, child streamSession, proto 
 	}
 
 	r, ok := s.readStreams[ssrc]
-	if !ok {
-		if err := proto.init(child, ssrc); err != nil {
-			return nil, false
-		}
-
-		s.readStreams[ssrc] = proto
-		return proto, true
+	if ok {
+		return r, false
 	}
-	return r, false
+
+	// Create the readStream.
+	r = proto()
+
+	if err := r.init(child, ssrc); err != nil {
+		return nil, false
+	}
+
+	s.readStreams[ssrc] = r
+	return r, true
 }
 
 func (s *session) removeReadStream(ssrc uint32) {
