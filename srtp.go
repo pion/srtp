@@ -54,11 +54,10 @@ func (c *Context) DecryptRTP(dst, encrypted []byte, header *rtp.Header) ([]byte,
 	return c.decryptRTP(dst, encrypted, header)
 }
 
-// EncryptRTP encrypts a plaintext RTP packet, writing to the dst buffer provided.
-// If the dst buffer does not have the capacity to hold `len(plaintext) + 10` bytes, a new one will be allocated.
+// EncryptRTP marshals and encrypts an RTP packet, writing to the dst buffer provided.
+// If the dst buffer does not have the capacity to hold `len(plaintext) + 10` bytes, a new one will be allocated and returned.
 // If a rtp.Header is provided, it will be Unmarshaled using the plaintext.
 func (c *Context) EncryptRTP(dst []byte, plaintext []byte, header *rtp.Header) ([]byte, error) {
-	// TODO(@lcurley) Potentially accept a *rtp.Packet to avoid this Unmarshal
 	if header == nil {
 		header = &rtp.Header{}
 	}
@@ -68,40 +67,40 @@ func (c *Context) EncryptRTP(dst []byte, plaintext []byte, header *rtp.Header) (
 		return nil, err
 	}
 
-	// Write to dst starting at this offset.
-	offset := 0
+	return c.encryptRTP(dst, header, plaintext[header.PayloadOffset:])
+}
 
+// encryptRTP marshals and encrypts an RTP packet, writing to the dst buffer provided.
+// If the dst buffer does not have the capacity to hold `len(plaintext) + 10` bytes, a new one will be allocated and returned.
+// Similar to above but faster because it can avoid unmarshaling the header and marshaling the payload.
+func (c *Context) encryptRTP(dst []byte, header *rtp.Header, payload []byte) (ciphertext []byte, err error) {
 	// Grow the given buffer to fit the output.
 	// authTag = 10 bytes
-	dst = growBufferSize(dst, len(plaintext)+10)
+	dst = growBufferSize(dst, header.MarshalSize()+len(payload)+10)
 
 	s := c.getSSRCState(header.SSRC)
 	c.updateRolloverCount(header.SequenceNumber, s)
 
 	// Copy the header unencrypted.
-	headerSize := header.PayloadOffset
-
-	// Skip the copy if the two slices share memory addresses.
-	if &dst[0] != &plaintext[0] {
-		copy(dst[offset:], plaintext[:headerSize])
+	n, err := header.MarshalTo(dst)
+	if err != nil {
+		return nil, err
 	}
-
-	offset += headerSize
 
 	// Encrypt the payload
 	counter := c.generateCounter(header.SequenceNumber, s.rolloverCounter, s.ssrc, c.srtpSessionSalt)
 	stream := cipher.NewCTR(c.srtpBlock, counter)
-	stream.XORKeyStream(dst[offset:], plaintext[headerSize:])
-	offset += len(plaintext) - headerSize
+	stream.XORKeyStream(dst[n:], payload)
+	n += len(payload)
 
 	// Generate the auth tag.
-	authTag, err := c.generateSrtpAuthTag(dst[:offset], s.rolloverCounter)
+	authTag, err := c.generateSrtpAuthTag(dst[:n], s.rolloverCounter)
 	if err != nil {
 		return nil, err
 	}
 
 	// Write the auth tag to the dest.
-	copy(dst[offset:], authTag)
+	copy(dst[n:], authTag)
 
 	return dst, nil
 }
