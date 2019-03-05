@@ -83,7 +83,18 @@ func (s *SessionSRTP) Close() error {
 	return s.session.close()
 }
 
-func (s *SessionSRTP) write(buf []byte) (int, error) {
+func (s *SessionSRTP) write(b []byte) (int, error) {
+	packet := &rtp.Packet{}
+
+	err := packet.Unmarshal(b)
+	if err != nil {
+		return 0, nil
+	}
+
+	return s.writeRTP(&packet.Header, packet.Payload)
+}
+
+func (s *SessionSRTP) writeRTP(header *rtp.Header, payload []byte) (int, error) {
 	if _, ok := <-s.session.started; ok {
 		return 0, fmt.Errorf("started channel used incorrectly, should only be closed")
 	}
@@ -91,10 +102,11 @@ func (s *SessionSRTP) write(buf []byte) (int, error) {
 	s.session.localContextMutex.Lock()
 	defer s.session.localContextMutex.Unlock()
 
-	encrypted, err := s.localContext.EncryptRTP(nil, buf, nil)
+	encrypted, err := s.localContext.encryptRTP(nil, header, payload)
 	if err != nil {
 		return 0, err
 	}
+
 	return s.session.nextConn.Write(encrypted)
 }
 
