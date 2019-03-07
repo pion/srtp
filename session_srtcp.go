@@ -102,19 +102,14 @@ func (s *SessionSRTCP) decrypt(buf []byte) error {
 		return err
 	}
 
-	compoundPacket := rtcp.NewReader(bytes.NewReader(decrypted))
+	compoundPacket := rtcp.NewDecoder(bytes.NewReader(decrypted))
 	for {
-		_, rawrtcp, err := compoundPacket.ReadPacket()
+
+		report, err := compoundPacket.DecodePacket()
 		if err != nil {
 			if err == io.EOF {
 				return nil
 			}
-			return err
-		}
-
-		var report rtcp.Packet
-		report, _, err = rtcp.Unmarshal(rawrtcp)
-		if err != nil {
 			return err
 		}
 
