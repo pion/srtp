@@ -39,6 +39,7 @@ Check out the **[contributing wiki](https://github.com/pions/webrtc/wiki/Contrib
 * [chenkaiC4](https://github.com/chenkaiC4) - *Fix GolangCI Linter*
 * [Luke Curley](https://github.com/kixelated) - *Performance*
 * [Chris Hiszpanski](https://github.com/thinkski) - *Fix out-of-bounds access*
+* [Yutaka Takeda](https://github.com/enobufs) - *Fix log messages*
 
 ### License
 MIT License - see [LICENSE](LICENSE) for full text
