@@ -2,6 +2,7 @@ package srtp
 
 import (
 	"fmt"
+	"io"
 	"net"
 	"sync"
 )
@@ -118,7 +119,9 @@ func (s *session) start(localMasterKey, localMasterSalt, remoteMasterKey, remote
 			var i int
 			i, err = s.nextConn.Read(b)
 			if err != nil {
-				fmt.Println(err)
+				if err != io.EOF {
+					fmt.Printf("srtp: %s\n", err.Error())
+				}
 				return
 			}
 
