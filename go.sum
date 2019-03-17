@@ -1,7 +1,7 @@
 github.com/davecgh/go-spew v1.1.0 h1:ZDRjVQ15GmhC3fiQ8ni8+OwkZQO4DARzQgrnXU1Liz8=
 github.com/davecgh/go-spew v1.1.0/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
-github.com/pions/rtcp v1.1.0 h1:WJarRpNaGE7aScgTXARaNIObMhIbftcbiPuhhqvDtl4=
-github.com/pions/rtcp v1.1.0/go.mod h1:Q5twXlqiz775Yn37X0cl4lAsfSk8EiHgeNkte59jBY4=
+github.com/pions/rtcp v1.1.2 h1:gTb+GOvOYDRZb+3OgZz5PE51xrHGZL0WIM5X37dGi60=
+github.com/pions/rtcp v1.1.2/go.mod h1:E8DBOVSErqbHrUEs8KINt3yhzO7FvKuZr2bVUKTvyaw=
 github.com/pions/rtp v1.1.0 h1:aioiXSi2UclJptFRqmii76GTrlgry5ucCGtdKc+5VDs=
 github.com/pions/rtp v1.1.0/go.mod h1:Bro/2l0PS5C3SQaEpLA+H34kpKIurx3K2Zln/nKjRMs=
 github.com/pions/transport v0.4.0 h1:1N6fluzmj5W/16eFLDsCB18s/xEkjVTek0K4IJz75FU=
