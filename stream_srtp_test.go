@@ -49,7 +49,7 @@ func BenchmarkWrite(b *testing.B) {
 			Version: 2,
 			SSRC:    322,
 		},
-		Payload: make([]byte, 100),
+		Payload: make([]byte, 1000),
 	}
 
 	packetRaw, err := packet.Marshal()
@@ -57,6 +57,7 @@ func BenchmarkWrite(b *testing.B) {
 		b.Fatal(err)
 	}
 
+	b.SetBytes(int64(len(packetRaw)))
 	b.ResetTimer()
 
 	for i := 0; i < b.N; i++ {
@@ -104,8 +105,9 @@ func BenchmarkWriteRTP(b *testing.B) {
 		SSRC:    322,
 	}
 
-	payload := make([]byte, 100)
+	payload := make([]byte, 1000)
 
+	b.SetBytes(int64(header.MarshalSize() + len(payload)))
 	b.ResetTimer()
 
 	for i := 0; i < b.N; i++ {

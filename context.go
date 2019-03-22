@@ -8,6 +8,7 @@ import (
 	"encoding/binary"
 	"hash"
 
+	"github.com/pions/srtp/internal/aesctr"
 	"github.com/pkg/errors"
 )
 
@@ -59,6 +60,7 @@ type Context struct {
 	srtpSessionAuth    hash.Hash
 	srtpSessionAuthTag []byte
 	srtpBlock          cipher.Block
+	srtpStream         *aesctr.Stream
 
 	srtcpSessionKey     []byte
 	srtcpSessionSalt    []byte
@@ -66,6 +68,7 @@ type Context struct {
 	srtcpSessionAuthTag []byte
 	srtcpIndex          uint32
 	srtcpBlock          cipher.Block
+	srtcpStream         *aesctr.Stream
 }
 
 // CreateContext creates a new SRTP Context
@@ -88,10 +91,14 @@ func CreateContext(masterKey, masterSalt []byte, profile ProtectionProfile) (c *
 		return nil, err
 	} else if c.srtpSessionAuthTag, err = c.generateSessionAuthTag(labelSRTPAuthenticationTag); err != nil {
 		return nil, err
-	} else if c.srtpBlock, err = aes.NewCipher(c.srtpSessionKey); err != nil {
+	}
+
+	c.srtpBlock, err = aes.NewCipher(c.srtpSessionKey)
+	if err != nil {
 		return nil, err
 	}
 
+	c.srtpStream = aesctr.New(c.srtpBlock, make([]byte, aes.BlockSize))
 	c.srtpSessionAuth = hmac.New(sha1.New, c.srtpSessionAuthTag)
 
 	if c.srtcpSessionKey, err = c.generateSessionKey(labelSRTCPEncryption); err != nil {
@@ -100,10 +107,14 @@ func CreateContext(masterKey, masterSalt []byte, profile ProtectionProfile) (c *
 		return nil, err
 	} else if c.srtcpSessionAuthTag, err = c.generateSessionAuthTag(labelSRTCPAuthenticationTag); err != nil {
 		return nil, err
-	} else if c.srtcpBlock, err = aes.NewCipher(c.srtcpSessionKey); err != nil {
+	}
+
+	c.srtcpBlock, err = aes.NewCipher(c.srtcpSessionKey)
+	if err != nil {
 		return nil, err
 	}
 
+	c.srtcpStream = aesctr.New(c.srtcpBlock, make([]byte, aes.BlockSize))
 	c.srtcpSessionAuth = hmac.New(sha1.New, c.srtcpSessionAuthTag)
 
 	return c, nil

@@ -1,7 +1,6 @@
 package srtp
 
 import (
-	"crypto/cipher"
 	"crypto/subtle"
 
 	"github.com/pions/rtp"
@@ -35,8 +34,8 @@ func (c *Context) decryptRTP(dst []byte, ciphertext []byte, header *rtp.Header) 
 
 	// Decrypt the ciphertext for the payload.
 	counter := c.generateCounter(header.SequenceNumber, s.rolloverCounter, s.ssrc, c.srtpSessionSalt)
-	stream := cipher.NewCTR(c.srtpBlock, counter)
-	stream.XORKeyStream(dst[header.PayloadOffset:], ciphertext[header.PayloadOffset:])
+	c.srtpStream.Reset(counter)
+	c.srtpStream.XORKeyStream(dst[header.PayloadOffset:], ciphertext[header.PayloadOffset:])
 
 	return dst, nil
 }
@@ -89,8 +88,8 @@ func (c *Context) encryptRTP(dst []byte, header *rtp.Header, payload []byte) (ci
 
 	// Encrypt the payload
 	counter := c.generateCounter(header.SequenceNumber, s.rolloverCounter, s.ssrc, c.srtpSessionSalt)
-	stream := cipher.NewCTR(c.srtpBlock, counter)
-	stream.XORKeyStream(dst[n:], payload)
+	c.srtpStream.Reset(counter)
+	c.srtpStream.XORKeyStream(dst[n:], payload)
 	n += len(payload)
 
 	// Generate the auth tag.
