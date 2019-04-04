@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"sync"
 
-	"github.com/pions/rtcp"
-	"github.com/pions/transport/packetio"
+	"github.com/pion/rtcp"
+	"github.com/pion/transport/packetio"
 )
 
 // Limit the buffer size to 100KB

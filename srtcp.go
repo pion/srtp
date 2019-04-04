@@ -4,7 +4,7 @@ import (
 	"crypto/cipher"
 	"encoding/binary"
 
-	"github.com/pions/rtcp"
+	"github.com/pion/rtcp"
 )
 
 func (c *Context) decryptRTCP(dst, encrypted []byte) ([]byte, error) {

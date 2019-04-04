@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"net"
 
-	"github.com/pions/rtp"
+	"github.com/pion/rtp"
 )
 
 // SessionSRTP implements io.ReadWriteCloser and provides a bi-directional SRTP session
