@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/pions/rtp"
+	"github.com/pion/rtp"
 )
 
 type noopConn struct{ closed chan struct{} }
