@@ -1,9 +1,11 @@
 package srtp
 
 import (
+	"errors"
 	"fmt"
 	"net"
 
+	"github.com/pion/logging"
 	"github.com/pion/rtp"
 )
 
@@ -18,6 +20,15 @@ type SessionSRTP struct {
 
 // NewSessionSRTP creates a SRTP session using conn as the underlying transport.
 func NewSessionSRTP(conn net.Conn, config *Config) (*SessionSRTP, error) {
+	if config == nil {
+		return nil, errors.New("no config provided")
+	}
+
+	loggerFactory := config.LoggerFactory
+	if loggerFactory == nil {
+		loggerFactory = logging.NewDefaultLoggerFactory()
+	}
+
 	s := &SessionSRTP{
 		session: session{
 			nextConn:    conn,
@@ -25,6 +36,7 @@ func NewSessionSRTP(conn net.Conn, config *Config) (*SessionSRTP, error) {
 			newStream:   make(chan readStream),
 			started:     make(chan interface{}),
 			closed:      make(chan interface{}),
+			log:         loggerFactory.NewLogger("srtp"),
 		},
 	}
 	s.writeStream = &WriteStreamSRTP{s}

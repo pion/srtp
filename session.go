@@ -1,10 +1,11 @@
 package srtp
 
 import (
-	"fmt"
 	"io"
 	"net"
 	"sync"
+
+	"github.com/pion/logging"
 )
 
 type streamSession interface {
@@ -26,6 +27,8 @@ type session struct {
 	readStreams       map[uint32]readStream
 	readStreamsLock   sync.Mutex
 
+	log logging.LeveledLogger
+
 	nextConn net.Conn
 }
 
@@ -34,8 +37,9 @@ type session struct {
 // or directly pass the keys themselves.
 // After a Config is passed to a session it must not be modified.
 type Config struct {
-	Keys    SessionKeys
-	Profile ProtectionProfile
+	Keys          SessionKeys
+	Profile       ProtectionProfile
+	LoggerFactory logging.LoggerFactory
 }
 
 // SessionKeys bundles the keys required to setup an SRTP session
@@ -120,13 +124,13 @@ func (s *session) start(localMasterKey, localMasterSalt, remoteMasterKey, remote
 			i, err = s.nextConn.Read(b)
 			if err != nil {
 				if err != io.EOF {
-					fmt.Printf("srtp: %s\n", err.Error())
+					s.log.Errorf("srtp: %s", err.Error())
 				}
 				return
 			}
 
 			if err = child.decrypt(b[:i]); err != nil {
-				fmt.Println(err)
+				s.log.Infof("%v \n", err)
 			}
 		}
 	}()
