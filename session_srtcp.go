@@ -1,10 +1,8 @@
 package srtp
 
 import (
-	"bytes"
 	"errors"
 	"fmt"
-	"io"
 	"net"
 
 	"github.com/pion/logging"
@@ -114,34 +112,29 @@ func (s *SessionSRTCP) decrypt(buf []byte) error {
 		return err
 	}
 
-	compoundPacket := rtcp.NewDecoder(bytes.NewReader(decrypted))
-	for {
+	pkt, err := rtcp.Unmarshal(decrypted)
+	if err != nil {
+		return err
+	}
 
-		report, err := compoundPacket.DecodePacket()
+	for _, ssrc := range pkt.DestinationSSRC() {
+		r, isNew := s.session.getOrCreateReadStream(ssrc, s, newReadStreamSRTCP)
+		if r == nil {
+			return nil // Session has been closed
+		} else if isNew {
+			s.session.newStream <- r // Notify AcceptStream
+		}
+
+		readStream, ok := r.(*ReadStreamSRTCP)
+		if !ok {
+			return fmt.Errorf("failed to get/create ReadStreamSRTP")
+		}
+
+		_, err = readStream.write(decrypted)
 		if err != nil {
-			if err == io.EOF {
-				return nil
-			}
 			return err
 		}
-
-		for _, ssrc := range report.DestinationSSRC() {
-			r, isNew := s.session.getOrCreateReadStream(ssrc, s, newReadStreamSRTCP)
-			if r == nil {
-				return nil // Session has been closed
-			} else if isNew {
-				s.session.newStream <- r // Notify AcceptStream
-			}
-
-			readStream, ok := r.(*ReadStreamSRTCP)
-			if !ok {
-				return fmt.Errorf("failed to get/create ReadStreamSRTP")
-			}
-
-			_, err = readStream.write(decrypted)
-			if err != nil {
-				return err
-			}
-		}
 	}
+
+	return nil
 }
