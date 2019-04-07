@@ -40,6 +40,7 @@ Check out the **[contributing wiki](https://github.com/pion/webrtc/wiki/Contribu
 * [Luke Curley](https://github.com/kixelated) - *Performance*
 * [Chris Hiszpanski](https://github.com/thinkski) - *Fix out-of-bounds access*
 * [Yutaka Takeda](https://github.com/enobufs) - *Fix log messages*
+* [Max Hawkins](https://github.com/maxhawkins)
 
 ### License
 MIT License - see [LICENSE](LICENSE) for full text
