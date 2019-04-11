@@ -106,6 +106,25 @@ func (s *SessionSRTCP) write(buf []byte) (int, error) {
 	return s.session.nextConn.Write(encrypted)
 }
 
+//create a list of Destination SSRCs
+//that's a superset of all Destinations in the slice.
+func destinationSSRC(pkts []rtcp.Packet) []uint32 {
+	ssrcSet := make(map[uint32]struct{})
+	for _, p := range pkts {
+		for _, ssrc := range p.DestinationSSRC() {
+			ssrcSet[ssrc] = struct{}{}
+		}
+	}
+
+	out := make([]uint32, len(ssrcSet))
+
+	for ssrc := range ssrcSet {
+		out = append(out, ssrc)
+	}
+
+	return out
+}
+
 func (s *SessionSRTCP) decrypt(buf []byte) error {
 	decrypted, err := s.remoteContext.DecryptRTCP(buf, buf, nil)
 	if err != nil {
@@ -117,7 +136,7 @@ func (s *SessionSRTCP) decrypt(buf []byte) error {
 		return err
 	}
 
-	for _, ssrc := range pkt.DestinationSSRC() {
+	for _, ssrc := range destinationSSRC(pkt) {
 		r, isNew := s.session.getOrCreateReadStream(ssrc, s, newReadStreamSRTCP)
 		if r == nil {
 			return nil // Session has been closed
