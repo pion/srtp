@@ -116,8 +116,7 @@ func destinationSSRC(pkts []rtcp.Packet) []uint32 {
 		}
 	}
 
-	out := make([]uint32, len(ssrcSet))
-
+	out := make([]uint32, 0, len(ssrcSet))
 	for ssrc := range ssrcSet {
 		out = append(out, ssrc)
 	}
