@@ -41,6 +41,7 @@ Check out the **[contributing wiki](https://github.com/pion/webrtc/wiki/Contribu
 * [Chris Hiszpanski](https://github.com/thinkski) - *Fix out-of-bounds access*
 * [Yutaka Takeda](https://github.com/enobufs) - *Fix log messages*
 * [Max Hawkins](https://github.com/maxhawkins)
+* [Woodrow Douglass](https://github.com/wdouglass)
 
 ### License
 MIT License - see [LICENSE](LICENSE) for full text
