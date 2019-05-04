@@ -13,10 +13,11 @@ const srtcpBufferSize = 100 * 1000
 
 // ReadStreamSRTCP handles decryption for a single RTCP SSRC
 type ReadStreamSRTCP struct {
-	mu sync.Mutex
+	mu sync.RWMutex
 
-	isInited bool
-	isClosed chan bool
+	isInited              bool
+	isClosed              chan bool
+	onRTCPReceivedHandler func([]rtcp.Packet)
 
 	session *SessionSRTCP
 	ssrc    uint32
@@ -25,12 +26,35 @@ type ReadStreamSRTCP struct {
 }
 
 func (r *ReadStreamSRTCP) write(buf []byte) (n int, err error) {
+	r.mu.RLock()
+	hdlr := r.onRTCPReceivedHandler
+	r.mu.RUnlock()
+
+	if hdlr != nil {
+		packets, err := rtcp.Unmarshal(buf)
+		if err != nil {
+			return 0, err
+		}
+		go hdlr(packets)
+		return len(buf), nil
+	}
 	return r.buffer.Write(buf)
 }
 
 // Used by getOrCreateReadStream
 func newReadStreamSRTCP() readStream {
 	return &ReadStreamSRTCP{}
+}
+
+// OnRTCPReceived sets a handler for dealing with incoming RTCP packets
+func (r *ReadStreamSRTCP) OnRTCPReceived(f func([]rtcp.Packet)) {
+	if f == nil {
+		return
+	}
+
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.onRTCPReceivedHandler = f
 }
 
 // ReadRTCP reads and decrypts full RTCP packet and its header from the nextConn
