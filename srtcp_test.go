@@ -123,3 +123,25 @@ func TestRTCPLifecyclePartialAllocation(t *testing.T) {
 	}
 	assert.Equal(actualEncrypted, rtcpTestEncrypted, "RTCP failed to encrypt")
 }
+
+func TestRTCPInvalidAuthTag(t *testing.T) {
+	assert := assert.New(t)
+	decryptContext, err := CreateContext(rtcpTestMasterKey, rtcpTestMasterSalt, cipherContextAlgo)
+	if err != nil {
+		t.Errorf("CreateContext failed: %v", err)
+	}
+
+	rtcpPacket := append([]byte{}, rtcpTestEncrypted...)
+	decryptResult, err := decryptContext.DecryptRTCP(nil, rtcpPacket, nil)
+	if err != nil {
+		t.Error(err)
+	}
+	assert.Equal(decryptResult, rtcpTestDecrypted, "RTCP failed to decrypt")
+
+	// Zero out auth tag
+	copy(rtcpPacket[len(rtcpPacket)-authTagSize:], make([]byte, authTagSize))
+
+	if _, err = decryptContext.DecryptRTCP(nil, rtcpPacket, nil); err == nil {
+		t.Errorf("Was able to decrypt RTCP packet with invalid Auth Tag")
+	}
+}
