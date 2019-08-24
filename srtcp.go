@@ -2,7 +2,9 @@ package srtp
 
 import (
 	"crypto/cipher"
+	"crypto/subtle"
 	"encoding/binary"
+	"fmt"
 
 	"github.com/pion/rtcp"
 )
@@ -16,6 +18,16 @@ func (c *Context) decryptRTCP(dst, encrypted []byte) ([]byte, error) {
 	isEncrypted := encrypted[tailOffset] >> 7
 	if isEncrypted == 0 {
 		return out, nil
+	}
+
+	actualTag := encrypted[len(encrypted)-authTagSize:]
+	expectedTag, err := c.generateSrtcpAuthTag(encrypted[:len(encrypted)-authTagSize])
+	if err != nil {
+		return nil, err
+	}
+
+	if subtle.ConstantTimeCompare(actualTag, expectedTag) != 1 {
+		return nil, fmt.Errorf("failed to verify auth tag")
 	}
 
 	srtcpIndexBuffer := encrypted[tailOffset : tailOffset+srtcpIndexSize]
