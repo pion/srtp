@@ -3,9 +3,9 @@ package srtp
 import (
 	"crypto/cipher"
 	"crypto/subtle"
+	"fmt"
 
 	"github.com/pion/rtp"
-	"github.com/pkg/errors"
 )
 
 func (c *Context) decryptRTP(dst []byte, ciphertext []byte, header *rtp.Header) ([]byte, error) {
@@ -27,7 +27,7 @@ func (c *Context) decryptRTP(dst []byte, ciphertext []byte, header *rtp.Header) 
 	// See if the auth tag actually matches.
 	// We use a constant time comparison to prevent timing attacks.
 	if subtle.ConstantTimeCompare(actualTag, expectedTag) != 1 {
-		return nil, errors.Errorf("failed to verify auth tag")
+		return nil, fmt.Errorf("failed to verify auth tag")
 	}
 
 	// Write the plaintext header to the destination buffer.

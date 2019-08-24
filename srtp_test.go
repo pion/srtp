@@ -5,7 +5,6 @@ import (
 	"testing"
 
 	"github.com/pion/rtp"
-	"github.com/pkg/errors"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -27,7 +26,7 @@ func TestKeyLen(t *testing.T) {
 	}
 
 	if _, err := CreateContext(make([]byte, keyLen), make([]byte, saltLen), cipherContextAlgo); err != nil {
-		t.Error(errors.Wrap(err, "CreateContext failed with a valid length key and salt"))
+		t.Errorf("CreateContext failed with a valid length key and salt: %v", err)
 	}
 }
 
@@ -41,26 +40,27 @@ func TestValidSessionKeys(t *testing.T) {
 
 	c, err := CreateContext(masterKey, masterSalt, cipherContextAlgo)
 	if err != nil {
-		t.Error(errors.Wrap(err, "CreateContext failed"))
+		t.Errorf("CreateContext failed: %v", err)
 	}
 
 	sessionKey, err := c.generateSessionKey(labelSRTPEncryption)
 	if err != nil {
-		t.Error(errors.Wrap(err, "generateSessionKey failed"))
+		t.Errorf("generateSessionKey failed: %v", err)
+
 	} else if !bytes.Equal(sessionKey, expectedSessionKey) {
 		t.Errorf("Session Key % 02x does not match expected % 02x", sessionKey, expectedSessionKey)
 	}
 
 	sessionSalt, err := c.generateSessionSalt(labelSRTPSalt)
 	if err != nil {
-		t.Error(errors.Wrap(err, "generateSessionSalt failed"))
+		t.Errorf("generateSessionSalt failed: %v", err)
 	} else if !bytes.Equal(sessionSalt, expectedSessionSalt) {
 		t.Errorf("Session Salt % 02x does not match expected % 02x", sessionSalt, expectedSessionSalt)
 	}
 
 	sessionAuthTag, err := c.generateSessionAuthTag(labelSRTPAuthenticationTag)
 	if err != nil {
-		t.Error(errors.Wrap(err, "generateSessionAuthTag failed"))
+		t.Errorf("generateSessionAuthTag failed: %v", err)
 	} else if !bytes.Equal(sessionAuthTag, expectedSessionAuthTag) {
 		t.Errorf("Session Auth Tag % 02x does not match expected % 02x", sessionAuthTag, expectedSessionAuthTag)
 	}
@@ -73,7 +73,7 @@ func TestValidPacketCounter(t *testing.T) {
 
 	c, err := CreateContext(masterKey, masterSalt, cipherContextAlgo)
 	if err != nil {
-		t.Error(errors.Wrap(err, "CreateContext failed"))
+		t.Errorf("CreateContext failed: %v", err)
 	}
 
 	s := &ssrcState{ssrc: 4160032510}
@@ -90,7 +90,7 @@ func TestRolloverCount(t *testing.T) {
 
 	c, err := CreateContext(masterKey, masterSalt, cipherContextAlgo)
 	if err != nil {
-		t.Error(errors.Wrap(err, "CreateContext failed"))
+		t.Errorf("CreateContext failed: %v", err)
 	}
 
 	s := &ssrcState{ssrc: defaultSsrc}
@@ -140,7 +140,7 @@ func TestRTPInvalidAuth(t *testing.T) {
 
 	invalidContext, err := CreateContext(masterKey, invalidSalt, cipherContextAlgo)
 	if err != nil {
-		t.Fatal(errors.Wrap(err, "CreateContext failed"))
+		t.Errorf("CreateContext failed: %v", err)
 	}
 
 	for _, testCase := range rtpTestCases {
