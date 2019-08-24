@@ -5,7 +5,6 @@ import (
 	"testing"
 
 	"github.com/pion/rtcp"
-	"github.com/pkg/errors"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -21,12 +20,12 @@ func TestRTCPLifecycle(t *testing.T) {
 	assert := assert.New(t)
 	encryptContext, err := CreateContext(rtcpTestMasterKey, rtcpTestMasterSalt, cipherContextAlgo)
 	if err != nil {
-		t.Error(errors.Wrap(err, "CreateContext failed"))
+		t.Errorf("CreateContext failed: %v", err)
 	}
 
 	decryptContext, err := CreateContext(rtcpTestMasterKey, rtcpTestMasterSalt, cipherContextAlgo)
 	if err != nil {
-		t.Error(errors.Wrap(err, "CreateContext failed"))
+		t.Errorf("CreateContext failed: %v", err)
 	}
 
 	decryptResult, err := decryptContext.DecryptRTCP(nil, rtcpTestEncrypted, nil)
@@ -48,13 +47,13 @@ func TestRTCPLifecycleInPlace(t *testing.T) {
 	encryptHeader := &rtcp.Header{}
 	encryptContext, err := CreateContext(rtcpTestMasterKey, rtcpTestMasterSalt, cipherContextAlgo)
 	if err != nil {
-		t.Error(errors.Wrap(err, "CreateContext failed"))
+		t.Errorf("CreateContext failed: %v", err)
 	}
 
 	decryptHeader := &rtcp.Header{}
 	decryptContext, err := CreateContext(rtcpTestMasterKey, rtcpTestMasterSalt, cipherContextAlgo)
 	if err != nil {
-		t.Error(errors.Wrap(err, "CreateContext failed"))
+		t.Errorf("CreateContext failed: %v", err)
 	}
 
 	// Copy packet, asserts that everything was done in place
@@ -93,13 +92,13 @@ func TestRTCPLifecyclePartialAllocation(t *testing.T) {
 	encryptHeader := &rtcp.Header{}
 	encryptContext, err := CreateContext(rtcpTestMasterKey, rtcpTestMasterSalt, cipherContextAlgo)
 	if err != nil {
-		t.Error(errors.Wrap(err, "CreateContext failed"))
+		t.Errorf("CreateContext failed: %v", err)
 	}
 
 	decryptHeader := &rtcp.Header{}
 	decryptContext, err := CreateContext(rtcpTestMasterKey, rtcpTestMasterSalt, cipherContextAlgo)
 	if err != nil {
-		t.Error(errors.Wrap(err, "CreateContext failed"))
+		t.Errorf("CreateContext failed: %v", err)
 	}
 
 	// Copy packet, asserts that partial buffers can be used

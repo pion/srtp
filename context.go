@@ -6,9 +6,8 @@ import (
 	"crypto/hmac"
 	"crypto/sha1" // #nosec
 	"encoding/binary"
+	"fmt"
 	"hash"
-
-	"github.com/pkg/errors"
 )
 
 // ProtectionProfile specifies Cipher and AuthTag details, similar to TLS cipher suite
@@ -71,9 +70,9 @@ type Context struct {
 // CreateContext creates a new SRTP Context
 func CreateContext(masterKey, masterSalt []byte, profile ProtectionProfile) (c *Context, err error) {
 	if masterKeyLen := len(masterKey); masterKeyLen != keyLen {
-		return c, errors.Errorf("SRTP Master Key must be len %d, got %d", masterKey, keyLen)
+		return c, fmt.Errorf("SRTP Master Key must be len %d, got %d", masterKey, keyLen)
 	} else if masterSaltLen := len(masterSalt); masterSaltLen != saltLen {
-		return c, errors.Errorf("SRTP Salt must be len %d, got %d", saltLen, masterSaltLen)
+		return c, fmt.Errorf("SRTP Salt must be len %d, got %d", saltLen, masterSaltLen)
 	}
 
 	c = &Context{
