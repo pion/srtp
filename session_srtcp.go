@@ -22,6 +22,8 @@ type SessionSRTCP struct {
 func NewSessionSRTCP(conn net.Conn, config *Config) (*SessionSRTCP, error) {
 	if config == nil {
 		return nil, errors.New("no config provided")
+	} else if conn == nil {
+		return nil, errors.New("no conn provided")
 	}
 
 	loggerFactory := config.LoggerFactory

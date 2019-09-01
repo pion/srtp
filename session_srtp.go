@@ -22,6 +22,8 @@ type SessionSRTP struct {
 func NewSessionSRTP(conn net.Conn, config *Config) (*SessionSRTP, error) {
 	if config == nil {
 		return nil, errors.New("no config provided")
+	} else if conn == nil {
+		return nil, errors.New("no conn provided")
 	}
 
 	loggerFactory := config.LoggerFactory
@@ -51,12 +53,6 @@ func NewSessionSRTP(conn net.Conn, config *Config) (*SessionSRTP, error) {
 		return nil, err
 	}
 	return s, nil
-}
-
-// Start initializes any crypto context and allows reading/writing to begin
-func (s *SessionSRTP) Start(localMasterKey, localMasterSalt, remoteMasterKey, remoteMasterSalt []byte, profile ProtectionProfile, nextConn net.Conn) error {
-	s.session.nextConn = nextConn
-	return s.session.start(localMasterKey, localMasterSalt, remoteMasterKey, remoteMasterSalt, profile, s)
 }
 
 // OpenWriteStream returns the global write stream for the Session
