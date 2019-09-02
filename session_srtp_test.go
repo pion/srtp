@@ -18,20 +18,7 @@ func TestSessionSRTPBadInit(t *testing.T) {
 	}
 }
 
-func TestSessionSRTP(t *testing.T) {
-	lim := test.TimeOut(time.Second * 5)
-	defer lim.Stop()
-
-	report := test.CheckRoutines(t)
-	defer report()
-
-	const (
-		testSSRC      = 5000
-		rtpHeaderSize = 12
-	)
-	testPayload := []byte{0x00, 0x01, 0x03, 0x04}
-	readBuffer := make([]byte, rtpHeaderSize+len(testPayload))
-
+func buildSessionSRTPPair(t *testing.T) (*SessionSRTP, *SessionSRTP) {
 	aPipe, bPipe := net.Pipe()
 	config := &Config{
 		Profile: ProtectionProfileAes128CmHmacSha1_80,
@@ -57,6 +44,24 @@ func TestSessionSRTP(t *testing.T) {
 		t.Fatal("NewSessionSRTP did not error, but returned nil session")
 	}
 
+	return aSession, bSession
+}
+
+func TestSessionSRTP(t *testing.T) {
+	lim := test.TimeOut(time.Second * 5)
+	defer lim.Stop()
+
+	report := test.CheckRoutines(t)
+	defer report()
+
+	const (
+		testSSRC      = 5000
+		rtpHeaderSize = 12
+	)
+	testPayload := []byte{0x00, 0x01, 0x03, 0x04}
+	readBuffer := make([]byte, rtpHeaderSize+len(testPayload))
+	aSession, bSession := buildSessionSRTPPair(t)
+
 	aWriteStream, err := aSession.OpenWriteStream()
 	if err != nil {
 		t.Fatal(err)
@@ -70,6 +75,51 @@ func TestSessionSRTP(t *testing.T) {
 		t.Fatal(err)
 	} else if ssrc != testSSRC {
 		t.Fatalf("SSRC mismatch during accept exp(%v) actual%v)", testSSRC, ssrc)
+	}
+
+	if _, err = bReadStream.Read(readBuffer); err != nil {
+		t.Fatal(err)
+	}
+
+	if !bytes.Equal(testPayload, readBuffer[rtpHeaderSize:]) {
+		t.Fatalf("Sent buffer does not match the one received exp(%v) actual(%v)", testPayload, readBuffer[rtpHeaderSize:])
+	}
+
+	if err = aSession.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	if err = bSession.Close(); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestSessionSRTPOpenReadStream(t *testing.T) {
+	lim := test.TimeOut(time.Second * 5)
+	defer lim.Stop()
+
+	report := test.CheckRoutines(t)
+	defer report()
+
+	const (
+		testSSRC      = 5000
+		rtpHeaderSize = 12
+	)
+	testPayload := []byte{0x00, 0x01, 0x03, 0x04}
+	readBuffer := make([]byte, rtpHeaderSize+len(testPayload))
+	aSession, bSession := buildSessionSRTPPair(t)
+
+	bReadStream, err := bSession.OpenReadStream(5000)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	aWriteStream, err := aSession.OpenWriteStream()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = aWriteStream.WriteRTP(&rtp.Header{SSRC: testSSRC}, append([]byte{}, testPayload...)); err != nil {
+		t.Fatal(err)
 	}
 
 	if _, err = bReadStream.Read(readBuffer); err != nil {
