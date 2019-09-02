@@ -10,9 +10,11 @@ import (
 	"github.com/pion/transport/test"
 )
 
-func TestSessionSRTPNoConfig(t *testing.T) {
+func TestSessionSRTPBadInit(t *testing.T) {
 	if _, err := NewSessionSRTP(nil, nil); err == nil {
-		t.Fatal("NewSessionSRTP should error if not config was provided")
+		t.Fatal("NewSessionSRTP should error if no config was provided")
+	} else if _, err := NewSessionSRTP(nil, &Config{}); err == nil {
+		t.Fatal("NewSessionSRTP should error if no net was provided")
 	}
 }
 
