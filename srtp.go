@@ -1,3 +1,4 @@
+// Package srtp implements Secure Real-time Transport Protocol
 package srtp
 
 import (

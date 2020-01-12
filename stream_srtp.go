@@ -107,7 +107,6 @@ func (r *ReadStreamSRTP) Close() error {
 		r.session.removeReadStream(r.ssrc)
 		return nil
 	}
-
 }
 
 // GetSSRC returns the SSRC we are demuxing for

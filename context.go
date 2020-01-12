@@ -265,7 +265,6 @@ func (c *Context) updateRolloverCount(sequenceNumber uint16, s *ssrcState) {
 	if !s.rolloverHasProcessed {
 		s.rolloverHasProcessed = true
 	} else if sequenceNumber == 0 { // We exactly hit the rollover count
-
 		// Only update rolloverCounter if lastSequenceNumber is greater then maxROCDisorder
 		// otherwise we already incremented for disorder
 		if s.lastSequenceNumber > maxROCDisorder {
