@@ -41,5 +41,4 @@ func (c *Config) ExtractSessionKeysFromDTLS(exporter KeyingMaterialExporter, isC
 	c.Keys.RemoteMasterKey = clientWriteKey[0:keyLen]
 	c.Keys.RemoteMasterSalt = clientWriteKey[keyLen:]
 	return nil
-
 }

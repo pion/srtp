@@ -65,6 +65,5 @@ func TestExtractSessionKeysFromDTLS(t *testing.T) {
 		if !bytes.Equal(serverMaterial, m.exported) {
 			t.Errorf("material reconstruction failed for %d-server:\n%#v\nexpected\n%#v", i, serverMaterial, m.exported)
 		}
-
 	}
 }

@@ -46,7 +46,6 @@ func TestValidSessionKeys(t *testing.T) {
 	sessionKey, err := c.generateSessionKey(labelSRTPEncryption)
 	if err != nil {
 		t.Errorf("generateSessionKey failed: %v", err)
-
 	} else if !bytes.Equal(sessionKey, expectedSessionKey) {
 		t.Errorf("Session Key % 02x does not match expected % 02x", sessionKey, expectedSessionKey)
 	}
@@ -64,7 +63,6 @@ func TestValidSessionKeys(t *testing.T) {
 	} else if !bytes.Equal(sessionAuthTag, expectedSessionAuthTag) {
 		t.Errorf("Session Auth Tag % 02x does not match expected % 02x", sessionAuthTag, expectedSessionAuthTag)
 	}
-
 }
 
 func TestValidPacketCounter(t *testing.T) {
