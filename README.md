@@ -43,6 +43,7 @@ Check out the **[contributing wiki](https://github.com/pion/webrtc/wiki/Contribu
 * [Woodrow Douglass](https://github.com/wdouglass)
 * [Hugo Arregui](https://github.com/hugoArregui)
 * [Atsushi Watanabe](https://github.com/at-wat)
+* [Novel Corpse](https://github.com/NovelCorpse)
 
 ### License
 MIT License - see [LICENSE](LICENSE) for full text
