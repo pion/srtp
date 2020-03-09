@@ -9,6 +9,8 @@ import (
 	"github.com/pion/rtcp"
 )
 
+const maxSRTCPIndex = 0x7FFFFFFF
+
 func (c *Context) decryptRTCP(dst, encrypted []byte) ([]byte, error) {
 	out := allocateIfMismatch(dst, encrypted)
 
@@ -20,6 +22,16 @@ func (c *Context) decryptRTCP(dst, encrypted []byte) ([]byte, error) {
 		return out, nil
 	}
 
+	srtcpIndexBuffer := encrypted[tailOffset : tailOffset+srtcpIndexSize]
+
+	index := binary.BigEndian.Uint32(srtcpIndexBuffer) &^ (1 << 31)
+	ssrc := binary.BigEndian.Uint32(encrypted[4:])
+
+	markAsValid, ok := c.srtcpReplayDetector.Check(uint64(index))
+	if !ok {
+		return nil, errDuplicated
+	}
+
 	actualTag := encrypted[len(encrypted)-authTagSize:]
 	expectedTag, err := c.generateSrtcpAuthTag(encrypted[:len(encrypted)-authTagSize])
 	if err != nil {
@@ -29,11 +41,7 @@ func (c *Context) decryptRTCP(dst, encrypted []byte) ([]byte, error) {
 	if subtle.ConstantTimeCompare(actualTag, expectedTag) != 1 {
 		return nil, fmt.Errorf("failed to verify auth tag")
 	}
-
-	srtcpIndexBuffer := encrypted[tailOffset : tailOffset+srtcpIndexSize]
-
-	index := binary.BigEndian.Uint32(srtcpIndexBuffer) &^ (1 << 31)
-	ssrc := binary.BigEndian.Uint32(encrypted[4:])
+	markAsValid()
 
 	stream := cipher.NewCTR(c.srtcpBlock, c.generateCounter(uint16(index&0xffff), index>>16, ssrc, c.srtcpSessionSalt))
 	stream.XORKeyStream(out[8:], out[8:])
@@ -60,7 +68,7 @@ func (c *Context) encryptRTCP(dst, decrypted []byte) ([]byte, error) {
 
 	// We roll over early because MSB is used for marking as encrypted
 	c.srtcpIndex++
-	if c.srtcpIndex >= 2147483647 {
+	if c.srtcpIndex >= maxSRTCPIndex {
 		c.srtcpIndex = 0
 	}
 
