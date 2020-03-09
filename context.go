@@ -8,6 +8,8 @@ import (
 	"encoding/binary"
 	"fmt"
 	"hash"
+
+	"github.com/pion/transport/replaydetector"
 )
 
 // ProtectionProfile specifies Cipher and AuthTag details, similar to TLS cipher suite
@@ -45,9 +47,9 @@ type ssrcState struct {
 	lastSequenceNumber   uint16
 }
 
-// Context represents a SRTP cryptographic context
-// Context can only be used for one-way operations
-// it must either used ONLY for encryption or ONLY for decryption
+// Context represents a SRTP cryptographic context.
+// Context can only be used for one-way operations.
+// it must either used ONLY for encryption or ONLY for decryption.
 type Context struct {
 	masterKey  []byte
 	masterSalt []byte
@@ -58,6 +60,7 @@ type Context struct {
 	srtpSessionAuth    hash.Hash
 	srtpSessionAuthTag []byte
 	srtpBlock          cipher.Block
+	srtpReplayDetector replaydetector.ReplayDetector
 
 	srtcpSessionKey     []byte
 	srtcpSessionSalt    []byte
@@ -65,10 +68,18 @@ type Context struct {
 	srtcpSessionAuthTag []byte
 	srtcpIndex          uint32
 	srtcpBlock          cipher.Block
+	srtcpReplayDetector replaydetector.ReplayDetector
 }
 
-// CreateContext creates a new SRTP Context
-func CreateContext(masterKey, masterSalt []byte, profile ProtectionProfile) (c *Context, err error) {
+// CreateContext creates a new SRTP Context.
+//
+// CreateContext receives variable number of ContextOption-s.
+// Passing multiple options which set the same parameter let the last one valid.
+// Following example create SRTP Context with replay protection with window size of 256.
+//
+//   decCtx, err := srtp.CreateContext(key, salt, profile, srtp.SRTPReplayProtection(256))
+//
+func CreateContext(masterKey, masterSalt []byte, profile ProtectionProfile, opts ...ContextOption) (c *Context, err error) {
 	if masterKeyLen := len(masterKey); masterKeyLen != keyLen {
 		return c, fmt.Errorf("SRTP Master Key must be len %d, got %d", masterKey, keyLen)
 	} else if masterSaltLen := len(masterSalt); masterSaltLen != saltLen {
@@ -76,9 +87,16 @@ func CreateContext(masterKey, masterSalt []byte, profile ProtectionProfile) (c *
 	}
 
 	c = &Context{
-		masterKey:  masterKey,
-		masterSalt: masterSalt,
-		ssrcStates: map[uint32]*ssrcState{},
+		masterKey:           masterKey,
+		masterSalt:          masterSalt,
+		ssrcStates:          map[uint32]*ssrcState{},
+		srtpReplayDetector:  &nopReplayDetector{},
+		srtcpReplayDetector: &nopReplayDetector{},
+	}
+	for _, o := range opts {
+		if errOpt := o(c); errOpt != nil {
+			return nil, errOpt
+		}
 	}
 
 	if c.srtpSessionKey, err = c.generateSessionKey(labelSRTPEncryption); err != nil {

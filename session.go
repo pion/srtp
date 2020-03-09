@@ -17,6 +17,7 @@ type streamSession interface {
 type session struct {
 	localContextMutex           sync.Mutex
 	localContext, remoteContext *Context
+	localOptions, remoteOptions []ContextOption
 
 	newStream chan readStream
 
@@ -40,6 +41,11 @@ type Config struct {
 	Keys          SessionKeys
 	Profile       ProtectionProfile
 	LoggerFactory logging.LoggerFactory
+
+	// List of local/remote context options.
+	// ReplayProtection is enabled on remote context by default.
+	// Default replay protection window size is 64.
+	LocalOptions, RemoteOptions []ContextOption
 }
 
 // SessionKeys bundles the keys required to setup an SRTP session
@@ -98,12 +104,12 @@ func (s *session) close() error {
 
 func (s *session) start(localMasterKey, localMasterSalt, remoteMasterKey, remoteMasterSalt []byte, profile ProtectionProfile, child streamSession) error {
 	var err error
-	s.localContext, err = CreateContext(localMasterKey, localMasterSalt, profile)
+	s.localContext, err = CreateContext(localMasterKey, localMasterSalt, profile, s.localOptions...)
 	if err != nil {
 		return err
 	}
 
-	s.remoteContext, err = CreateContext(remoteMasterKey, remoteMasterSalt, profile)
+	s.remoteContext, err = CreateContext(remoteMasterKey, remoteMasterSalt, profile, s.remoteOptions...)
 	if err != nil {
 		return err
 	}
