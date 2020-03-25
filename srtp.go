@@ -10,14 +10,15 @@ import (
 )
 
 func (c *Context) decryptRTP(dst, ciphertext []byte, header *rtp.Header) ([]byte, error) {
-	markAsValid, ok := c.srtpReplayDetector.Check(uint64(header.SequenceNumber))
+	s := c.getSSRCState(header.SSRC)
+
+	markAsValid, ok := s.replayDetector.Check(uint64(header.SequenceNumber))
 	if !ok {
 		return nil, errDuplicated
 	}
 
 	dst = growBufferSize(dst, len(ciphertext)-authTagSize)
 
-	s := c.getSSRCState(header.SSRC)
 	c.updateRolloverCount(header.SequenceNumber, s)
 
 	// Split the auth tag and the cipher text into two parts.
