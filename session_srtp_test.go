@@ -143,6 +143,55 @@ func TestSessionSRTPOpenReadStream(t *testing.T) {
 	}
 }
 
+func TestSessionSRTPMultiSSRC(t *testing.T) {
+	lim := test.TimeOut(time.Second * 5)
+	defer lim.Stop()
+
+	report := test.CheckRoutines(t)
+	defer report()
+
+	const rtpHeaderSize = 12
+	ssrcs := []uint32{5000, 5001, 5002}
+	testPayload := []byte{0x00, 0x01, 0x03, 0x04}
+	aSession, bSession := buildSessionSRTPPair(t)
+
+	bReadStreams := make(map[uint32]*ReadStreamSRTP)
+	for _, ssrc := range ssrcs {
+		bReadStream, err := bSession.OpenReadStream(ssrc)
+		if err != nil {
+			t.Fatal(err)
+		}
+		bReadStreams[ssrc] = bReadStream
+	}
+
+	aWriteStream, err := aSession.OpenWriteStream()
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, ssrc := range ssrcs {
+		if _, err = aWriteStream.WriteRTP(&rtp.Header{SSRC: ssrc}, append([]byte{}, testPayload...)); err != nil {
+			t.Fatal(err)
+		}
+
+		readBuffer := make([]byte, rtpHeaderSize+len(testPayload))
+		if _, err = bReadStreams[ssrc].Read(readBuffer); err != nil {
+			t.Fatal(err)
+		}
+
+		if !bytes.Equal(testPayload, readBuffer[rtpHeaderSize:]) {
+			t.Fatalf("Sent buffer does not match the one received exp(%v) actual(%v)", testPayload, readBuffer[rtpHeaderSize:])
+		}
+	}
+
+	if err = aSession.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	if err = bSession.Close(); err != nil {
+		t.Fatal(err)
+	}
+}
+
 func TestSessionSRTPReplayProtection(t *testing.T) {
 	lim := test.TimeOut(time.Second * 5)
 	defer lim.Stop()

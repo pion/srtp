@@ -45,6 +45,7 @@ type ssrcState struct {
 	rolloverCounter      uint32
 	rolloverHasProcessed bool
 	lastSequenceNumber   uint16
+	replayDetector       replaydetector.ReplayDetector
 }
 
 // Context represents a SRTP cryptographic context.
@@ -60,7 +61,6 @@ type Context struct {
 	srtpSessionAuth    hash.Hash
 	srtpSessionAuthTag []byte
 	srtpBlock          cipher.Block
-	srtpReplayDetector replaydetector.ReplayDetector
 
 	srtcpSessionKey     []byte
 	srtcpSessionSalt    []byte
@@ -68,7 +68,9 @@ type Context struct {
 	srtcpSessionAuthTag []byte
 	srtcpIndex          uint32
 	srtcpBlock          cipher.Block
-	srtcpReplayDetector replaydetector.ReplayDetector
+
+	srtcpReplayDetector   replaydetector.ReplayDetector
+	newSRTPReplayDetector func() replaydetector.ReplayDetector
 }
 
 // CreateContext creates a new SRTP Context.
@@ -87,13 +89,17 @@ func CreateContext(masterKey, masterSalt []byte, profile ProtectionProfile, opts
 	}
 
 	c = &Context{
-		masterKey:           masterKey,
-		masterSalt:          masterSalt,
-		ssrcStates:          map[uint32]*ssrcState{},
-		srtpReplayDetector:  &nopReplayDetector{},
-		srtcpReplayDetector: &nopReplayDetector{},
+		masterKey:  masterKey,
+		masterSalt: masterSalt,
+		ssrcStates: map[uint32]*ssrcState{},
 	}
-	for _, o := range opts {
+	for _, o := range append(
+		[]ContextOption{ // Default options
+			SRTPNoReplayProtection(),
+			SRTCPNoReplayProtection(),
+		},
+		opts..., // User specified options
+	) {
 		if errOpt := o(c); errOpt != nil {
 			return nil, errOpt
 		}
@@ -306,7 +312,10 @@ func (c *Context) getSSRCState(ssrc uint32) *ssrcState {
 		return s
 	}
 
-	s = &ssrcState{ssrc: ssrc}
+	s = &ssrcState{
+		ssrc:           ssrc,
+		replayDetector: c.newSRTPReplayDetector(),
+	}
 	c.ssrcStates[ssrc] = s
 	return s
 }
