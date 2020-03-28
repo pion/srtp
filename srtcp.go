@@ -100,3 +100,13 @@ func (c *Context) EncryptRTCP(dst, decrypted []byte, header *rtcp.Header) ([]byt
 
 	return c.encryptRTCP(dst, decrypted)
 }
+
+// EncryptRTCPBytes ...
+func (c *Context) EncryptRTCPBytes(plaintext []byte) ([]byte, error) {
+	return c.EncryptRTCP(nil, plaintext, nil)
+}
+
+// DecryptRTCPBytes ...
+func (c *Context) DecryptRTCPBytes(encrypted []byte) ([]byte, error) {
+	return c.DecryptRTCP(nil, encrypted, nil)
+}

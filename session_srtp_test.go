@@ -295,14 +295,14 @@ func assertPayloadSRTP(t *testing.T, stream *ReadStreamSRTP, headerSize int, exp
 	return hdr.SequenceNumber, nil
 }
 
-func encryptSRTP(context *Context, pkt *rtp.Packet) ([]byte, error) {
+func encryptSRTP(context RTPCrypto, pkt *rtp.Packet) ([]byte, error) {
 	decryptedRaw, err := pkt.Marshal()
 	if err != nil {
 		return nil, err
 	}
 	encryptInput := make([]byte, len(decryptedRaw), len(decryptedRaw)+10)
 	copy(encryptInput, decryptedRaw)
-	encrypted, eerr := context.EncryptRTP(encryptInput, encryptInput, nil)
+	encrypted, eerr := context.EncryptRTPBytes(encryptInput)
 	if eerr != nil {
 		return nil, eerr
 	}

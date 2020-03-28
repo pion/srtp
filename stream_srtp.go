@@ -121,7 +121,11 @@ type WriteStreamSRTP struct {
 
 // WriteRTP encrypts a RTP packet and writes to the connection
 func (w *WriteStreamSRTP) WriteRTP(header *rtp.Header, payload []byte) (int, error) {
-	return w.session.writeRTP(header, payload)
+	hdrBytes, err := header.Marshal()
+	if err != nil {
+		return 0, err
+	}
+	return w.session.write(append(hdrBytes, payload...))
 }
 
 // Write encrypts and writes a full RTP packets to the nextConn

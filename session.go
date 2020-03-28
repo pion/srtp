@@ -15,8 +15,9 @@ type streamSession interface {
 }
 
 type session struct {
+	cryptoFactory               CryptoFactory
 	localContextMutex           sync.Mutex
-	localContext, remoteContext *Context
+	localContext, remoteContext RTPCrypto
 	localOptions, remoteOptions []ContextOption
 
 	newStream chan readStream
@@ -33,6 +34,13 @@ type session struct {
 	nextConn net.Conn
 }
 
+// CryptoFactory ...
+type CryptoFactory = func([]byte, []byte, ProtectionProfile, []ContextOption) (RTPCrypto, error)
+
+func defaultFactory(key []byte, salt []byte, protection ProtectionProfile, opts []ContextOption) (RTPCrypto, error) {
+	return CreateContext(key, salt, protection, opts...)
+}
+
 // Config is used to configure a session.
 // You can provide either a KeyingMaterialExporter to export keys
 // or directly pass the keys themselves.
@@ -46,6 +54,7 @@ type Config struct {
 	// ReplayProtection is enabled on remote context by default.
 	// Default replay protection window size is 64.
 	LocalOptions, RemoteOptions []ContextOption
+	RTPCryptoFactory            CryptoFactory
 }
 
 // SessionKeys bundles the keys required to setup an SRTP session
@@ -103,13 +112,18 @@ func (s *session) close() error {
 }
 
 func (s *session) start(localMasterKey, localMasterSalt, remoteMasterKey, remoteMasterSalt []byte, profile ProtectionProfile, child streamSession) error {
+	factory := s.cryptoFactory
+	if factory == nil {
+		factory = defaultFactory
+	}
+
 	var err error
-	s.localContext, err = CreateContext(localMasterKey, localMasterSalt, profile, s.localOptions...)
+	s.localContext, err = factory(localMasterKey, localMasterSalt, profile, s.localOptions)
 	if err != nil {
 		return err
 	}
 
-	s.remoteContext, err = CreateContext(remoteMasterKey, remoteMasterSalt, profile, s.remoteOptions...)
+	s.remoteContext, err = factory(remoteMasterKey, remoteMasterSalt, profile, s.remoteOptions)
 	if err != nil {
 		return err
 	}

@@ -55,6 +55,7 @@ func NewSessionSRTP(conn net.Conn, config *Config) (*SessionSRTP, error) {
 			started:       make(chan interface{}),
 			closed:        make(chan interface{}),
 			log:           loggerFactory.NewLogger("srtp"),
+			cryptoFactory: config.RTPCryptoFactory,
 		},
 	}
 	s.writeStream = &WriteStreamSRTP{s}
@@ -108,18 +109,7 @@ func (s *SessionSRTP) Close() error {
 	return s.session.close()
 }
 
-func (s *SessionSRTP) write(b []byte) (int, error) {
-	packet := &rtp.Packet{}
-
-	err := packet.Unmarshal(b)
-	if err != nil {
-		return 0, nil
-	}
-
-	return s.writeRTP(&packet.Header, packet.Payload)
-}
-
-func (s *SessionSRTP) writeRTP(header *rtp.Header, payload []byte) (int, error) {
+func (s *SessionSRTP) write(rtpBytes []byte) (int, error) {
 	if _, ok := <-s.session.started; ok {
 		return 0, fmt.Errorf("started channel used incorrectly, should only be closed")
 	}
@@ -127,7 +117,7 @@ func (s *SessionSRTP) writeRTP(header *rtp.Header, payload []byte) (int, error) 
 	s.session.localContextMutex.Lock()
 	defer s.session.localContextMutex.Unlock()
 
-	encrypted, err := s.localContext.encryptRTP(nil, header, payload)
+	encrypted, err := s.localContext.EncryptRTPBytes(rtpBytes)
 	if err != nil {
 		return 0, err
 	}
@@ -153,7 +143,7 @@ func (s *SessionSRTP) decrypt(buf []byte) error {
 		return fmt.Errorf("failed to get/create ReadStreamSRTP")
 	}
 
-	decrypted, err := s.remoteContext.decryptRTP(buf, buf, h)
+	decrypted, err := s.remoteContext.DecryptRTPBytes(buf)
 	if err != nil {
 		return err
 	}

@@ -112,3 +112,13 @@ func (c *Context) encryptRTP(dst []byte, header *rtp.Header, payload []byte) (ci
 
 	return dst, nil
 }
+
+// EncryptRTPBytes ...
+func (c *Context) EncryptRTPBytes(plaintext []byte) ([]byte, error) {
+	return c.EncryptRTP(nil, plaintext, nil)
+}
+
+// DecryptRTPBytes ...
+func (c *Context) DecryptRTPBytes(encrypted []byte) ([]byte, error) {
+	return c.DecryptRTP(nil, encrypted, nil)
+}

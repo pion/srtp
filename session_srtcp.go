@@ -55,6 +55,7 @@ func NewSessionSRTCP(conn net.Conn, config *Config) (*SessionSRTCP, error) {
 			started:       make(chan interface{}),
 			closed:        make(chan interface{}),
 			log:           loggerFactory.NewLogger("srtp"),
+			cryptoFactory: config.RTPCryptoFactory,
 		},
 	}
 	s.writeStream = &WriteStreamSRTCP{s}
@@ -117,7 +118,7 @@ func (s *SessionSRTCP) write(buf []byte) (int, error) {
 	s.session.localContextMutex.Lock()
 	defer s.session.localContextMutex.Unlock()
 
-	encrypted, err := s.localContext.EncryptRTCP(nil, buf, nil)
+	encrypted, err := s.localContext.EncryptRTCPBytes(buf)
 	if err != nil {
 		return 0, err
 	}
@@ -143,7 +144,7 @@ func destinationSSRC(pkts []rtcp.Packet) []uint32 {
 }
 
 func (s *SessionSRTCP) decrypt(buf []byte) error {
-	decrypted, err := s.remoteContext.DecryptRTCP(buf, buf, nil)
+	decrypted, err := s.remoteContext.DecryptRTCPBytes(buf)
 	if err != nil {
 		return err
 	}

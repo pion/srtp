@@ -243,14 +243,14 @@ func getSenderSSRC(t *testing.T, stream *ReadStreamSRTCP) (ssrc uint32, err erro
 	return pli.SenderSSRC, nil
 }
 
-func encryptSRTCP(context *Context, pkt rtcp.Packet) ([]byte, error) {
+func encryptSRTCP(context RTPCrypto, pkt rtcp.Packet) ([]byte, error) {
 	decryptedRaw, err := pkt.Marshal()
 	if err != nil {
 		return nil, err
 	}
 	encryptInput := make([]byte, len(decryptedRaw), rtcpHeaderSize+len(decryptedRaw)+10)
 	copy(encryptInput, decryptedRaw)
-	encrypted, eerr := context.EncryptRTCP(encryptInput, encryptInput, nil)
+	encrypted, eerr := context.EncryptRTCPBytes(encryptInput)
 	if eerr != nil {
 		return nil, eerr
 	}
