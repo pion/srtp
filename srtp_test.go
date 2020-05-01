@@ -74,7 +74,7 @@ func TestValidPacketCounter(t *testing.T) {
 		t.Errorf("CreateContext failed: %v", err)
 	}
 
-	s := &ssrcState{ssrc: 4160032510}
+	s := &srtpSSRCState{ssrc: 4160032510}
 	expectedCounter := []byte{0xcf, 0x90, 0x1e, 0xa5, 0xda, 0xd3, 0x2c, 0x15, 0x00, 0xa2, 0x24, 0xae, 0xae, 0xaf, 0x00, 0x00}
 	counter := c.generateCounter(32846, s.rolloverCounter, s.ssrc, c.srtpSessionSalt)
 	if !bytes.Equal(counter, expectedCounter) {
@@ -91,7 +91,7 @@ func TestRolloverCount(t *testing.T) {
 		t.Errorf("CreateContext failed: %v", err)
 	}
 
-	s := &ssrcState{ssrc: defaultSsrc}
+	s := &srtpSSRCState{ssrc: defaultSsrc}
 
 	// Set initial seqnum
 	c.updateRolloverCount(65530, s)

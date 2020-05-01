@@ -27,7 +27,9 @@ func (c *Context) decryptRTCP(dst, encrypted []byte) ([]byte, error) {
 	index := binary.BigEndian.Uint32(srtcpIndexBuffer) &^ (1 << 31)
 	ssrc := binary.BigEndian.Uint32(encrypted[4:])
 
-	markAsValid, ok := c.srtcpReplayDetector.Check(uint64(index))
+	s := c.getSRTCPSSRCState(ssrc)
+
+	markAsValid, ok := s.replayDetector.Check(uint64(index))
 	if !ok {
 		return nil, errDuplicated
 	}
