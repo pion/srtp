@@ -39,7 +39,7 @@ const (
 	srtcpIndexSize = 4
 )
 
-// Encode/Decode state for a single SRTP SSRC
+// Encrypt/Decrypt state for a single SRTP SSRC
 type srtpSSRCState struct {
 	ssrc                 uint32
 	rolloverCounter      uint32
@@ -48,8 +48,9 @@ type srtpSSRCState struct {
 	replayDetector       replaydetector.ReplayDetector
 }
 
-// Encode/Decode state for a single SRTCP SSRC
+// Encrypt/Decrypt state for a single SRTCP SSRC
 type srtcpSSRCState struct {
+	srtcpIndex     uint32
 	ssrc           uint32
 	replayDetector replaydetector.ReplayDetector
 }
@@ -73,7 +74,6 @@ type Context struct {
 	srtcpSessionSalt    []byte
 	srtcpSessionAuth    hash.Hash
 	srtcpSessionAuthTag []byte
-	srtcpIndex          uint32
 	srtcpBlock          cipher.Block
 
 	newSRTCPReplayDetector func() replaydetector.ReplayDetector

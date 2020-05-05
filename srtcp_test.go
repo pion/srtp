@@ -2,6 +2,7 @@ package srtp
 
 import (
 	"bytes"
+	"encoding/binary"
 	"testing"
 
 	"github.com/pion/rtcp"
@@ -177,5 +178,44 @@ func TestRTCPReplayDetectorSeparation(t *testing.T) {
 	}
 	if _, err = decryptContext.DecryptRTCP(nil, rtcpPacket2, nil); err != errDuplicated {
 		t.Errorf("Was able to decrypt duplicated RTCP packet")
+	}
+}
+
+func getRTCPIndex(encrypted []byte) uint32 {
+	tailOffset := len(encrypted) - (authTagSize + srtcpIndexSize)
+	srtcpIndexBuffer := encrypted[tailOffset : tailOffset+srtcpIndexSize]
+	return binary.BigEndian.Uint32(srtcpIndexBuffer) &^ (1 << 31)
+}
+
+func TestEncryptRTCPSeparation(t *testing.T) {
+	assert := assert.New(t)
+	encryptContext, err := CreateContext(rtcpTestMasterKey, rtcpTestMasterSalt, cipherContextAlgo)
+	assert.NoError(err)
+
+	decryptContext, err := CreateContext(
+		rtcpTestMasterKey, rtcpTestMasterSalt, cipherContextAlgo,
+		SRTCPReplayProtection(10),
+	)
+	assert.NoError(err)
+
+	encryptHeader := &rtcp.Header{}
+
+	inputs := [][]byte{rtcpTestDecrypted, rtcpTestDecrypted2, rtcpTestDecrypted, rtcpTestDecrypted2}
+	encryptedRCTPs := make([][]byte, len(inputs))
+
+	for i, input := range inputs {
+		encrypted, err := encryptContext.EncryptRTCP(nil, input, encryptHeader)
+		assert.NoError(err)
+		encryptedRCTPs[i] = encrypted
+	}
+
+	for i, expectedIndex := range []uint32{1, 1, 2, 2} {
+		assert.Equal(expectedIndex, getRTCPIndex(encryptedRCTPs[i]), "RTCP index does not match")
+	}
+
+	for i, output := range encryptedRCTPs {
+		decrypted, err := decryptContext.DecryptRTCP(nil, output, encryptHeader)
+		assert.NoError(err)
+		assert.Equal(inputs[i], decrypted)
 	}
 }
