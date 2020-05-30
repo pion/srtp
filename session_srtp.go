@@ -125,9 +125,9 @@ func (s *SessionSRTP) writeRTP(header *rtp.Header, payload []byte) (int, error) 
 	}
 
 	s.session.localContextMutex.Lock()
-	defer s.session.localContextMutex.Unlock()
-
 	encrypted, err := s.localContext.encryptRTP(nil, header, payload)
+	s.session.localContextMutex.Unlock()
+
 	if err != nil {
 		return 0, err
 	}
