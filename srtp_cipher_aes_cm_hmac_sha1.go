@@ -82,8 +82,9 @@ func (s *srtpCipherAesCmHmacSha1) encryptRTP(dst []byte, header *rtp.Header, pay
 
 	// Encrypt the payload
 	counter := generateCounter(header.SequenceNumber, roc, header.SSRC, s.srtpSessionSalt)
-	stream := cipher.NewCTR(s.srtpBlock, counter[:])
-	stream.XORKeyStream(dst[n:], payload)
+	if err = xorBytesCTR(s.srtpBlock, counter[:], dst[n:], payload); err != nil {
+		return nil, err
+	}
 	n += len(payload)
 
 	// Generate the auth tag.
@@ -124,9 +125,10 @@ func (s *srtpCipherAesCmHmacSha1) decryptRTP(dst, ciphertext []byte, header *rtp
 
 	// Decrypt the ciphertext for the payload.
 	counter := generateCounter(header.SequenceNumber, roc, header.SSRC, s.srtpSessionSalt)
-	stream := cipher.NewCTR(s.srtpBlock, counter[:])
-	stream.XORKeyStream(dst[headerLen:], ciphertext[headerLen:])
-	return dst, nil
+	err = xorBytesCTR(
+		s.srtpBlock, counter[:], dst[headerLen:], ciphertext[headerLen:],
+	)
+	return dst, err
 }
 
 func (s *srtpCipherAesCmHmacSha1) encryptRTCP(dst, decrypted []byte, srtcpIndex uint32, ssrc uint32) ([]byte, error) {
@@ -134,8 +136,9 @@ func (s *srtpCipherAesCmHmacSha1) encryptRTCP(dst, decrypted []byte, srtcpIndex 
 
 	// Encrypt everything after header
 	counter := generateCounter(uint16(srtcpIndex&0xffff), srtcpIndex>>16, ssrc, s.srtcpSessionSalt)
-	stream := cipher.NewCTR(s.srtcpBlock, counter[:])
-	stream.XORKeyStream(dst[8:], dst[8:])
+	if err := xorBytesCTR(s.srtcpBlock, counter[:], dst[8:], dst[8:]); err != nil {
+		return nil, err
+	}
 
 	// Add SRTCP Index and set Encryption bit
 	dst = append(dst, make([]byte, 4)...)
@@ -168,10 +171,9 @@ func (s *srtpCipherAesCmHmacSha1) decryptRTCP(out, encrypted []byte, index, ssrc
 	}
 
 	counter := generateCounter(uint16(index&0xffff), index>>16, ssrc, s.srtcpSessionSalt)
-	stream := cipher.NewCTR(s.srtcpBlock, counter[:])
-	stream.XORKeyStream(out[8:], out[8:])
+	err = xorBytesCTR(s.srtcpBlock, counter[:], out[8:], out[8:])
 
-	return out, nil
+	return out, err
 }
 
 func (s *srtpCipherAesCmHmacSha1) generateSrtpAuthTag(buf []byte, roc uint32) ([]byte, error) {

@@ -18,6 +18,7 @@ var (
 	errTooShortRTCP                  = errors.New("packet is too short to be rtcp packet")
 	errPayloadDiffers                = errors.New("payload differs")
 	errStartedChannelUsedIncorrectly = errors.New("started channel used incorrectly, should only be closed")
+	errBadIVLength                   = errors.New("bad iv length in xorBytesCTR")
 
 	errStreamNotInited     = errors.New("stream has not been inited, unable to close")
 	errStreamAlreadyClosed = errors.New("stream is already closed")
