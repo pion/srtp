@@ -97,6 +97,7 @@ func BenchmarkWrite(b *testing.B) {
 		b.Fatal(err)
 	}
 
+	b.SetBytes(int64(len(packetRaw)))
 	b.ResetTimer()
 
 	for i := 0; i < b.N; i++ {
@@ -146,6 +147,7 @@ func BenchmarkWriteRTP(b *testing.B) {
 
 	payload := make([]byte, 100)
 
+	b.SetBytes(int64(header.MarshalSize() + len(payload)))
 	b.ResetTimer()
 
 	for i := 0; i < b.N; i++ {
