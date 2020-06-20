@@ -1,6 +1,7 @@
 package srtp
 
 import (
+	"context"
 	"fmt"
 	"sync"
 
@@ -64,9 +65,14 @@ func (r *ReadStreamSRTP) write(buf []byte) (n int, err error) {
 	return n, err
 }
 
-// Read reads and decrypts full RTP packet from the nextConn
+// Read reads and decrypts a full RTP packet from the nextConn.
 func (r *ReadStreamSRTP) Read(buf []byte) (int, error) {
-	return r.buffer.Read(buf)
+	return r.ReadContext(context.Background(), buf)
+}
+
+// ReadContext reads and decrypts a full RTP packet from the nextConn, respecting ctx.
+func (r *ReadStreamSRTP) ReadContext(ctx context.Context, buf []byte) (int, error) {
+	return r.buffer.ReadContext(ctx, buf)
 }
 
 // ReadRTP reads and decrypts full RTP packet and its header from the nextConn
