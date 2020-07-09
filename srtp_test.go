@@ -83,40 +83,70 @@ func TestValidPacketCounter(t *testing.T) {
 }
 
 func TestRolloverCount(t *testing.T) {
-	masterKey := []byte{0x0d, 0xcd, 0x21, 0x3e, 0x4c, 0xbc, 0xf2, 0x8f, 0x01, 0x7f, 0x69, 0x94, 0x40, 0x1e, 0x28, 0x89}
-	masterSalt := []byte{0x62, 0x77, 0x60, 0x38, 0xc0, 0x6d, 0xc9, 0x41, 0x9f, 0x6d, 0xd9, 0x43, 0x3e, 0x7c}
-
-	c, err := CreateContext(masterKey, masterSalt, cipherContextAlgo)
-	if err != nil {
-		t.Errorf("CreateContext failed: %v", err)
-	}
-
 	s := &srtpSSRCState{ssrc: defaultSsrc}
 
 	// Set initial seqnum
-	c.updateRolloverCount(65530, s)
+	roc, update := s.nextRolloverCount(65530)
+	if roc != 0 {
+		t.Errorf("Initial rolloverCounter must be 0")
+	}
+	update()
+
+	// Invalid packets never update ROC
+	_, _ = s.nextRolloverCount(0)
+	_, _ = s.nextRolloverCount(0x4000)
+	_, _ = s.nextRolloverCount(0x8000)
+	_, _ = s.nextRolloverCount(0xFFFF)
+	_, _ = s.nextRolloverCount(0)
 
 	// We rolled over to 0
-	c.updateRolloverCount(0, s)
-	if s.rolloverCounter != 1 {
+	roc, update = s.nextRolloverCount(0)
+	if roc != 1 {
 		t.Errorf("rolloverCounter was not updated after it crossed 0")
 	}
+	update()
 
-	c.updateRolloverCount(65530, s)
-	if s.rolloverCounter != 0 {
+	roc, update = s.nextRolloverCount(65530)
+	if roc != 0 {
 		t.Errorf("rolloverCounter was not updated when it rolled back, failed to handle out of order")
 	}
+	update()
 
-	c.updateRolloverCount(5, s)
-	if s.rolloverCounter != 1 {
+	roc, update = s.nextRolloverCount(5)
+	if roc != 1 {
 		t.Errorf("rolloverCounter was not updated when it rolled over initial, to handle out of order")
 	}
+	update()
 
-	c.updateRolloverCount(6, s)
-	c.updateRolloverCount(7, s)
-	c.updateRolloverCount(8, s)
-	if s.rolloverCounter != 1 {
+	_, update = s.nextRolloverCount(6)
+	update()
+	_, update = s.nextRolloverCount(7)
+	update()
+	roc, update = s.nextRolloverCount(8)
+	if roc != 1 {
 		t.Errorf("rolloverCounter was improperly updated for non-significant packets")
+	}
+	update()
+
+	// valid packets never update ROC
+	roc, update = s.nextRolloverCount(0x4000)
+	if roc != 1 {
+		t.Errorf("rolloverCounter was improperly updated for non-significant packets")
+	}
+	update()
+	roc, update = s.nextRolloverCount(0x8000)
+	if roc != 1 {
+		t.Errorf("rolloverCounter was improperly updated for non-significant packets")
+	}
+	update()
+	roc, update = s.nextRolloverCount(0xFFFF)
+	if roc != 1 {
+		t.Errorf("rolloverCounter was improperly updated for non-significant packets")
+	}
+	update()
+	roc, _ = s.nextRolloverCount(0)
+	if roc != 2 {
+		t.Errorf("rolloverCounter must be incremented after wrapping, got %d", roc)
 	}
 }
 
