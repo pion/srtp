@@ -293,25 +293,33 @@ func (c *Context) generateSrtcpAuthTag(buf []byte) ([]byte, error) {
 }
 
 // https://tools.ietf.org/html/rfc3550#appendix-A.1
-func (c *Context) updateRolloverCount(sequenceNumber uint16, s *srtpSSRCState) {
-	if !s.rolloverHasProcessed {
-		s.rolloverHasProcessed = true
-	} else if sequenceNumber == 0 { // We exactly hit the rollover count
+func (s *srtpSSRCState) nextRolloverCount(sequenceNumber uint16) (uint32, func()) {
+	roc := s.rolloverCounter
+
+	switch {
+	case !s.rolloverHasProcessed:
+	case sequenceNumber == 0: // We exactly hit the rollover count
 		// Only update rolloverCounter if lastSequenceNumber is greater then maxROCDisorder
 		// otherwise we already incremented for disorder
 		if s.lastSequenceNumber > maxROCDisorder {
-			s.rolloverCounter++
+			roc++
 		}
-	} else if s.lastSequenceNumber < maxROCDisorder && sequenceNumber > (maxSequenceNumber-maxROCDisorder) {
+	case s.lastSequenceNumber < maxROCDisorder &&
+		sequenceNumber > (maxSequenceNumber-maxROCDisorder):
 		// Our last sequence number incremented because we crossed 0, but then our current number was within maxROCDisorder of the max
 		// So we fell behind, drop to account for jitter
-		s.rolloverCounter--
-	} else if sequenceNumber < maxROCDisorder && s.lastSequenceNumber > (maxSequenceNumber-maxROCDisorder) {
+		roc--
+	case sequenceNumber < maxROCDisorder &&
+		s.lastSequenceNumber > (maxSequenceNumber-maxROCDisorder):
 		// our current is within a maxROCDisorder of 0
 		// and our last sequence number was a high sequence number, increment to account for jitter
-		s.rolloverCounter++
+		roc++
 	}
-	s.lastSequenceNumber = sequenceNumber
+	return roc, func() {
+		s.rolloverHasProcessed = true
+		s.lastSequenceNumber = sequenceNumber
+		s.rolloverCounter = roc
+	}
 }
 
 func (c *Context) getSRTPSSRCState(ssrc uint32) *srtpSSRCState {

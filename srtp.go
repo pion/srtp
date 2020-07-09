@@ -19,14 +19,14 @@ func (c *Context) decryptRTP(dst, ciphertext []byte, header *rtp.Header) ([]byte
 
 	dst = growBufferSize(dst, len(ciphertext)-authTagSize)
 
-	c.updateRolloverCount(header.SequenceNumber, s)
+	roc, updateROC := s.nextRolloverCount(header.SequenceNumber)
 
 	// Split the auth tag and the cipher text into two parts.
 	actualTag := ciphertext[len(ciphertext)-authTagSize:]
 	ciphertext = ciphertext[:len(ciphertext)-authTagSize]
 
 	// Generate the auth tag we expect to see from the ciphertext.
-	expectedTag, err := c.generateSrtpAuthTag(ciphertext, s.rolloverCounter)
+	expectedTag, err := c.generateSrtpAuthTag(ciphertext, roc)
 	if err != nil {
 		return nil, err
 	}
@@ -37,12 +37,13 @@ func (c *Context) decryptRTP(dst, ciphertext []byte, header *rtp.Header) ([]byte
 		return nil, fmt.Errorf("failed to verify auth tag")
 	}
 	markAsValid()
+	updateROC()
 
 	// Write the plaintext header to the destination buffer.
 	copy(dst, ciphertext[:header.PayloadOffset])
 
 	// Decrypt the ciphertext for the payload.
-	counter := c.generateCounter(header.SequenceNumber, s.rolloverCounter, s.ssrc, c.srtpSessionSalt)
+	counter := c.generateCounter(header.SequenceNumber, roc, s.ssrc, c.srtpSessionSalt)
 	stream := cipher.NewCTR(c.srtpBlock, counter)
 	stream.XORKeyStream(dst[header.PayloadOffset:], ciphertext[header.PayloadOffset:])
 
@@ -87,7 +88,8 @@ func (c *Context) encryptRTP(dst []byte, header *rtp.Header, payload []byte) (ci
 	dst = growBufferSize(dst, header.MarshalSize()+len(payload)+10)
 
 	s := c.getSRTPSSRCState(header.SSRC)
-	c.updateRolloverCount(header.SequenceNumber, s)
+	roc, updateROC := s.nextRolloverCount(header.SequenceNumber)
+	updateROC()
 
 	// Copy the header unencrypted.
 	n, err := header.MarshalTo(dst)
@@ -96,13 +98,13 @@ func (c *Context) encryptRTP(dst []byte, header *rtp.Header, payload []byte) (ci
 	}
 
 	// Encrypt the payload
-	counter := c.generateCounter(header.SequenceNumber, s.rolloverCounter, s.ssrc, c.srtpSessionSalt)
+	counter := c.generateCounter(header.SequenceNumber, roc, s.ssrc, c.srtpSessionSalt)
 	stream := cipher.NewCTR(c.srtpBlock, counter)
 	stream.XORKeyStream(dst[n:], payload)
 	n += len(payload)
 
 	// Generate the auth tag.
-	authTag, err := c.generateSrtpAuthTag(dst[:n], s.rolloverCounter)
+	authTag, err := c.generateSrtpAuthTag(dst[:n], roc)
 	if err != nil {
 		return nil, err
 	}
