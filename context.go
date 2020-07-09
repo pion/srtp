@@ -341,3 +341,33 @@ func (c *Context) getSRTCPSSRCState(ssrc uint32) *srtcpSSRCState {
 	c.srtcpSSRCStates[ssrc] = s
 	return s
 }
+
+// ROC returns SRTP rollover counter value of specified SSRC.
+func (c *Context) ROC(ssrc uint32) (uint32, bool) {
+	s, ok := c.srtpSSRCStates[ssrc]
+	if !ok {
+		return 0, false
+	}
+	return s.rolloverCounter, true
+}
+
+// SetROC sets SRTP rollover counter value of specified SSRC.
+func (c *Context) SetROC(ssrc uint32, roc uint32) {
+	s := c.getSRTPSSRCState(ssrc)
+	s.rolloverCounter = roc
+}
+
+// Index returns SRTCP index value of specified SSRC.
+func (c *Context) Index(ssrc uint32) (uint32, bool) {
+	s, ok := c.srtcpSSRCStates[ssrc]
+	if !ok {
+		return 0, false
+	}
+	return s.srtcpIndex, true
+}
+
+// SetIndex sets SRTCP index value of specified SSRC.
+func (c *Context) SetIndex(ssrc uint32, index uint32) {
+	s := c.getSRTCPSSRCState(ssrc)
+	s.srtcpIndex = index % maxSRTCPIndex
+}
