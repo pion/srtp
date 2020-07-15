@@ -46,6 +46,8 @@ func TestRTCPLifecycle(t *testing.T) {
 
 func TestRTCPLifecycleInPlace(t *testing.T) {
 	assert := assert.New(t)
+	authTagLen, err := ProtectionProfileAes128CmHmacSha1_80.authTagLen()
+	assert.NoError(err)
 
 	encryptHeader := &rtcp.Header{}
 	encryptContext, err := CreateContext(rtcpTestMasterKey, rtcpTestMasterSalt, cipherContextAlgo)
@@ -67,7 +69,7 @@ func TestRTCPLifecycleInPlace(t *testing.T) {
 		t.Error(err)
 	} else if decryptHeader.Type != rtcp.TypeSenderReport {
 		t.Fatal("DecryptRTCP failed to populate input rtcp.Header")
-	} else if !bytes.Equal(decryptInput[:len(decryptInput)-(authTagSize+srtcpIndexSize)], actualDecrypted) {
+	} else if !bytes.Equal(decryptInput[:len(decryptInput)-(authTagLen+srtcpIndexSize)], actualDecrypted) {
 		t.Fatal("DecryptRTP failed to decrypt in place")
 	}
 
@@ -81,7 +83,7 @@ func TestRTCPLifecycleInPlace(t *testing.T) {
 		t.Error(err)
 	} else if encryptHeader.Type != rtcp.TypeSenderReport {
 		t.Fatal("EncryptRTCP failed to populate input rtcp.Header")
-	} else if !bytes.Equal(encryptInput, actualEncrypted[:len(actualEncrypted)-(authTagSize+srtcpIndexSize)]) {
+	} else if !bytes.Equal(encryptInput, actualEncrypted[:len(actualEncrypted)-(authTagLen+srtcpIndexSize)]) {
 		t.Fatal("EncryptRTCP failed to encrypt in place")
 	}
 
@@ -129,6 +131,9 @@ func TestRTCPLifecyclePartialAllocation(t *testing.T) {
 
 func TestRTCPInvalidAuthTag(t *testing.T) {
 	assert := assert.New(t)
+	authTagLen, err := ProtectionProfileAes128CmHmacSha1_80.authTagLen()
+	assert.NoError(err)
+
 	decryptContext, err := CreateContext(rtcpTestMasterKey, rtcpTestMasterSalt, cipherContextAlgo)
 	if err != nil {
 		t.Errorf("CreateContext failed: %v", err)
@@ -142,7 +147,7 @@ func TestRTCPInvalidAuthTag(t *testing.T) {
 	assert.Equal(decryptResult, rtcpTestDecrypted, "RTCP failed to decrypt")
 
 	// Zero out auth tag
-	copy(rtcpPacket[len(rtcpPacket)-authTagSize:], make([]byte, authTagSize))
+	copy(rtcpPacket[len(rtcpPacket)-authTagLen:], make([]byte, authTagLen))
 
 	if _, err = decryptContext.DecryptRTCP(nil, rtcpPacket, nil); err == nil {
 		t.Errorf("Was able to decrypt RTCP packet with invalid Auth Tag")
@@ -181,8 +186,8 @@ func TestRTCPReplayDetectorSeparation(t *testing.T) {
 	}
 }
 
-func getRTCPIndex(encrypted []byte) uint32 {
-	tailOffset := len(encrypted) - (authTagSize + srtcpIndexSize)
+func getRTCPIndex(encrypted []byte, authTagLen int) uint32 {
+	tailOffset := len(encrypted) - (authTagLen + srtcpIndexSize)
 	srtcpIndexBuffer := encrypted[tailOffset : tailOffset+srtcpIndexSize]
 	return binary.BigEndian.Uint32(srtcpIndexBuffer) &^ (1 << 31)
 }
@@ -190,6 +195,9 @@ func getRTCPIndex(encrypted []byte) uint32 {
 func TestEncryptRTCPSeparation(t *testing.T) {
 	assert := assert.New(t)
 	encryptContext, err := CreateContext(rtcpTestMasterKey, rtcpTestMasterSalt, cipherContextAlgo)
+	assert.NoError(err)
+
+	authTagLen, err := ProtectionProfileAes128CmHmacSha1_80.authTagLen()
 	assert.NoError(err)
 
 	decryptContext, err := CreateContext(
@@ -210,7 +218,7 @@ func TestEncryptRTCPSeparation(t *testing.T) {
 	}
 
 	for i, expectedIndex := range []uint32{1, 1, 2, 2} {
-		assert.Equal(expectedIndex, getRTCPIndex(encryptedRCTPs[i]), "RTCP index does not match")
+		assert.Equal(expectedIndex, getRTCPIndex(encryptedRCTPs[i], authTagLen), "RTCP index does not match")
 	}
 
 	for i, output := range encryptedRCTPs {

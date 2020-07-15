@@ -225,6 +225,11 @@ func TestSessionSRTCPReplayProtection(t *testing.T) {
 }
 
 func getSenderSSRC(t *testing.T, stream *ReadStreamSRTCP) (ssrc uint32, err error) {
+	authTagSize, err := ProtectionProfileAes128CmHmacSha1_80.authTagLen()
+	if err != nil {
+		return 0, err
+	}
+
 	const pliPacketSize = 8
 	readBuffer := make([]byte, pliPacketSize+authTagSize+srtcpIndexSize)
 	n, _, err := stream.ReadRTCP(readBuffer)
