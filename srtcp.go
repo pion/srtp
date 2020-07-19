@@ -2,6 +2,7 @@ package srtp
 
 import (
 	"encoding/binary"
+	"fmt"
 
 	"github.com/pion/rtcp"
 )
@@ -10,14 +11,15 @@ const maxSRTCPIndex = 0x7FFFFFFF
 
 func (c *Context) decryptRTCP(dst, encrypted []byte) ([]byte, error) {
 	out := allocateIfMismatch(dst, encrypted)
-
 	tailOffset := len(encrypted) - (c.cipher.authTagLen() + srtcpIndexSize)
-	if isEncrypted := encrypted[tailOffset] >> 7; isEncrypted == 0 {
+
+	if tailOffset < 0 {
+		return nil, fmt.Errorf("%d is too short to be a valid RTCP packet", len(encrypted))
+	} else if isEncrypted := encrypted[tailOffset] >> 7; isEncrypted == 0 {
 		return out, nil
 	}
 
-	srtcpIndexBuffer := encrypted[tailOffset : tailOffset+srtcpIndexSize]
-	index := binary.BigEndian.Uint32(srtcpIndexBuffer) &^ (1 << 31)
+	index := c.cipher.getRTCPIndex(encrypted)
 	ssrc := binary.BigEndian.Uint32(encrypted[4:])
 
 	s := c.getSRTCPSSRCState(ssrc)
@@ -49,8 +51,7 @@ func (c *Context) DecryptRTCP(dst, encrypted []byte, header *rtcp.Header) ([]byt
 }
 
 func (c *Context) encryptRTCP(dst, decrypted []byte) ([]byte, error) {
-	out := allocateIfMismatch(dst, decrypted)
-	ssrc := binary.BigEndian.Uint32(out[4:])
+	ssrc := binary.BigEndian.Uint32(decrypted[4:])
 	s := c.getSRTCPSSRCState(ssrc)
 
 	// We roll over early because MSB is used for marking as encrypted
@@ -59,7 +60,7 @@ func (c *Context) encryptRTCP(dst, decrypted []byte) ([]byte, error) {
 		s.srtcpIndex = 0
 	}
 
-	return c.cipher.encryptRTCP(out, decrypted, s.srtcpIndex, ssrc)
+	return c.cipher.encryptRTCP(dst, decrypted, s.srtcpIndex, ssrc)
 }
 
 // EncryptRTCP Encrypts a RTCP packet
