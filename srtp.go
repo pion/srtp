@@ -47,8 +47,7 @@ func (c *Context) EncryptRTP(dst []byte, plaintext []byte, header *rtp.Header) (
 		header = &rtp.Header{}
 	}
 
-	err := header.Unmarshal(plaintext)
-	if err != nil {
+	if err := header.Unmarshal(plaintext); err != nil {
 		return nil, err
 	}
 
@@ -56,12 +55,9 @@ func (c *Context) EncryptRTP(dst []byte, plaintext []byte, header *rtp.Header) (
 }
 
 // encryptRTP marshals and encrypts an RTP packet, writing to the dst buffer provided.
-// If the dst buffer does not have the capacity to hold `len(plaintext) + 10` bytes, a new one will be allocated and returned.
+// If the dst buffer does not have the capacity, a new one will be allocated and returned.
 // Similar to above but faster because it can avoid unmarshaling the header and marshaling the payload.
 func (c *Context) encryptRTP(dst []byte, header *rtp.Header, payload []byte) (ciphertext []byte, err error) {
-	// Grow the given buffer to fit the output.
-	dst = growBufferSize(dst, header.MarshalSize()+len(payload)+c.cipher.authTagLen())
-
 	s := c.getSRTPSSRCState(header.SSRC)
 	roc, updateROC := s.nextRolloverCount(header.SequenceNumber)
 	updateROC()

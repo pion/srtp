@@ -75,16 +75,23 @@ func CreateContext(masterKey, masterSalt []byte, profile ProtectionProfile, opts
 		return c, fmt.Errorf("SRTP Salt must be len %d, got %d", saltLen, masterSaltLen)
 	}
 
-	sCipher, err := newSrtpCipherAesCmHmacSha1(masterKey, masterSalt)
+	c = &Context{
+		srtpSSRCStates:  map[uint32]*srtpSSRCState{},
+		srtcpSSRCStates: map[uint32]*srtcpSSRCState{},
+	}
+
+	switch profile {
+	case ProtectionProfileAeadAes128Gcm:
+		c.cipher, err = newSrtpCipherAeadAesGcm(masterKey, masterSalt)
+	case ProtectionProfileAes128CmHmacSha1_80:
+		c.cipher, err = newSrtpCipherAesCmHmacSha1(masterKey, masterSalt)
+	default:
+		return nil, fmt.Errorf("no such SRTP Profile %#v", profile)
+	}
 	if err != nil {
 		return nil, err
 	}
 
-	c = &Context{
-		cipher:          sCipher,
-		srtpSSRCStates:  map[uint32]*srtpSSRCState{},
-		srtcpSSRCStates: map[uint32]*srtcpSSRCState{},
-	}
 	for _, o := range append(
 		[]ContextOption{ // Default options
 			SRTPNoReplayProtection(),
