@@ -2,6 +2,7 @@ package srtp
 
 import (
 	"bytes"
+	"errors"
 	"testing"
 
 	"github.com/pion/rtp"
@@ -343,7 +344,7 @@ func TestRTPReplayProtection(t *testing.T) {
 		assert.Equalf(actualDecrypted, decryptedRaw, "RTP packet with SeqNum invalid decryption: %d", testCase.sequenceNumber)
 
 		_, errReplay := decryptContext.DecryptRTP(decryptInput, decryptInput, decryptHeader)
-		if errReplay != errDuplicated {
+		if !errors.Is(errReplay, errDuplicated) {
 			t.Errorf("Replayed packet must be errored with %v, got %v", errDuplicated, errReplay)
 		}
 	}

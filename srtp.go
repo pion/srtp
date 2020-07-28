@@ -10,7 +10,9 @@ func (c *Context) decryptRTP(dst, ciphertext []byte, header *rtp.Header) ([]byte
 
 	markAsValid, ok := s.replayDetector.Check(uint64(header.SequenceNumber))
 	if !ok {
-		return nil, errDuplicated
+		return nil, &errorDuplicated{
+			Proto: "srtp", SSRC: header.SSRC, Index: uint32(header.SequenceNumber),
+		}
 	}
 
 	dst = growBufferSize(dst, len(ciphertext)-c.cipher.authTagLen())

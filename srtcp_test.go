@@ -3,6 +3,7 @@ package srtp
 import (
 	"bytes"
 	"encoding/binary"
+	"errors"
 	"testing"
 
 	"github.com/pion/rtcp"
@@ -178,10 +179,10 @@ func TestRTCPReplayDetectorSeparation(t *testing.T) {
 	}
 	assert.Equal(decryptResult2, rtcpTestDecrypted2, "RTCP failed to decrypt")
 
-	if _, err = decryptContext.DecryptRTCP(nil, rtcpPacket1, nil); err != errDuplicated {
+	if _, err = decryptContext.DecryptRTCP(nil, rtcpPacket1, nil); !errors.Is(err, errDuplicated) {
 		t.Errorf("Was able to decrypt duplicated RTCP packet")
 	}
-	if _, err = decryptContext.DecryptRTCP(nil, rtcpPacket2, nil); err != errDuplicated {
+	if _, err = decryptContext.DecryptRTCP(nil, rtcpPacket2, nil); !errors.Is(err, errDuplicated) {
 		t.Errorf("Was able to decrypt duplicated RTCP packet")
 	}
 }
