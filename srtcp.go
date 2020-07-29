@@ -56,7 +56,7 @@ func (c *Context) encryptRTCP(dst, decrypted []byte) ([]byte, error) {
 
 	// We roll over early because MSB is used for marking as encrypted
 	s.srtcpIndex++
-	if s.srtcpIndex >= maxSRTCPIndex {
+	if s.srtcpIndex > maxSRTCPIndex {
 		s.srtcpIndex = 0
 	}
 

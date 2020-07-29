@@ -192,5 +192,5 @@ func (c *Context) Index(ssrc uint32) (uint32, bool) {
 // SetIndex sets SRTCP index value of specified SSRC.
 func (c *Context) SetIndex(ssrc uint32, index uint32) {
 	s := c.getSRTCPSSRCState(ssrc)
-	s.srtcpIndex = index % maxSRTCPIndex
+	s.srtcpIndex = index % (maxSRTCPIndex + 1)
 }
