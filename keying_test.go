@@ -13,12 +13,12 @@ type mockKeyingMaterialExporter struct {
 
 func (m *mockKeyingMaterialExporter) ExportKeyingMaterial(label string, context []byte, length int) ([]byte, error) {
 	if label != labelExtractorDtlsSrtp {
-		return nil, fmt.Errorf("exporter called with wrong label: %s", label)
+		return nil, fmt.Errorf("%w: expected(%s) actual(%s)", errExporterWrongLabel, label, labelExtractorDtlsSrtp)
 	}
 
 	m.exported = make([]byte, length)
 	if _, err := rand.Read(m.exported); err != nil {
-		return nil, fmt.Errorf("failed to create random bytes: %v", err)
+		return nil, err
 	}
 
 	return m.exported, nil

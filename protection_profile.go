@@ -18,7 +18,7 @@ func (p ProtectionProfile) keyLen() (int, error) {
 	case ProtectionProfileAeadAes128Gcm:
 		return 16, nil
 	default:
-		return 0, fmt.Errorf("no such ProtectionProfile %#v", p)
+		return 0, fmt.Errorf("%w: %#v", errNoSuchSRTPProfile, p)
 	}
 }
 
@@ -29,7 +29,7 @@ func (p ProtectionProfile) saltLen() (int, error) {
 	case ProtectionProfileAeadAes128Gcm:
 		return 12, nil
 	default:
-		return 0, fmt.Errorf("no such ProtectionProfile %#v", p)
+		return 0, fmt.Errorf("%w: %#v", errNoSuchSRTPProfile, p)
 	}
 }
 
@@ -40,7 +40,7 @@ func (p ProtectionProfile) authTagLen() (int, error) {
 	case ProtectionProfileAeadAes128Gcm:
 		return (&srtpCipherAeadAesGcm{}).authTagLen(), nil
 	default:
-		return 0, fmt.Errorf("no such ProtectionProfile %#v", p)
+		return 0, fmt.Errorf("%w: %#v", errNoSuchSRTPProfile, p)
 	}
 }
 
@@ -51,6 +51,6 @@ func (p ProtectionProfile) authKeyLen() (int, error) {
 	case ProtectionProfileAeadAes128Gcm:
 		return 0, nil
 	default:
-		return 0, fmt.Errorf("no such ProtectionProfile %#v", p)
+		return 0, fmt.Errorf("%w: %#v", errNoSuchSRTPProfile, p)
 	}
 }

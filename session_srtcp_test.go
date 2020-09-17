@@ -23,7 +23,7 @@ func TestSessionSRTCPBadInit(t *testing.T) {
 	}
 }
 
-func buildSessionSRTCPPair(t *testing.T) (*SessionSRTCP, *SessionSRTCP) {
+func buildSessionSRTCPPair(t *testing.T) (*SessionSRTCP, *SessionSRTCP) { //nolint:dupl
 	aPipe, bPipe := net.Pipe()
 	config := &Config{
 		Profile: ProtectionProfileAes128CmHmacSha1_80,

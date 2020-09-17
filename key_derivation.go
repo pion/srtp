@@ -3,13 +3,12 @@ package srtp
 import (
 	"crypto/aes"
 	"encoding/binary"
-	"errors"
 )
 
 func aesCmKeyDerivation(label byte, masterKey, masterSalt []byte, indexOverKdr int, outLen int) ([]byte, error) {
 	if indexOverKdr != 0 {
 		// 24-bit "index DIV kdr" must be xored to prf input.
-		return nil, errors.New("indexOverKdr > 0 is not supported yet")
+		return nil, errNonZeroKDRNotSupported
 	}
 
 	// https://tools.ietf.org/html/rfc3711#appendix-B.3
@@ -25,7 +24,7 @@ func aesCmKeyDerivation(label byte, masterKey, masterSalt []byte, indexOverKdr i
 
 	prfIn[7] ^= label
 
-	//The resulting value is then AES encrypted using the master key to get the cipher key.
+	// The resulting value is then AES encrypted using the master key to get the cipher key.
 	block, err := aes.NewCipher(masterKey)
 	if err != nil {
 		return nil, err
@@ -57,7 +56,7 @@ func generateCounter(sequenceNumber uint16, rolloverCounter uint32, ssrc uint32,
 	binary.BigEndian.PutUint32(counter[12:], uint32(sequenceNumber)<<16)
 
 	for i := range sessionSalt {
-		counter[i] = counter[i] ^ sessionSalt[i]
+		counter[i] ^= sessionSalt[i]
 	}
 
 	return counter

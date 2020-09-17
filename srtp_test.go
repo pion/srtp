@@ -9,8 +9,10 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-const cipherContextAlgo = ProtectionProfileAes128CmHmacSha1_80
-const defaultSsrc = 0
+const (
+	cipherContextAlgo = ProtectionProfileAes128CmHmacSha1_80
+	defaultSsrc       = 0
+)
 
 type rtpTestCase struct {
 	sequenceNumber uint16
@@ -141,8 +143,8 @@ func TestRTPInvalidAuth(t *testing.T) {
 		t.Errorf("CreateContext failed: %v", err)
 	}
 
-	for _, testCase := range rtpTestCases {
-		pkt := &rtp.Packet{Payload: rtpTestCaseDecrypted, Header: rtp.Header{SequenceNumber: testCase.sequenceNumber}}
+	for _, testCase := range rtpTestCases() {
+		pkt := &rtp.Packet{Payload: rtpTestCaseDecrypted(), Header: rtp.Header{SequenceNumber: testCase.sequenceNumber}}
 		pktRaw, err := pkt.Marshal()
 		if err != nil {
 			t.Fatal(err)
@@ -159,32 +161,35 @@ func TestRTPInvalidAuth(t *testing.T) {
 	}
 }
 
-var rtpTestCaseDecrypted = []byte{0x00, 0x01, 0x02, 0x03, 0x04, 0x05}
-var rtpTestCases = []rtpTestCase{
-	{
-		sequenceNumber: 5000,
-		encrypted:      []byte{0x6d, 0xd3, 0x7e, 0xd5, 0x99, 0xb7, 0x2d, 0x28, 0xb1, 0xf3, 0xa1, 0xf0, 0xc, 0xfb, 0xfd, 0x8},
-	},
-	{
-		sequenceNumber: 5001,
-		encrypted:      []byte{0xda, 0x47, 0xb, 0x2a, 0x74, 0x53, 0x65, 0xbd, 0x2f, 0xeb, 0xdc, 0x4b, 0x6d, 0x23, 0xf3, 0xde},
-	},
-	{
-		sequenceNumber: 5002,
-		encrypted:      []byte{0x6e, 0xa7, 0x69, 0x8d, 0x24, 0x6d, 0xdc, 0xbf, 0xec, 0x2, 0x1c, 0xd1, 0x60, 0x76, 0xc1, 0xe},
-	},
-	{
-		sequenceNumber: 5003,
-		encrypted:      []byte{0x24, 0x7e, 0x96, 0xc8, 0x7d, 0x33, 0xa2, 0x92, 0x8d, 0x13, 0x8d, 0xe0, 0x76, 0x9f, 0x8, 0xdc},
-	},
-	{
-		sequenceNumber: 5004,
-		encrypted:      []byte{0x75, 0x43, 0x28, 0xe4, 0x3a, 0x77, 0x59, 0x9b, 0x2e, 0xdf, 0x7b, 0x12, 0x68, 0xb, 0x57, 0x49},
-	},
-	{
-		sequenceNumber: 65535, // upper boundary
-		encrypted:      []byte{0xaf, 0xf7, 0xc2, 0x70, 0x37, 0x20, 0x83, 0x9c, 0x2c, 0x63, 0x85, 0x15, 0xe, 0x44, 0xca, 0x36},
-	},
+func rtpTestCaseDecrypted() []byte { return []byte{0x00, 0x01, 0x02, 0x03, 0x04, 0x05} }
+
+func rtpTestCases() []rtpTestCase {
+	return []rtpTestCase{
+		{
+			sequenceNumber: 5000,
+			encrypted:      []byte{0x6d, 0xd3, 0x7e, 0xd5, 0x99, 0xb7, 0x2d, 0x28, 0xb1, 0xf3, 0xa1, 0xf0, 0xc, 0xfb, 0xfd, 0x8},
+		},
+		{
+			sequenceNumber: 5001,
+			encrypted:      []byte{0xda, 0x47, 0xb, 0x2a, 0x74, 0x53, 0x65, 0xbd, 0x2f, 0xeb, 0xdc, 0x4b, 0x6d, 0x23, 0xf3, 0xde},
+		},
+		{
+			sequenceNumber: 5002,
+			encrypted:      []byte{0x6e, 0xa7, 0x69, 0x8d, 0x24, 0x6d, 0xdc, 0xbf, 0xec, 0x2, 0x1c, 0xd1, 0x60, 0x76, 0xc1, 0xe},
+		},
+		{
+			sequenceNumber: 5003,
+			encrypted:      []byte{0x24, 0x7e, 0x96, 0xc8, 0x7d, 0x33, 0xa2, 0x92, 0x8d, 0x13, 0x8d, 0xe0, 0x76, 0x9f, 0x8, 0xdc},
+		},
+		{
+			sequenceNumber: 5004,
+			encrypted:      []byte{0x75, 0x43, 0x28, 0xe4, 0x3a, 0x77, 0x59, 0x9b, 0x2e, 0xdf, 0x7b, 0x12, 0x68, 0xb, 0x57, 0x49},
+		},
+		{
+			sequenceNumber: 65535, // upper boundary
+			encrypted:      []byte{0xaf, 0xf7, 0xc2, 0x70, 0x37, 0x20, 0x83, 0x9c, 0x2c, 0x63, 0x85, 0x15, 0xe, 0x44, 0xca, 0x36},
+		},
+	}
 }
 
 func TestRTPLifecyleNewAlloc(t *testing.T) {
@@ -193,7 +198,7 @@ func TestRTPLifecyleNewAlloc(t *testing.T) {
 	authTagLen, err := ProtectionProfileAes128CmHmacSha1_80.authTagLen()
 	assert.NoError(err)
 
-	for _, testCase := range rtpTestCases {
+	for _, testCase := range rtpTestCases() {
 		encryptContext, err := buildTestContext()
 		if err != nil {
 			t.Fatal(err)
@@ -204,7 +209,7 @@ func TestRTPLifecyleNewAlloc(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		decryptedPkt := &rtp.Packet{Payload: rtpTestCaseDecrypted, Header: rtp.Header{SequenceNumber: testCase.sequenceNumber}}
+		decryptedPkt := &rtp.Packet{Payload: rtpTestCaseDecrypted(), Header: rtp.Header{SequenceNumber: testCase.sequenceNumber}}
 		decryptedRaw, err := decryptedPkt.Marshal()
 		if err != nil {
 			t.Fatal(err)
@@ -236,7 +241,7 @@ func TestRTPLifecyleNewAlloc(t *testing.T) {
 func TestRTPLifecyleInPlace(t *testing.T) {
 	assert := assert.New(t)
 
-	for _, testCase := range rtpTestCases {
+	for _, testCase := range rtpTestCases() {
 		encryptContext, err := buildTestContext()
 		if err != nil {
 			t.Fatal(err)
@@ -248,7 +253,7 @@ func TestRTPLifecyleInPlace(t *testing.T) {
 		}
 
 		decryptHeader := &rtp.Header{}
-		decryptedPkt := &rtp.Packet{Payload: rtpTestCaseDecrypted, Header: rtp.Header{SequenceNumber: testCase.sequenceNumber}}
+		decryptedPkt := &rtp.Packet{Payload: rtpTestCaseDecrypted(), Header: rtp.Header{SequenceNumber: testCase.sequenceNumber}}
 		decryptedRaw, err := decryptedPkt.Marshal()
 		if err != nil {
 			t.Fatal(err)
@@ -266,11 +271,12 @@ func TestRTPLifecyleInPlace(t *testing.T) {
 		copy(encryptInput, decryptedRaw)
 
 		actualEncrypted, err := encryptContext.EncryptRTP(encryptInput, encryptInput, encryptHeader)
-		if err != nil {
+		switch {
+		case err != nil:
 			t.Fatal(err)
-		} else if &encryptInput[0] != &actualEncrypted[0] {
+		case &encryptInput[0] != &actualEncrypted[0]:
 			t.Fatal("EncryptRTP failed to encrypt in place")
-		} else if encryptHeader.SequenceNumber != testCase.sequenceNumber {
+		case encryptHeader.SequenceNumber != testCase.sequenceNumber:
 			t.Fatal("EncryptRTP failed to populate input rtp.Header")
 		}
 		assert.Equalf(actualEncrypted, encryptedRaw, "RTP packet with SeqNum invalid encryption: %d", testCase.sequenceNumber)
@@ -280,11 +286,12 @@ func TestRTPLifecyleInPlace(t *testing.T) {
 		copy(decryptInput, encryptedRaw)
 
 		actualDecrypted, err := decryptContext.DecryptRTP(decryptInput, decryptInput, decryptHeader)
-		if err != nil {
+		switch {
+		case err != nil:
 			t.Fatal(err)
-		} else if &decryptInput[0] != &actualDecrypted[0] {
+		case &decryptInput[0] != &actualDecrypted[0]:
 			t.Fatal("DecryptRTP failed to decrypt in place")
-		} else if decryptHeader.SequenceNumber != testCase.sequenceNumber {
+		case decryptHeader.SequenceNumber != testCase.sequenceNumber:
 			t.Fatal("DecryptRTP failed to populate input rtp.Header")
 		}
 		assert.Equalf(actualDecrypted, decryptedRaw, "RTP packet with SeqNum invalid decryption: %d", testCase.sequenceNumber)
@@ -294,7 +301,7 @@ func TestRTPLifecyleInPlace(t *testing.T) {
 func TestRTPReplayProtection(t *testing.T) {
 	assert := assert.New(t)
 
-	for _, testCase := range rtpTestCases {
+	for _, testCase := range rtpTestCases() {
 		encryptContext, err := buildTestContext()
 		if err != nil {
 			t.Fatal(err)
@@ -306,7 +313,7 @@ func TestRTPReplayProtection(t *testing.T) {
 		}
 
 		decryptHeader := &rtp.Header{}
-		decryptedPkt := &rtp.Packet{Payload: rtpTestCaseDecrypted, Header: rtp.Header{SequenceNumber: testCase.sequenceNumber}}
+		decryptedPkt := &rtp.Packet{Payload: rtpTestCaseDecrypted(), Header: rtp.Header{SequenceNumber: testCase.sequenceNumber}}
 		decryptedRaw, err := decryptedPkt.Marshal()
 		if err != nil {
 			t.Fatal(err)
@@ -324,11 +331,12 @@ func TestRTPReplayProtection(t *testing.T) {
 		copy(encryptInput, decryptedRaw)
 
 		actualEncrypted, err := encryptContext.EncryptRTP(encryptInput, encryptInput, encryptHeader)
-		if err != nil {
+		switch {
+		case err != nil:
 			t.Fatal(err)
-		} else if &encryptInput[0] != &actualEncrypted[0] {
+		case &encryptInput[0] != &actualEncrypted[0]:
 			t.Fatal("EncryptRTP failed to encrypt in place")
-		} else if encryptHeader.SequenceNumber != testCase.sequenceNumber {
+		case encryptHeader.SequenceNumber != testCase.sequenceNumber:
 			t.Fatal("EncryptRTP failed to populate input rtp.Header")
 		}
 		assert.Equalf(actualEncrypted, encryptedRaw, "RTP packet with SeqNum invalid encryption: %d", testCase.sequenceNumber)
@@ -338,11 +346,12 @@ func TestRTPReplayProtection(t *testing.T) {
 		copy(decryptInput, encryptedRaw)
 
 		actualDecrypted, err := decryptContext.DecryptRTP(decryptInput, decryptInput, decryptHeader)
-		if err != nil {
+		switch {
+		case err != nil:
 			t.Fatal(err)
-		} else if &decryptInput[0] != &actualDecrypted[0] {
+		case &decryptInput[0] != &actualDecrypted[0]:
 			t.Fatal("DecryptRTP failed to decrypt in place")
-		} else if decryptHeader.SequenceNumber != testCase.sequenceNumber {
+		case decryptHeader.SequenceNumber != testCase.sequenceNumber:
 			t.Fatal("DecryptRTP failed to populate input rtp.Header")
 		}
 		assert.Equalf(actualDecrypted, decryptedRaw, "RTP packet with SeqNum invalid decryption: %d", testCase.sequenceNumber)

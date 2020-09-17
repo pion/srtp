@@ -1,13 +1,12 @@
 package srtp
 
-import (
+import ( //nolint:gci
 	"crypto/aes"
 	"crypto/cipher"
 	"crypto/hmac"
-	"crypto/sha1" //#nosec
+	"crypto/sha1" //nolint:gosec
 	"crypto/subtle"
 	"encoding/binary"
-	"fmt"
 	"hash"
 
 	"github.com/pion/rtp"
@@ -111,7 +110,7 @@ func (s *srtpCipherAesCmHmacSha1) decryptRTP(dst, ciphertext []byte, header *rtp
 	// See if the auth tag actually matches.
 	// We use a constant time comparison to prevent timing attacks.
 	if subtle.ConstantTimeCompare(actualTag, expectedTag) != 1 {
-		return nil, fmt.Errorf("failed to verify auth tag")
+		return nil, errFailedToVerifyAuthTag
 	}
 
 	// Write the plaintext header to the destination buffer.
@@ -154,7 +153,7 @@ func (s *srtpCipherAesCmHmacSha1) decryptRTCP(out, encrypted []byte, index, ssrc
 
 	actualTag := encrypted[len(encrypted)-s.authTagLen():]
 	if subtle.ConstantTimeCompare(actualTag, expectedTag) != 1 {
-		return nil, fmt.Errorf("failed to verify auth tag")
+		return nil, errFailedToVerifyAuthTag
 	}
 
 	stream := cipher.NewCTR(s.srtcpBlock, generateCounter(uint16(index&0xffff), index>>16, ssrc, s.srtcpSessionSalt))

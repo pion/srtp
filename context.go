@@ -70,9 +70,9 @@ func CreateContext(masterKey, masterSalt []byte, profile ProtectionProfile, opts
 	}
 
 	if masterKeyLen := len(masterKey); masterKeyLen != keyLen {
-		return c, fmt.Errorf("SRTP Master Key must be len %d, got %d", masterKey, keyLen)
+		return c, fmt.Errorf("%w expected(%d) actual(%d)", errShortSrtpMasterKey, masterKey, keyLen)
 	} else if masterSaltLen := len(masterSalt); masterSaltLen != saltLen {
-		return c, fmt.Errorf("SRTP Salt must be len %d, got %d", saltLen, masterSaltLen)
+		return c, fmt.Errorf("%w expected(%d) actual(%d)", errShortSrtpMasterSalt, saltLen, masterSaltLen)
 	}
 
 	c = &Context{
@@ -86,7 +86,7 @@ func CreateContext(masterKey, masterSalt []byte, profile ProtectionProfile, opts
 	case ProtectionProfileAes128CmHmacSha1_80:
 		c.cipher, err = newSrtpCipherAesCmHmacSha1(masterKey, masterSalt)
 	default:
-		return nil, fmt.Errorf("no such SRTP Profile %#v", profile)
+		return nil, fmt.Errorf("%w: %#v", errNoSuchSRTPProfile, profile)
 	}
 	if err != nil {
 		return nil, err

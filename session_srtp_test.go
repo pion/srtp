@@ -2,7 +2,6 @@ package srtp
 
 import (
 	"bytes"
-	"errors"
 	"io"
 	"net"
 	"reflect"
@@ -22,7 +21,7 @@ func TestSessionSRTPBadInit(t *testing.T) {
 	}
 }
 
-func buildSessionSRTPPair(t *testing.T) (*SessionSRTP, *SessionSRTP) {
+func buildSessionSRTPPair(t *testing.T) (*SessionSRTP, *SessionSRTP) { //nolint:dupl
 	aPipe, bPipe := net.Pipe()
 	config := &Config{
 		Profile: ProtectionProfileAes128CmHmacSha1_80,
@@ -290,7 +289,7 @@ func assertPayloadSRTP(t *testing.T, stream *ReadStreamSRTP, headerSize int, exp
 	}
 	if !bytes.Equal(expectedPayload, readBuffer[headerSize:n]) {
 		t.Errorf("Sent buffer does not match the one received exp(%v) actual(%v)", expectedPayload, readBuffer[headerSize:n])
-		return 0, errors.New("payload differs")
+		return 0, errPayloadDiffers
 	}
 	return hdr.SequenceNumber, nil
 }
