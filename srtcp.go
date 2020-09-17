@@ -14,7 +14,7 @@ func (c *Context) decryptRTCP(dst, encrypted []byte) ([]byte, error) {
 	tailOffset := len(encrypted) - (c.cipher.authTagLen() + srtcpIndexSize)
 
 	if tailOffset < 0 {
-		return nil, fmt.Errorf("%d is too short to be a valid RTCP packet", len(encrypted))
+		return nil, fmt.Errorf("%w: %d", errTooShortRTCP, len(encrypted))
 	} else if isEncrypted := encrypted[tailOffset] >> 7; isEncrypted == 0 {
 		return out, nil
 	}
