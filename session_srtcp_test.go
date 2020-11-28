@@ -2,29 +2,34 @@ package srtp
 
 import (
 	"bytes"
+	"context"
 	"io"
-	"net"
 	"reflect"
 	"sync"
 	"testing"
 	"time"
 
 	"github.com/pion/rtcp"
+	"github.com/pion/transport/connctx"
 	"github.com/pion/transport/test"
 )
 
 const rtcpHeaderSize = 4
 
 func TestSessionSRTCPBadInit(t *testing.T) {
-	if _, err := NewSessionSRTCP(nil, nil); err == nil {
+	ctx := context.Background()
+
+	if _, err := NewSessionSRTCP(ctx, nil, nil); err == nil {
 		t.Fatal("NewSessionSRTCP should error if no config was provided")
-	} else if _, err := NewSessionSRTCP(nil, &Config{}); err == nil {
+	} else if _, err := NewSessionSRTCP(ctx, nil, &Config{}); err == nil {
 		t.Fatal("NewSessionSRTCP should error if no net was provided")
 	}
 }
 
 func buildSessionSRTCPPair(t *testing.T) (*SessionSRTCP, *SessionSRTCP) { //nolint:dupl
-	aPipe, bPipe := net.Pipe()
+	ctx := context.Background()
+
+	aPipe, bPipe := connctx.Pipe()
 	config := &Config{
 		Profile: ProtectionProfileAes128CmHmacSha1_80,
 		Keys: SessionKeys{
@@ -35,14 +40,14 @@ func buildSessionSRTCPPair(t *testing.T) (*SessionSRTCP, *SessionSRTCP) { //noli
 		},
 	}
 
-	aSession, err := NewSessionSRTCP(aPipe, config)
+	aSession, err := NewSessionSRTCP(ctx, aPipe, config)
 	if err != nil {
 		t.Fatal(err)
 	} else if aSession == nil {
 		t.Fatal("NewSessionSRTCP did not error, but returned nil session")
 	}
 
-	bSession, err := NewSessionSRTCP(bPipe, config)
+	bSession, err := NewSessionSRTCP(ctx, bPipe, config)
 	if err != nil {
 		t.Fatal(err)
 	} else if bSession == nil {
@@ -53,6 +58,8 @@ func buildSessionSRTCPPair(t *testing.T) (*SessionSRTCP, *SessionSRTCP) { //noli
 }
 
 func TestSessionSRTCP(t *testing.T) {
+	ctx := context.Background()
+
 	lim := test.TimeOut(time.Second * 10)
 	defer lim.Stop()
 
@@ -71,7 +78,7 @@ func TestSessionSRTCP(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if _, err = aWriteStream.Write(testPayload); err != nil {
+	if _, err = aWriteStream.Write(ctx, testPayload); err != nil {
 		t.Fatal(err)
 	}
 
@@ -80,7 +87,7 @@ func TestSessionSRTCP(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if _, err = bReadStream.Read(readBuffer); err != nil {
+	if _, err = bReadStream.Read(ctx, readBuffer); err != nil {
 		t.Fatal(err)
 	}
 
@@ -98,6 +105,8 @@ func TestSessionSRTCP(t *testing.T) {
 }
 
 func TestSessionSRTCPOpenReadStream(t *testing.T) {
+	ctx := context.Background()
+
 	lim := test.TimeOut(time.Second * 10)
 	defer lim.Stop()
 
@@ -121,11 +130,11 @@ func TestSessionSRTCPOpenReadStream(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if _, err = aWriteStream.Write(testPayload); err != nil {
+	if _, err = aWriteStream.Write(ctx, testPayload); err != nil {
 		t.Fatal(err)
 	}
 
-	if _, err = bReadStream.Read(readBuffer); err != nil {
+	if _, err = bReadStream.Read(ctx, readBuffer); err != nil {
 		t.Fatal(err)
 	}
 
@@ -143,6 +152,8 @@ func TestSessionSRTCPOpenReadStream(t *testing.T) {
 }
 
 func TestSessionSRTCPReplayProtection(t *testing.T) {
+	ctx := context.Background()
+
 	lim := test.TimeOut(time.Second * 5)
 	defer lim.Stop()
 
@@ -181,7 +192,7 @@ func TestSessionSRTCPReplayProtection(t *testing.T) {
 	go func() {
 		defer wg.Done()
 		for {
-			if ssrc, perr := getSenderSSRC(t, bReadStream); perr == nil {
+			if ssrc, perr := getSenderSSRC(ctx, t, bReadStream); perr == nil {
 				receivedSSRC = append(receivedSSRC, ssrc)
 			} else if perr == io.EOF {
 				return
@@ -191,17 +202,17 @@ func TestSessionSRTCPReplayProtection(t *testing.T) {
 
 	// Write with replay attack
 	for _, p := range packets {
-		if _, err = aSession.session.nextConn.Write(p); err != nil {
+		if _, err = aSession.session.nextConn.WriteContext(ctx, p); err != nil {
 			t.Fatal(err)
 		}
 		// Immediately replay
-		if _, err = aSession.session.nextConn.Write(p); err != nil {
+		if _, err = aSession.session.nextConn.WriteContext(ctx, p); err != nil {
 			t.Fatal(err)
 		}
 	}
 	for _, p := range packets {
 		// Delayed replay
-		if _, err = aSession.session.nextConn.Write(p); err != nil {
+		if _, err = aSession.session.nextConn.WriteContext(ctx, p); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -224,7 +235,7 @@ func TestSessionSRTCPReplayProtection(t *testing.T) {
 	}
 }
 
-func getSenderSSRC(t *testing.T, stream *ReadStreamSRTCP) (ssrc uint32, err error) {
+func getSenderSSRC(ctx context.Context, t *testing.T, stream *ReadStreamSRTCP) (ssrc uint32, err error) {
 	authTagSize, err := ProtectionProfileAes128CmHmacSha1_80.authTagLen()
 	if err != nil {
 		return 0, err
@@ -232,7 +243,7 @@ func getSenderSSRC(t *testing.T, stream *ReadStreamSRTCP) (ssrc uint32, err erro
 
 	const pliPacketSize = 8
 	readBuffer := make([]byte, pliPacketSize+authTagSize+srtcpIndexSize)
-	n, _, err := stream.ReadRTCP(readBuffer)
+	n, _, err := stream.ReadRTCP(ctx, readBuffer)
 	if err == io.EOF {
 		return 0, err
 	}

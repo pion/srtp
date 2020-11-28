@@ -1,7 +1,7 @@
 package srtp
 
 import (
-	"net"
+	"context"
 
 	"github.com/pion/logging"
 	"github.com/pion/rtcp"
@@ -19,7 +19,7 @@ type SessionSRTCP struct {
 }
 
 // NewSessionSRTCP creates a SRTCP session using conn as the underlying transport.
-func NewSessionSRTCP(conn net.Conn, config *Config) (*SessionSRTCP, error) { //nolint:dupl
+func NewSessionSRTCP(ctx context.Context, conn ConnCtx, config *Config) (*SessionSRTCP, error) { //nolint:dupl
 	if config == nil {
 		return nil, errNoConfig
 	} else if conn == nil {
@@ -58,6 +58,7 @@ func NewSessionSRTCP(conn net.Conn, config *Config) (*SessionSRTCP, error) { //n
 	s.writeStream = &WriteStreamSRTCP{s}
 
 	err := s.session.start(
+		ctx,
 		config.Keys.LocalMasterKey, config.Keys.LocalMasterSalt,
 		config.Keys.RemoteMasterKey, config.Keys.RemoteMasterSalt,
 		config.Profile,
@@ -107,7 +108,7 @@ func (s *SessionSRTCP) Close() error {
 
 // Private
 
-func (s *SessionSRTCP) write(buf []byte) (int, error) {
+func (s *SessionSRTCP) write(ctx context.Context, buf []byte) (int, error) {
 	if _, ok := <-s.session.started; ok {
 		return 0, errStartedChannelUsedIncorrectly
 	}
@@ -119,7 +120,7 @@ func (s *SessionSRTCP) write(buf []byte) (int, error) {
 	if err != nil {
 		return 0, err
 	}
-	return s.session.nextConn.Write(encrypted)
+	return s.session.nextConn.WriteContext(ctx, encrypted)
 }
 
 // create a list of Destination SSRCs
@@ -140,7 +141,7 @@ func destinationSSRC(pkts []rtcp.Packet) []uint32 {
 	return out
 }
 
-func (s *SessionSRTCP) decrypt(buf []byte) error {
+func (s *SessionSRTCP) decrypt(ctx context.Context, buf []byte) error {
 	decrypted, err := s.remoteContext.DecryptRTCP(buf, buf, nil)
 	if err != nil {
 		return err
@@ -164,7 +165,7 @@ func (s *SessionSRTCP) decrypt(buf []byte) error {
 			return errFailedTypeAssertion
 		}
 
-		_, err = readStream.write(decrypted)
+		_, err = readStream.write(ctx, decrypted)
 		if err != nil {
 			return err
 		}

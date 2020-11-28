@@ -1,7 +1,7 @@
 package srtp
 
 import (
-	"net"
+	"context"
 
 	"github.com/pion/logging"
 	"github.com/pion/rtp"
@@ -19,7 +19,7 @@ type SessionSRTP struct {
 }
 
 // NewSessionSRTP creates a SRTP session using conn as the underlying transport.
-func NewSessionSRTP(conn net.Conn, config *Config) (*SessionSRTP, error) { //nolint:dupl
+func NewSessionSRTP(ctx context.Context, conn ConnCtx, config *Config) (*SessionSRTP, error) { //nolint:dupl
 	if config == nil {
 		return nil, errNoConfig
 	} else if conn == nil {
@@ -58,6 +58,7 @@ func NewSessionSRTP(conn net.Conn, config *Config) (*SessionSRTP, error) { //nol
 	s.writeStream = &WriteStreamSRTP{s}
 
 	err := s.session.start(
+		ctx,
 		config.Keys.LocalMasterKey, config.Keys.LocalMasterSalt,
 		config.Keys.RemoteMasterKey, config.Keys.RemoteMasterSalt,
 		config.Profile,
@@ -106,7 +107,7 @@ func (s *SessionSRTP) Close() error {
 	return s.session.close()
 }
 
-func (s *SessionSRTP) write(b []byte) (int, error) {
+func (s *SessionSRTP) write(ctx context.Context, b []byte) (int, error) {
 	packet := &rtp.Packet{}
 
 	err := packet.Unmarshal(b)
@@ -114,10 +115,10 @@ func (s *SessionSRTP) write(b []byte) (int, error) {
 		return 0, nil
 	}
 
-	return s.writeRTP(&packet.Header, packet.Payload)
+	return s.writeRTP(ctx, &packet.Header, packet.Payload)
 }
 
-func (s *SessionSRTP) writeRTP(header *rtp.Header, payload []byte) (int, error) {
+func (s *SessionSRTP) writeRTP(ctx context.Context, header *rtp.Header, payload []byte) (int, error) {
 	if _, ok := <-s.session.started; ok {
 		return 0, errStartedChannelUsedIncorrectly
 	}
@@ -130,10 +131,10 @@ func (s *SessionSRTP) writeRTP(header *rtp.Header, payload []byte) (int, error) 
 		return 0, err
 	}
 
-	return s.session.nextConn.Write(encrypted)
+	return s.session.nextConn.WriteContext(ctx, encrypted)
 }
 
-func (s *SessionSRTP) decrypt(buf []byte) error {
+func (s *SessionSRTP) decrypt(ctx context.Context, buf []byte) error {
 	h := &rtp.Header{}
 	if err := h.Unmarshal(buf); err != nil {
 		return err
@@ -156,7 +157,7 @@ func (s *SessionSRTP) decrypt(buf []byte) error {
 		return err
 	}
 
-	_, err = readStream.write(decrypted)
+	_, err = readStream.write(ctx, decrypted)
 	if err != nil {
 		return err
 	}
