@@ -1,6 +1,7 @@
 package srtp
 
 import (
+	"context"
 	"errors"
 	"sync"
 
@@ -53,8 +54,8 @@ func (r *ReadStreamSRTP) init(child streamSession, ssrc uint32) error {
 	return nil
 }
 
-func (r *ReadStreamSRTP) write(buf []byte) (n int, err error) {
-	n, err = r.buffer.Write(buf)
+func (r *ReadStreamSRTP) write(ctx context.Context, buf []byte) (n int, err error) {
+	n, err = r.buffer.WriteContext(ctx, buf)
 
 	if errors.Is(err, packetio.ErrFull) {
 		// Silently drop data when the buffer is full.
@@ -65,13 +66,13 @@ func (r *ReadStreamSRTP) write(buf []byte) (n int, err error) {
 }
 
 // Read reads and decrypts full RTP packet from the nextConn
-func (r *ReadStreamSRTP) Read(buf []byte) (int, error) {
-	return r.buffer.Read(buf)
+func (r *ReadStreamSRTP) Read(ctx context.Context, buf []byte) (int, error) {
+	return r.buffer.ReadContext(ctx, buf)
 }
 
 // ReadRTP reads and decrypts full RTP packet and its header from the nextConn
-func (r *ReadStreamSRTP) ReadRTP(buf []byte) (int, *rtp.Header, error) {
-	n, err := r.Read(buf)
+func (r *ReadStreamSRTP) ReadRTP(ctx context.Context, buf []byte) (int, *rtp.Header, error) {
+	n, err := r.Read(ctx, buf)
 	if err != nil {
 		return 0, nil, err
 	}
@@ -120,11 +121,11 @@ type WriteStreamSRTP struct {
 }
 
 // WriteRTP encrypts a RTP packet and writes to the connection
-func (w *WriteStreamSRTP) WriteRTP(header *rtp.Header, payload []byte) (int, error) {
-	return w.session.writeRTP(header, payload)
+func (w *WriteStreamSRTP) WriteRTP(ctx context.Context, header *rtp.Header, payload []byte) (int, error) {
+	return w.session.writeRTP(ctx, header, payload)
 }
 
 // Write encrypts and writes a full RTP packets to the nextConn
-func (w *WriteStreamSRTP) Write(b []byte) (int, error) {
-	return w.session.write(b)
+func (w *WriteStreamSRTP) Write(ctx context.Context, b []byte) (int, error) {
+	return w.session.write(ctx, b)
 }

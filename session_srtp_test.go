@@ -2,27 +2,32 @@ package srtp
 
 import (
 	"bytes"
+	"context"
 	"io"
-	"net"
 	"reflect"
 	"sync"
 	"testing"
 	"time"
 
 	"github.com/pion/rtp"
+	"github.com/pion/transport/connctx"
 	"github.com/pion/transport/test"
 )
 
 func TestSessionSRTPBadInit(t *testing.T) {
-	if _, err := NewSessionSRTP(nil, nil); err == nil {
+	ctx := context.Background()
+
+	if _, err := NewSessionSRTP(ctx, nil, nil); err == nil {
 		t.Fatal("NewSessionSRTP should error if no config was provided")
-	} else if _, err := NewSessionSRTP(nil, &Config{}); err == nil {
+	} else if _, err := NewSessionSRTP(ctx, nil, &Config{}); err == nil {
 		t.Fatal("NewSessionSRTP should error if no net was provided")
 	}
 }
 
 func buildSessionSRTPPair(t *testing.T) (*SessionSRTP, *SessionSRTP) { //nolint:dupl
-	aPipe, bPipe := net.Pipe()
+	ctx := context.Background()
+
+	aPipe, bPipe := connctx.Pipe()
 	config := &Config{
 		Profile: ProtectionProfileAes128CmHmacSha1_80,
 		Keys: SessionKeys{
@@ -33,14 +38,14 @@ func buildSessionSRTPPair(t *testing.T) (*SessionSRTP, *SessionSRTP) { //nolint:
 		},
 	}
 
-	aSession, err := NewSessionSRTP(aPipe, config)
+	aSession, err := NewSessionSRTP(ctx, aPipe, config)
 	if err != nil {
 		t.Fatal(err)
 	} else if aSession == nil {
 		t.Fatal("NewSessionSRTP did not error, but returned nil session")
 	}
 
-	bSession, err := NewSessionSRTP(bPipe, config)
+	bSession, err := NewSessionSRTP(ctx, bPipe, config)
 	if err != nil {
 		t.Fatal(err)
 	} else if bSession == nil {
@@ -51,6 +56,8 @@ func buildSessionSRTPPair(t *testing.T) (*SessionSRTP, *SessionSRTP) { //nolint:
 }
 
 func TestSessionSRTP(t *testing.T) {
+	ctx := context.Background()
+
 	lim := test.TimeOut(time.Second * 5)
 	defer lim.Stop()
 
@@ -69,7 +76,7 @@ func TestSessionSRTP(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err = aWriteStream.WriteRTP(&rtp.Header{SSRC: testSSRC}, append([]byte{}, testPayload...)); err != nil {
+	if _, err = aWriteStream.WriteRTP(ctx, &rtp.Header{SSRC: testSSRC}, append([]byte{}, testPayload...)); err != nil {
 		t.Fatal(err)
 	}
 
@@ -80,7 +87,7 @@ func TestSessionSRTP(t *testing.T) {
 		t.Fatalf("SSRC mismatch during accept exp(%v) actual%v)", testSSRC, ssrc)
 	}
 
-	if _, err = bReadStream.Read(readBuffer); err != nil {
+	if _, err = bReadStream.Read(ctx, readBuffer); err != nil {
 		t.Fatal(err)
 	}
 
@@ -98,6 +105,8 @@ func TestSessionSRTP(t *testing.T) {
 }
 
 func TestSessionSRTPOpenReadStream(t *testing.T) {
+	ctx := context.Background()
+
 	lim := test.TimeOut(time.Second * 5)
 	defer lim.Stop()
 
@@ -121,11 +130,11 @@ func TestSessionSRTPOpenReadStream(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err = aWriteStream.WriteRTP(&rtp.Header{SSRC: testSSRC}, append([]byte{}, testPayload...)); err != nil {
+	if _, err = aWriteStream.WriteRTP(ctx, &rtp.Header{SSRC: testSSRC}, append([]byte{}, testPayload...)); err != nil {
 		t.Fatal(err)
 	}
 
-	if _, err = bReadStream.Read(readBuffer); err != nil {
+	if _, err = bReadStream.Read(ctx, readBuffer); err != nil {
 		t.Fatal(err)
 	}
 
@@ -143,6 +152,8 @@ func TestSessionSRTPOpenReadStream(t *testing.T) {
 }
 
 func TestSessionSRTPMultiSSRC(t *testing.T) {
+	ctx := context.Background()
+
 	lim := test.TimeOut(time.Second * 5)
 	defer lim.Stop()
 
@@ -168,12 +179,12 @@ func TestSessionSRTPMultiSSRC(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, ssrc := range ssrcs {
-		if _, err = aWriteStream.WriteRTP(&rtp.Header{SSRC: ssrc}, append([]byte{}, testPayload...)); err != nil {
+		if _, err = aWriteStream.WriteRTP(ctx, &rtp.Header{SSRC: ssrc}, append([]byte{}, testPayload...)); err != nil {
 			t.Fatal(err)
 		}
 
 		readBuffer := make([]byte, rtpHeaderSize+len(testPayload))
-		if _, err = bReadStreams[ssrc].Read(readBuffer); err != nil {
+		if _, err = bReadStreams[ssrc].Read(ctx, readBuffer); err != nil {
 			t.Fatal(err)
 		}
 
@@ -192,6 +203,8 @@ func TestSessionSRTPMultiSSRC(t *testing.T) {
 }
 
 func TestSessionSRTPReplayProtection(t *testing.T) {
+	ctx := context.Background()
+
 	lim := test.TimeOut(time.Second * 5)
 	defer lim.Stop()
 
@@ -234,7 +247,7 @@ func TestSessionSRTPReplayProtection(t *testing.T) {
 	go func() {
 		defer wg.Done()
 		for {
-			if seq, perr := assertPayloadSRTP(t, bReadStream, rtpHeaderSize, testPayload); perr == nil {
+			if seq, perr := assertPayloadSRTP(ctx, t, bReadStream, rtpHeaderSize, testPayload); perr == nil {
 				receivedSequenceNumber = append(receivedSequenceNumber, seq)
 			} else if perr == io.EOF {
 				return
@@ -244,17 +257,17 @@ func TestSessionSRTPReplayProtection(t *testing.T) {
 
 	// Write with replay attack
 	for _, p := range packets {
-		if _, err = aSession.session.nextConn.Write(p); err != nil {
+		if _, err = aSession.session.nextConn.WriteContext(ctx, p); err != nil {
 			t.Fatal(err)
 		}
 		// Immediately replay
-		if _, err = aSession.session.nextConn.Write(p); err != nil {
+		if _, err = aSession.session.nextConn.WriteContext(ctx, p); err != nil {
 			t.Fatal(err)
 		}
 	}
 	for _, p := range packets {
 		// Delayed replay
-		if _, err = aSession.session.nextConn.Write(p); err != nil {
+		if _, err = aSession.session.nextConn.WriteContext(ctx, p); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -277,9 +290,9 @@ func TestSessionSRTPReplayProtection(t *testing.T) {
 	}
 }
 
-func assertPayloadSRTP(t *testing.T, stream *ReadStreamSRTP, headerSize int, expectedPayload []byte) (seq uint16, err error) {
+func assertPayloadSRTP(ctx context.Context, t *testing.T, stream *ReadStreamSRTP, headerSize int, expectedPayload []byte) (seq uint16, err error) {
 	readBuffer := make([]byte, headerSize+len(expectedPayload))
-	n, hdr, err := stream.ReadRTP(readBuffer)
+	n, hdr, err := stream.ReadRTP(ctx, readBuffer)
 	if err == io.EOF {
 		return 0, err
 	}
