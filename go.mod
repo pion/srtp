@@ -1,9 +1,8 @@
-module github.com/pion/srtp
+module github.com/pion/srtp/v2
 
-go 1.12
+go 1.14
 
 require (
-	github.com/davecgh/go-spew v1.1.1 // indirect
 	github.com/pion/logging v0.2.2
 	github.com/pion/rtcp v1.2.4
 	github.com/pion/rtp v1.6.1
