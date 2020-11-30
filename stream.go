@@ -1,12 +1,10 @@
 package srtp
 
-import (
-	"context"
-)
+import "github.com/pion/transport/connctx"
 
 type readStream interface {
 	init(child streamSession, ssrc uint32) error
 
-	Read(ctx context.Context, buf []byte) (int, error)
+	connctx.Reader
 	GetSSRC() uint32
 }
