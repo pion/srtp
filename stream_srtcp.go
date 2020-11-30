@@ -43,7 +43,7 @@ func newReadStreamSRTCP() readStream {
 
 // ReadRTCP reads and decrypts full RTCP packet and its header from the nextConn
 func (r *ReadStreamSRTCP) ReadRTCP(ctx context.Context, buf []byte) (int, *rtcp.Header, error) {
-	n, err := r.Read(ctx, buf)
+	n, err := r.ReadContext(ctx, buf)
 	if err != nil {
 		return 0, nil, err
 	}
@@ -57,8 +57,8 @@ func (r *ReadStreamSRTCP) ReadRTCP(ctx context.Context, buf []byte) (int, *rtcp.
 	return n, header, nil
 }
 
-// Read reads and decrypts full RTCP packet from the nextConn
-func (r *ReadStreamSRTCP) Read(ctx context.Context, buf []byte) (int, error) {
+// ReadContext reads and decrypts full RTCP packet from the nextConn
+func (r *ReadStreamSRTCP) ReadContext(ctx context.Context, buf []byte) (int, error) {
 	return r.buffer.ReadContext(ctx, buf)
 }
 
@@ -128,7 +128,7 @@ func (w *WriteStreamSRTCP) WriteRTCP(ctx context.Context, header *rtcp.Header, p
 	return w.session.write(ctx, append(headerRaw, payload...))
 }
 
-// Write encrypts and writes a full RTCP packets to the nextConn
-func (w *WriteStreamSRTCP) Write(ctx context.Context, b []byte) (int, error) {
+// WriteContext encrypts and writes a full RTCP packets to the nextConn
+func (w *WriteStreamSRTCP) WriteContext(ctx context.Context, b []byte) (int, error) {
 	return w.session.write(ctx, b)
 }

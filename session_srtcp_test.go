@@ -78,7 +78,7 @@ func TestSessionSRTCP(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if _, err = aWriteStream.Write(ctx, testPayload); err != nil {
+	if _, err = aWriteStream.WriteContext(ctx, testPayload); err != nil {
 		t.Fatal(err)
 	}
 
@@ -87,7 +87,7 @@ func TestSessionSRTCP(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if _, err = bReadStream.Read(ctx, readBuffer); err != nil {
+	if _, err = bReadStream.ReadContext(ctx, readBuffer); err != nil {
 		t.Fatal(err)
 	}
 
@@ -130,11 +130,11 @@ func TestSessionSRTCPOpenReadStream(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if _, err = aWriteStream.Write(ctx, testPayload); err != nil {
+	if _, err = aWriteStream.WriteContext(ctx, testPayload); err != nil {
 		t.Fatal(err)
 	}
 
-	if _, err = bReadStream.Read(ctx, readBuffer); err != nil {
+	if _, err = bReadStream.ReadContext(ctx, readBuffer); err != nil {
 		t.Fatal(err)
 	}
 

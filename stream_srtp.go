@@ -65,14 +65,14 @@ func (r *ReadStreamSRTP) write(ctx context.Context, buf []byte) (n int, err erro
 	return n, err
 }
 
-// Read reads and decrypts full RTP packet from the nextConn
-func (r *ReadStreamSRTP) Read(ctx context.Context, buf []byte) (int, error) {
+// ReadContext reads and decrypts full RTP packet from the nextConn
+func (r *ReadStreamSRTP) ReadContext(ctx context.Context, buf []byte) (int, error) {
 	return r.buffer.ReadContext(ctx, buf)
 }
 
 // ReadRTP reads and decrypts full RTP packet and its header from the nextConn
 func (r *ReadStreamSRTP) ReadRTP(ctx context.Context, buf []byte) (int, *rtp.Header, error) {
-	n, err := r.Read(ctx, buf)
+	n, err := r.ReadContext(ctx, buf)
 	if err != nil {
 		return 0, nil, err
 	}
@@ -125,7 +125,7 @@ func (w *WriteStreamSRTP) WriteRTP(ctx context.Context, header *rtp.Header, payl
 	return w.session.writeRTP(ctx, header, payload)
 }
 
-// Write encrypts and writes a full RTP packets to the nextConn
-func (w *WriteStreamSRTP) Write(ctx context.Context, b []byte) (int, error) {
+// WriteContext encrypts and writes a full RTP packets to the nextConn
+func (w *WriteStreamSRTP) WriteContext(ctx context.Context, b []byte) (int, error) {
 	return w.session.write(ctx, b)
 }

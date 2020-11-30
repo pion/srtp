@@ -87,7 +87,7 @@ func TestSessionSRTP(t *testing.T) {
 		t.Fatalf("SSRC mismatch during accept exp(%v) actual%v)", testSSRC, ssrc)
 	}
 
-	if _, err = bReadStream.Read(ctx, readBuffer); err != nil {
+	if _, err = bReadStream.ReadContext(ctx, readBuffer); err != nil {
 		t.Fatal(err)
 	}
 
@@ -134,7 +134,7 @@ func TestSessionSRTPOpenReadStream(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if _, err = bReadStream.Read(ctx, readBuffer); err != nil {
+	if _, err = bReadStream.ReadContext(ctx, readBuffer); err != nil {
 		t.Fatal(err)
 	}
 
@@ -184,7 +184,7 @@ func TestSessionSRTPMultiSSRC(t *testing.T) {
 		}
 
 		readBuffer := make([]byte, rtpHeaderSize+len(testPayload))
-		if _, err = bReadStreams[ssrc].Read(ctx, readBuffer); err != nil {
+		if _, err = bReadStreams[ssrc].ReadContext(ctx, readBuffer); err != nil {
 			t.Fatal(err)
 		}
 

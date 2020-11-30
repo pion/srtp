@@ -60,7 +60,7 @@ func BenchmarkWrite(b *testing.B) {
 	for i := 0; i < b.N; i++ {
 		packet.Header.SequenceNumber++
 
-		_, err = ws.Write(ctx, packetRaw)
+		_, err = ws.WriteContext(ctx, packetRaw)
 		if err != nil {
 			b.Fatal(err)
 		}
