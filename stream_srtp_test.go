@@ -1,25 +1,27 @@
 package srtp
 
 import (
-	"context"
 	"io"
+	"net"
 	"testing"
+	"time"
 
 	"github.com/pion/rtp"
 )
 
 type noopConn struct{ closed chan struct{} }
 
-func newNoopConn() *noopConn { return &noopConn{closed: make(chan struct{})} }
-func (c *noopConn) ReadContext(ctx context.Context, b []byte) (n int, err error) {
-	<-c.closed
-	return 0, io.EOF
-}
-func (c *noopConn) WriteContext(ctx context.Context, b []byte) (n int, err error) { return len(b), nil }
-func (c *noopConn) Close() error                                                  { close(c.closed); return nil }
+func newNoopConn() *noopConn                           { return &noopConn{closed: make(chan struct{})} }
+func (c *noopConn) Read(b []byte) (n int, err error)   { <-c.closed; return 0, io.EOF }
+func (c *noopConn) Write(b []byte) (n int, err error)  { return len(b), nil }
+func (c *noopConn) Close() error                       { close(c.closed); return nil }
+func (c *noopConn) LocalAddr() net.Addr                { return nil }
+func (c *noopConn) RemoteAddr() net.Addr               { return nil }
+func (c *noopConn) SetDeadline(t time.Time) error      { return nil }
+func (c *noopConn) SetReadDeadline(t time.Time) error  { return nil }
+func (c *noopConn) SetWriteDeadline(t time.Time) error { return nil }
 
 func BenchmarkWrite(b *testing.B) {
-	ctx := context.Background()
 	conn := newNoopConn()
 
 	config := &Config{
@@ -32,7 +34,7 @@ func BenchmarkWrite(b *testing.B) {
 		Profile: ProtectionProfileAes128CmHmacSha1_80,
 	}
 
-	session, err := NewSessionSRTP(ctx, conn, config)
+	session, err := NewSessionSRTP(conn, config)
 	if err != nil {
 		b.Fatal(err)
 	}
@@ -60,7 +62,7 @@ func BenchmarkWrite(b *testing.B) {
 	for i := 0; i < b.N; i++ {
 		packet.Header.SequenceNumber++
 
-		_, err = ws.WriteContext(ctx, packetRaw)
+		_, err = ws.Write(packetRaw)
 		if err != nil {
 			b.Fatal(err)
 		}
@@ -73,7 +75,6 @@ func BenchmarkWrite(b *testing.B) {
 }
 
 func BenchmarkWriteRTP(b *testing.B) {
-	ctx := context.Background()
 	conn := &noopConn{
 		closed: make(chan struct{}),
 	}
@@ -88,7 +89,7 @@ func BenchmarkWriteRTP(b *testing.B) {
 		Profile: ProtectionProfileAes128CmHmacSha1_80,
 	}
 
-	session, err := NewSessionSRTP(ctx, conn, config)
+	session, err := NewSessionSRTP(conn, config)
 	if err != nil {
 		b.Fatal(err)
 	}
@@ -110,7 +111,7 @@ func BenchmarkWriteRTP(b *testing.B) {
 	for i := 0; i < b.N; i++ {
 		header.SequenceNumber++
 
-		_, err = ws.WriteRTP(ctx, header, payload)
+		_, err = ws.WriteRTP(header, payload)
 		if err != nil {
 			b.Fatal(err)
 		}

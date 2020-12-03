@@ -1,8 +1,8 @@
 package srtp
 
 import (
-	"context"
 	"io"
+	"net"
 	"sync"
 
 	"github.com/pion/logging"
@@ -10,8 +10,8 @@ import (
 
 type streamSession interface {
 	Close() error
-	write(context.Context, []byte) (int, error)
-	decrypt(context.Context, []byte) error
+	write([]byte) (int, error)
+	decrypt([]byte) error
 }
 
 type session struct {
@@ -30,7 +30,7 @@ type session struct {
 
 	log logging.LeveledLogger
 
-	nextConn ConnCtx
+	nextConn net.Conn
 }
 
 // Config is used to configure a session.
@@ -102,7 +102,7 @@ func (s *session) close() error {
 	return nil
 }
 
-func (s *session) start(ctx context.Context, localMasterKey, localMasterSalt, remoteMasterKey, remoteMasterSalt []byte, profile ProtectionProfile, child streamSession) error {
+func (s *session) start(localMasterKey, localMasterSalt, remoteMasterKey, remoteMasterSalt []byte, profile ProtectionProfile, child streamSession) error {
 	var err error
 	s.localContext, err = CreateContext(localMasterKey, localMasterSalt, profile, s.localOptions...)
 	if err != nil {
@@ -127,7 +127,7 @@ func (s *session) start(ctx context.Context, localMasterKey, localMasterSalt, re
 		b := make([]byte, 8192)
 		for {
 			var i int
-			i, err = s.nextConn.ReadContext(ctx, b)
+			i, err = s.nextConn.Read(b)
 			if err != nil {
 				if err != io.EOF {
 					s.log.Error(err.Error())
@@ -135,7 +135,7 @@ func (s *session) start(ctx context.Context, localMasterKey, localMasterSalt, re
 				return
 			}
 
-			if err = child.decrypt(ctx, b[:i]); err != nil {
+			if err = child.decrypt(b[:i]); err != nil {
 				s.log.Info(err.Error())
 			}
 		}
