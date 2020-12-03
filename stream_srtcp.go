@@ -1,7 +1,6 @@
 package srtp
 
 import (
-	"context"
 	"errors"
 	"sync"
 
@@ -25,8 +24,8 @@ type ReadStreamSRTCP struct {
 	buffer *packetio.Buffer
 }
 
-func (r *ReadStreamSRTCP) write(ctx context.Context, buf []byte) (n int, err error) {
-	n, err = r.buffer.WriteContext(ctx, buf)
+func (r *ReadStreamSRTCP) write(buf []byte) (n int, err error) {
+	n, err = r.buffer.Write(buf)
 
 	if errors.Is(err, packetio.ErrFull) {
 		// Silently drop data when the buffer is full.
@@ -42,8 +41,8 @@ func newReadStreamSRTCP() readStream {
 }
 
 // ReadRTCP reads and decrypts full RTCP packet and its header from the nextConn
-func (r *ReadStreamSRTCP) ReadRTCP(ctx context.Context, buf []byte) (int, *rtcp.Header, error) {
-	n, err := r.ReadContext(ctx, buf)
+func (r *ReadStreamSRTCP) ReadRTCP(buf []byte) (int, *rtcp.Header, error) {
+	n, err := r.Read(buf)
 	if err != nil {
 		return 0, nil, err
 	}
@@ -57,9 +56,9 @@ func (r *ReadStreamSRTCP) ReadRTCP(ctx context.Context, buf []byte) (int, *rtcp.
 	return n, header, nil
 }
 
-// ReadContext reads and decrypts full RTCP packet from the nextConn
-func (r *ReadStreamSRTCP) ReadContext(ctx context.Context, buf []byte) (int, error) {
-	return r.buffer.ReadContext(ctx, buf)
+// Read reads and decrypts full RTCP packet from the nextConn
+func (r *ReadStreamSRTCP) Read(buf []byte) (int, error) {
+	return r.buffer.Read(buf)
 }
 
 // Close removes the ReadStream from the session and cleans up any associated state
@@ -119,16 +118,16 @@ type WriteStreamSRTCP struct {
 }
 
 // WriteRTCP encrypts a RTCP header and its payload to the nextConn
-func (w *WriteStreamSRTCP) WriteRTCP(ctx context.Context, header *rtcp.Header, payload []byte) (int, error) {
+func (w *WriteStreamSRTCP) WriteRTCP(header *rtcp.Header, payload []byte) (int, error) {
 	headerRaw, err := header.Marshal()
 	if err != nil {
 		return 0, err
 	}
 
-	return w.session.write(ctx, append(headerRaw, payload...))
+	return w.session.write(append(headerRaw, payload...))
 }
 
-// WriteContext encrypts and writes a full RTCP packets to the nextConn
-func (w *WriteStreamSRTCP) WriteContext(ctx context.Context, b []byte) (int, error) {
-	return w.session.write(ctx, b)
+// Write encrypts and writes a full RTCP packets to the nextConn
+func (w *WriteStreamSRTCP) Write(b []byte) (int, error) {
+	return w.session.write(b)
 }
