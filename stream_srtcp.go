@@ -3,6 +3,7 @@ package srtp
 import (
 	"errors"
 	"sync"
+	"time"
 
 	"github.com/pion/rtcp"
 	"github.com/pion/transport/packetio"
@@ -110,6 +111,11 @@ func (r *ReadStreamSRTCP) init(child streamSession, ssrc uint32) error {
 // GetSSRC returns the SSRC we are demuxing for
 func (r *ReadStreamSRTCP) GetSSRC() uint32 {
 	return r.ssrc
+}
+
+// SetReadDeadline sets the max amount of time the stream will block before returning. 0 is forever.
+func (r *ReadStreamSRTCP) SetReadDeadline(t time.Time) error {
+	return r.buffer.SetReadDeadline(t)
 }
 
 // WriteStreamSRTCP is stream for a single Session that is used to encrypt RTCP
