@@ -47,6 +47,8 @@ Check out the **[contributing wiki](https://github.com/pion/webrtc/wiki/Contribu
 * [Jerko Steiner](https://github.com/jeremija)
 * [Juliusz Chroboczek](https://github.com/jech)
 * [Mission Liao](https://github.com/mission-liao)
+* [Orlando](https://github.com/OrlandoCo)
+* [Tarrence van As](https://github.com/tarrencev)
 
 ### License
 MIT License - see [LICENSE](LICENSE) for full text

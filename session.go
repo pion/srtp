@@ -6,6 +6,7 @@ import (
 	"sync"
 
 	"github.com/pion/logging"
+	"github.com/pion/transport/packetio"
 )
 
 type streamSession interface {
@@ -28,7 +29,8 @@ type session struct {
 	readStreams       map[uint32]readStream
 	readStreamsLock   sync.Mutex
 
-	log logging.LeveledLogger
+	log           logging.LeveledLogger
+	bufferFactory func(packetType packetio.BufferPacketType, ssrc uint32) io.ReadWriteCloser
 
 	nextConn net.Conn
 }
@@ -40,6 +42,7 @@ type session struct {
 type Config struct {
 	Keys          SessionKeys
 	Profile       ProtectionProfile
+	BufferFactory func(packetType packetio.BufferPacketType, ssrc uint32) io.ReadWriteCloser
 	LoggerFactory logging.LoggerFactory
 
 	// List of local/remote context options.
