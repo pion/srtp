@@ -2,6 +2,7 @@ package srtp
 
 import (
 	"errors"
+	"io"
 	"sync"
 	"time"
 
@@ -22,7 +23,7 @@ type ReadStreamSRTCP struct {
 	session *SessionSRTCP
 	ssrc    uint32
 
-	buffer *packetio.Buffer
+	buffer io.ReadWriteCloser
 }
 
 func (r *ReadStreamSRTCP) write(buf []byte) (n int, err error) {
@@ -107,9 +108,14 @@ func (r *ReadStreamSRTCP) init(child streamSession, ssrc uint32) error {
 	r.isInited = true
 	r.isClosed = make(chan bool)
 
-	// Create a buffer and limit it to 100KB
-	r.buffer = packetio.NewBuffer()
-	r.buffer.SetLimitSize(srtcpBufferSize)
+	if r.session.bufferFactory != nil {
+		r.buffer = r.session.bufferFactory(packetio.RTCPBufferPacket, ssrc)
+	} else {
+		// Create a buffer and limit it to 100KB
+		buff := packetio.NewBuffer()
+		buff.SetLimitSize(srtcpBufferSize)
+		r.buffer = buff
+	}
 
 	return nil
 }

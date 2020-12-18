@@ -53,6 +53,7 @@ func NewSessionSRTCP(conn net.Conn, config *Config) (*SessionSRTCP, error) { //n
 			newStream:     make(chan readStream),
 			started:       make(chan interface{}),
 			closed:        make(chan interface{}),
+			bufferFactory: config.BufferFactory,
 			log:           loggerFactory.NewLogger("srtp"),
 		},
 	}
