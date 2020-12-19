@@ -2,6 +2,7 @@ package srtp
 
 import (
 	"net"
+	"time"
 
 	"github.com/pion/logging"
 	"github.com/pion/rtp"
@@ -131,6 +132,10 @@ func (s *SessionSRTP) writeRTP(header *rtp.Header, payload []byte) (int, error) 
 	}
 
 	return s.session.nextConn.Write(encrypted)
+}
+
+func (s *SessionSRTP) setWriteDeadline(t time.Time) error {
+	return s.session.nextConn.SetWriteDeadline(t)
 }
 
 func (s *SessionSRTP) decrypt(buf []byte) error {

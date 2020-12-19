@@ -21,7 +21,7 @@ func TestSessionSRTPBadInit(t *testing.T) {
 	}
 }
 
-func buildSessionSRTPPair(t *testing.T) (*SessionSRTP, *SessionSRTP) { //nolint:dupl
+func buildSessionSRTP(t *testing.T) (*SessionSRTP, net.Conn, *Config) {
 	aPipe, bPipe := net.Pipe()
 	config := &Config{
 		Profile: ProtectionProfileAes128CmHmacSha1_80,
@@ -40,6 +40,11 @@ func buildSessionSRTPPair(t *testing.T) (*SessionSRTP, *SessionSRTP) { //nolint:
 		t.Fatal("NewSessionSRTP did not error, but returned nil session")
 	}
 
+	return aSession, bPipe, config
+}
+
+func buildSessionSRTPPair(t *testing.T) (*SessionSRTP, *SessionSRTP) { //nolint:dupl
+	aSession, bPipe, config := buildSessionSRTP(t)
 	bSession, err := NewSessionSRTP(bPipe, config)
 	if err != nil {
 		t.Fatal(err)
@@ -92,6 +97,78 @@ func TestSessionSRTP(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	if err = bSession.Close(); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestSessionSRTPWithIODeadline(t *testing.T) {
+	lim := test.TimeOut(time.Second * 10)
+	defer lim.Stop()
+
+	report := test.CheckRoutines(t)
+	defer report()
+
+	const (
+		testSSRC      = 5000
+		rtpHeaderSize = 12
+	)
+	testPayload := []byte{0x00, 0x01, 0x03, 0x04}
+	readBuffer := make([]byte, rtpHeaderSize+len(testPayload))
+	aSession, bPipe, config := buildSessionSRTP(t)
+
+	aWriteStream, err := aSession.OpenWriteStream()
+	if err != nil {
+		t.Fatal(err)
+	}
+	// When the other peer is not ready, the Write would be blocked if no deadline.
+	if err = aWriteStream.SetWriteDeadline(time.Now().Add(1 * time.Second)); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = aWriteStream.WriteRTP(&rtp.Header{SSRC: testSSRC}, append([]byte{}, testPayload...)); !errIsTimeout(err) {
+		t.Fatal(err)
+	}
+	if err = aWriteStream.SetWriteDeadline(time.Time{}); err != nil {
+		t.Fatal(err)
+	}
+
+	// Setup another peer.
+	bSession, err := NewSessionSRTP(bPipe, config)
+	if err != nil {
+		t.Fatal(err)
+	} else if bSession == nil {
+		t.Fatal("NewSessionSRTCP did not error, but returned nil session")
+	}
+
+	// The second attempt to write, even without deadline.
+	if _, err = aWriteStream.WriteRTP(&rtp.Header{SSRC: testSSRC}, append([]byte{}, testPayload...)); err != nil {
+		t.Fatal(err)
+	}
+
+	bReadStream, ssrc, err := bSession.AcceptStream()
+	if err != nil {
+		t.Fatal(err)
+	} else if ssrc != testSSRC {
+		t.Fatalf("SSRC mismatch during accept exp(%v) actual%v)", testSSRC, ssrc)
+	}
+	if _, err = bReadStream.Read(readBuffer); err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(testPayload, readBuffer[rtpHeaderSize:]) {
+		t.Fatalf("Sent buffer does not match the one received exp(%v) actual(%v)", testPayload, readBuffer[rtpHeaderSize:])
+	}
+
+	// The second Read attempt would be blocked if the deadline is not set.
+	if err = bReadStream.SetReadDeadline(time.Now().Add(1 * time.Second)); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = bReadStream.Read(readBuffer); !errIsTimeout(err) {
+		t.Fatalf("Unexpected read-error(%v)", err)
+	}
+
+	if err = aSession.Close(); err != nil {
+		t.Fatal(err)
+	}
 	if err = bSession.Close(); err != nil {
 		t.Fatal(err)
 	}

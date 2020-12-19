@@ -3,6 +3,7 @@ package srtp
 import (
 	"errors"
 	"sync"
+	"time"
 
 	"github.com/pion/rtp"
 	"github.com/pion/transport/packetio"
@@ -86,6 +87,12 @@ func (r *ReadStreamSRTP) ReadRTP(buf []byte) (int, *rtp.Header, error) {
 	return n, header, nil
 }
 
+// SetReadDeadline sets the deadline for the Read operation.
+// Setting to zero means no deadline.
+func (r *ReadStreamSRTP) SetReadDeadline(t time.Time) error {
+	return r.buffer.SetReadDeadline(t)
+}
+
 // Close removes the ReadStream from the session and cleans up any associated state
 func (r *ReadStreamSRTP) Close() error {
 	r.mu.Lock()
@@ -127,4 +134,10 @@ func (w *WriteStreamSRTP) WriteRTP(header *rtp.Header, payload []byte) (int, err
 // Write encrypts and writes a full RTP packets to the nextConn
 func (w *WriteStreamSRTP) Write(b []byte) (int, error) {
 	return w.session.write(b)
+}
+
+// SetWriteDeadline sets the deadline for the Write operation.
+// Setting to zero means no deadline.
+func (w *WriteStreamSRTP) SetWriteDeadline(t time.Time) error {
+	return w.session.setWriteDeadline(t)
 }
