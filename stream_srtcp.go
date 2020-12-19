@@ -3,6 +3,7 @@ package srtp
 import (
 	"errors"
 	"sync"
+	"time"
 
 	"github.com/pion/rtcp"
 	"github.com/pion/transport/packetio"
@@ -59,6 +60,12 @@ func (r *ReadStreamSRTCP) ReadRTCP(buf []byte) (int, *rtcp.Header, error) {
 // Read reads and decrypts full RTCP packet from the nextConn
 func (r *ReadStreamSRTCP) Read(buf []byte) (int, error) {
 	return r.buffer.Read(buf)
+}
+
+// SetReadDeadline sets the deadline for the Read operation.
+// Setting to zero means no deadline.
+func (r *ReadStreamSRTCP) SetReadDeadline(t time.Time) error {
+	return r.buffer.SetReadDeadline(t)
 }
 
 // Close removes the ReadStream from the session and cleans up any associated state
@@ -130,4 +137,10 @@ func (w *WriteStreamSRTCP) WriteRTCP(header *rtcp.Header, payload []byte) (int, 
 // Write encrypts and writes a full RTCP packets to the nextConn
 func (w *WriteStreamSRTCP) Write(b []byte) (int, error) {
 	return w.session.write(b)
+}
+
+// SetWriteDeadline sets the deadline for the Write operation.
+// Setting to zero means no deadline.
+func (w *WriteStreamSRTCP) SetWriteDeadline(t time.Time) error {
+	return w.session.setWriteDeadline(t)
 }

@@ -5,6 +5,7 @@ import (
 	"io"
 	"net"
 	"reflect"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -23,7 +24,7 @@ func TestSessionSRTCPBadInit(t *testing.T) {
 	}
 }
 
-func buildSessionSRTCPPair(t *testing.T) (*SessionSRTCP, *SessionSRTCP) { //nolint:dupl
+func buildSessionSRTCP(t *testing.T) (*SessionSRTCP, net.Conn, *Config) {
 	aPipe, bPipe := net.Pipe()
 	config := &Config{
 		Profile: ProtectionProfileAes128CmHmacSha1_80,
@@ -42,6 +43,11 @@ func buildSessionSRTCPPair(t *testing.T) (*SessionSRTCP, *SessionSRTCP) { //noli
 		t.Fatal("NewSessionSRTCP did not error, but returned nil session")
 	}
 
+	return aSession, bPipe, config
+}
+
+func buildSessionSRTCPPair(t *testing.T) (*SessionSRTCP, *SessionSRTCP) { //nolint:dupl
+	aSession, bPipe, config := buildSessionSRTCP(t)
 	bSession, err := NewSessionSRTCP(bPipe, config)
 	if err != nil {
 		t.Fatal(err)
@@ -92,6 +98,76 @@ func TestSessionSRTCP(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	if err = bSession.Close(); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestSessionSRTCPWithIODeadline(t *testing.T) {
+	lim := test.TimeOut(time.Second * 10)
+	defer lim.Stop()
+
+	report := test.CheckRoutines(t)
+	defer report()
+
+	testPayload, err := rtcp.Marshal([]rtcp.Packet{&rtcp.PictureLossIndication{MediaSSRC: 5000}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	readBuffer := make([]byte, len(testPayload))
+	aSession, bPipe, config := buildSessionSRTCP(t)
+
+	aWriteStream, err := aSession.OpenWriteStream()
+	if err != nil {
+		t.Fatal(err)
+	}
+	// When the other peer is not ready, the Write would be blocked if no deadline.
+	if err = aWriteStream.SetWriteDeadline(time.Now().Add(1 * time.Second)); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = aWriteStream.Write(testPayload); !errIsTimeout(err) {
+		t.Fatalf("Unexcepted write-error(%v)", err)
+	}
+	if err = aWriteStream.SetWriteDeadline(time.Time{}); err != nil {
+		t.Fatal(err)
+	}
+
+	// Setup another peer.
+	bSession, err := NewSessionSRTCP(bPipe, config)
+	if err != nil {
+		t.Fatal(err)
+	} else if bSession == nil {
+		t.Fatal("NewSessionSRTCP did not error, but returned nil session")
+	}
+
+	// The second attempt to write.
+	if _, err = aWriteStream.Write(testPayload); err != nil {
+		// The other peer is ready, this write attempt should work.
+		t.Fatal(err)
+	}
+
+	bReadStream, _, err := bSession.AcceptStream()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = bReadStream.Read(readBuffer); err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(testPayload, readBuffer) {
+		t.Fatalf("Sent buffer does not match the one received exp(%v) actual(%v)", testPayload, readBuffer)
+	}
+
+	// The second Read attempt would be blocked if the deadline is not set.
+	if err = bReadStream.SetReadDeadline(time.Now().Add(1 * time.Second)); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = bReadStream.Read(readBuffer); !errIsTimeout(err) {
+		t.Fatalf("Unexpected read-error(%v)", err)
+	}
+
+	if err = aSession.Close(); err != nil {
+		t.Fatal(err)
+	}
 	if err = bSession.Close(); err != nil {
 		t.Fatal(err)
 	}
@@ -260,4 +336,18 @@ func encryptSRTCP(context *Context, pkt rtcp.Packet) ([]byte, error) {
 		return nil, eerr
 	}
 	return encrypted, nil
+}
+
+func errIsTimeout(err error) bool {
+	if err == nil {
+		return false
+	}
+	s := err.Error()
+	switch {
+	case strings.Contains(s, "i/o timeout"): // error message when timeout before go1.15.
+		return true
+	case strings.Contains(s, "deadline exceeded"): // error message when timeout after go1.15.
+		return true
+	}
+	return false
 }
