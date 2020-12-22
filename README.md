@@ -46,6 +46,7 @@ Check out the **[contributing wiki](https://github.com/pion/webrtc/wiki/Contribu
 * [Novel Corpse](https://github.com/NovelCorpse)
 * [Jerko Steiner](https://github.com/jeremija)
 * [Juliusz Chroboczek](https://github.com/jech)
+* [Threadnaught](https://github.com/Threadnaught/)
 
 ### License
 MIT License - see [LICENSE](LICENSE) for full text
