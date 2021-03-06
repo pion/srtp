@@ -61,6 +61,10 @@ func newSrtpCipherAeadAesGcm(masterKey, masterSalt []byte) (*srtpCipherAeadAesGc
 }
 
 func (s *srtpCipherAeadAesGcm) authTagLen() int {
+	return 0
+}
+
+func (s *srtpCipherAeadAesGcm) aeadAuthTagLen() int {
 	return 16
 }
 
