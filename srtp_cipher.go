@@ -6,6 +6,7 @@ import "github.com/pion/rtp"
 // of the SRTP Specific ciphers
 type srtpCipher interface {
 	authTagLen() int
+	aeadAuthTagLen() int
 	getRTCPIndex([]byte) uint32
 
 	encryptRTP([]byte, *rtp.Header, []byte, uint32) ([]byte, error)
