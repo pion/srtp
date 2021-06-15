@@ -7,6 +7,7 @@ Atsushi Watanabe <atsushi.w@ieee.org>
 backkem <mail@backkem.me>
 chenkaiC4 <chenkaic4@gmail.com>
 Chris Hiszpanski <chris@hiszpanski.name>
+cszdlt <cszdlt@qq.com>
 Hugo Arregui <hugo.arregui@gmail.com>
 Jerko Steiner <jerko.steiner@gmail.com>
 Juliusz Chroboczek <jch@irif.fr>
