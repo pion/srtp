@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/pion/rtp/v2"
+	"github.com/pion/rtp"
 	"github.com/pion/transport/test"
 )
 

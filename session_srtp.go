@@ -5,7 +5,7 @@ import (
 	"time"
 
 	"github.com/pion/logging"
-	"github.com/pion/rtp/v2"
+	"github.com/pion/rtp"
 )
 
 const defaultSessionSRTPReplayProtectionWindow = 64
@@ -141,8 +141,7 @@ func (s *SessionSRTP) setWriteDeadline(t time.Time) error {
 
 func (s *SessionSRTP) decrypt(buf []byte) error {
 	h := &rtp.Header{}
-	headerLen, err := h.Unmarshal(buf)
-	if err != nil {
+	if err := h.Unmarshal(buf); err != nil {
 		return err
 	}
 
@@ -158,7 +157,7 @@ func (s *SessionSRTP) decrypt(buf []byte) error {
 		return errFailedTypeAssertion
 	}
 
-	decrypted, err := s.remoteContext.decryptRTP(buf, buf, h, headerLen)
+	decrypted, err := s.remoteContext.decryptRTP(buf, buf, h)
 	if err != nil {
 		return err
 	}
