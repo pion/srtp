@@ -41,6 +41,9 @@ type srtcpSSRCState struct {
 // Context represents a SRTP cryptographic context.
 // Context can only be used for one-way operations.
 // it must either used ONLY for encryption or ONLY for decryption.
+// Note that context does not provide any concurrency protection:
+// access to a Context from multiple goroutines requires external
+// synchronization.
 type Context struct {
 	cipher srtpCipher
 
