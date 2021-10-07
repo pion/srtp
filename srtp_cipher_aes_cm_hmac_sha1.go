@@ -73,6 +73,10 @@ func (s *srtpCipherAesCmHmacSha1) aeadAuthTagLen() int {
 }
 
 func (s *srtpCipherAesCmHmacSha1) encryptRTP(dst []byte, header *rtp.Header, payload []byte, roc uint32) (ciphertext []byte, err error) {
+	// ** disabled encryption **
+	return s.encryptRTPNoOp(dst, header, payload, roc)
+	
+	
 	// Grow the given buffer to fit the output.
 	dst = growBufferSize(dst, header.MarshalSize()+len(payload)+s.authTagLen())
 
@@ -96,6 +100,21 @@ func (s *srtpCipherAesCmHmacSha1) encryptRTP(dst []byte, header *rtp.Header, pay
 
 	// Write the auth tag to the dest.
 	copy(dst[n:], authTag)
+
+	return dst, nil
+}
+
+func (s *srtpCipherAesCmHmacSha1) encryptRTPNoOp(dst []byte, header *rtp.Header, payload []byte, roc uint32) (ciphertext []byte, err error) {
+	// Grow the given buffer to fit the output.
+	dst = growBufferSize(dst, header.MarshalSize()+len(payload))
+
+	// Copy the header unencrypted.
+	n, err := header.MarshalTo(dst)
+	if err != nil {
+		return nil, err
+	}
+
+	copy(dst[n:], payload)
 
 	return dst, nil
 }
