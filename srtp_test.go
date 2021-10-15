@@ -49,7 +49,7 @@ func TestValidPacketCounter(t *testing.T) {
 	s := &srtpSSRCState{ssrc: 4160032510}
 	expectedCounter := []byte{0xcf, 0x90, 0x1e, 0xa5, 0xda, 0xd3, 0x2c, 0x15, 0x00, 0xa2, 0x24, 0xae, 0xae, 0xaf, 0x00, 0x00}
 	counter := generateCounter(32846, uint32(s.index>>16), s.ssrc, srtpSessionSalt)
-	if !bytes.Equal(counter, expectedCounter) {
+	if !bytes.Equal(counter[:], expectedCounter) {
 		t.Errorf("Session Key % 02x does not match expected % 02x", counter, expectedCounter)
 	}
 }
