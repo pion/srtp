@@ -84,7 +84,7 @@ func (s *srtpCipherAesCmHmacSha1) encryptRTP(dst []byte, header *rtp.Header, pay
 
 	// Encrypt the payload
 	counter := generateCounter(header.SequenceNumber, roc, header.SSRC, s.srtpSessionSalt)
-	stream := cipher.NewCTR(s.srtpBlock, counter)
+	stream := cipher.NewCTR(s.srtpBlock, counter[:])
 	stream.XORKeyStream(dst[n:], payload)
 	n += len(payload)
 
@@ -122,7 +122,7 @@ func (s *srtpCipherAesCmHmacSha1) decryptRTP(dst, ciphertext []byte, header *rtp
 
 	// Decrypt the ciphertext for the payload.
 	counter := generateCounter(header.SequenceNumber, roc, header.SSRC, s.srtpSessionSalt)
-	stream := cipher.NewCTR(s.srtpBlock, counter)
+	stream := cipher.NewCTR(s.srtpBlock, counter[:])
 	stream.XORKeyStream(dst[headerLen:], ciphertext[headerLen:])
 	return dst, nil
 }
@@ -131,7 +131,8 @@ func (s *srtpCipherAesCmHmacSha1) encryptRTCP(dst, decrypted []byte, srtcpIndex 
 	dst = allocateIfMismatch(dst, decrypted)
 
 	// Encrypt everything after header
-	stream := cipher.NewCTR(s.srtcpBlock, generateCounter(uint16(srtcpIndex&0xffff), srtcpIndex>>16, ssrc, s.srtcpSessionSalt))
+	counter := generateCounter(uint16(srtcpIndex&0xffff), srtcpIndex>>16, ssrc, s.srtcpSessionSalt)
+	stream := cipher.NewCTR(s.srtcpBlock, counter[:])
 	stream.XORKeyStream(dst[8:], dst[8:])
 
 	// Add SRTCP Index and set Encryption bit
@@ -160,7 +161,8 @@ func (s *srtpCipherAesCmHmacSha1) decryptRTCP(out, encrypted []byte, index, ssrc
 		return nil, errFailedToVerifyAuthTag
 	}
 
-	stream := cipher.NewCTR(s.srtcpBlock, generateCounter(uint16(index&0xffff), index>>16, ssrc, s.srtcpSessionSalt))
+	counter := generateCounter(uint16(index&0xffff), index>>16, ssrc, s.srtcpSessionSalt)
+	stream := cipher.NewCTR(s.srtcpBlock, counter[:])
 	stream.XORKeyStream(out[8:], out[8:])
 
 	return out, nil
