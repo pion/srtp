@@ -6,6 +6,7 @@ import "fmt"
 type ProtectionProfile uint16
 
 // Supported protection profiles
+// See https://www.iana.org/assignments/srtp-protection/srtp-protection.xhtml
 const (
 	ProtectionProfileAes128CmHmacSha1_80 ProtectionProfile = 0x0001
 	ProtectionProfileAeadAes128Gcm       ProtectionProfile = 0x0007
