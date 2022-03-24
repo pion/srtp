@@ -15,10 +15,14 @@ func (c *Context) decryptRTP(dst, ciphertext []byte, header *rtp.Header, headerL
 		}
 	}
 
-	dst = growBufferSize(dst, len(ciphertext)-c.cipher.authTagLen())
+	authTagLen, err := c.cipher.rtpAuthTagLen()
+	if err != nil {
+		return nil, err
+	}
+	dst = growBufferSize(dst, len(ciphertext)-authTagLen)
 	roc, updateROC := s.nextRolloverCount(header.SequenceNumber)
 
-	dst, err := c.cipher.decryptRTP(dst, ciphertext, header, headerLen, roc)
+	dst, err = c.cipher.decryptRTP(dst, ciphertext, header, headerLen, roc)
 	if err != nil {
 		return nil, err
 	}
