@@ -195,7 +195,7 @@ func rtpTestCases() []rtpTestCase {
 func TestRTPLifecyleNewAlloc(t *testing.T) {
 	assert := assert.New(t)
 
-	authTagLen, err := ProtectionProfileAes128CmHmacSha1_80.authTagLen()
+	authTagLen, err := ProtectionProfileAes128CmHmacSha1_80.rtpAuthTagLen()
 	assert.NoError(err)
 
 	for _, testCase := range rtpTestCases() {
@@ -495,4 +495,39 @@ func TestRolloverCount2(t *testing.T) {
 		t.Errorf("index was not updated after it crossed 0")
 	}
 	update()
+}
+
+func TestProtectionProfileAes128CmHmacSha1_32(t *testing.T) {
+	masterKey := []byte{0x0d, 0xcd, 0x21, 0x3e, 0x4c, 0xbc, 0xf2, 0x8f, 0x01, 0x7f, 0x69, 0x94, 0x40, 0x1e, 0x28, 0x89}
+	masterSalt := []byte{0x62, 0x77, 0x60, 0x38, 0xc0, 0x6d, 0xc9, 0x41, 0x9f, 0x6d, 0xd9, 0x43, 0x3e, 0x7c}
+
+	encryptContext, err := CreateContext(masterKey, masterSalt, ProtectionProfileAes128CmHmacSha1_32)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	decryptContext, err := CreateContext(masterKey, masterSalt, ProtectionProfileAes128CmHmacSha1_32)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	pkt := &rtp.Packet{Payload: rtpTestCaseDecrypted(), Header: rtp.Header{SequenceNumber: 5000}}
+	pktRaw, err := pkt.Marshal()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	out, err := encryptContext.EncryptRTP(nil, pktRaw, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	decrypted, err := decryptContext.DecryptRTP(nil, out, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if !bytes.Equal(decrypted, pktRaw) {
+		t.Errorf("Decrypted % 02x does not match original % 02x", decrypted, pktRaw)
+	}
 }

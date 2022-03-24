@@ -226,7 +226,7 @@ func TestRTCPLifecycleInPlace(t *testing.T) {
 		testCase := testCase
 		t.Run(caseName, func(t *testing.T) {
 			assert := assert.New(t)
-			authTagLen, err := testCase.algo.authTagLen()
+			authTagLen, err := testCase.algo.rtcpAuthTagLen()
 			assert.NoError(err)
 
 			aeadAuthTagLen, err := testCase.algo.aeadAuthTagLen()
@@ -338,7 +338,7 @@ func TestRTCPInvalidAuthTag(t *testing.T) {
 		testCase := testCase
 		t.Run(caseName, func(t *testing.T) {
 			assert := assert.New(t)
-			authTagLen, err := testCase.algo.authTagLen()
+			authTagLen, err := testCase.algo.rtcpAuthTagLen()
 			assert.NoError(err)
 
 			aeadAuthTagLen, err := testCase.algo.aeadAuthTagLen()
@@ -420,7 +420,7 @@ func TestEncryptRTCPSeparation(t *testing.T) {
 			encryptContext, err := CreateContext(testCase.masterKey, testCase.masterSalt, testCase.algo)
 			assert.NoError(err)
 
-			authTagLen, err := testCase.algo.authTagLen()
+			authTagLen, err := testCase.algo.rtcpAuthTagLen()
 			assert.NoError(err)
 
 			decryptContext, err := CreateContext(
