@@ -10,7 +10,7 @@ func (c *Context) decryptRTP(dst, ciphertext []byte, header *rtp.Header, headerL
 
 	markAsValid, ok := s.replayDetector.Check(uint64(header.SequenceNumber))
 	if !ok {
-		return nil, &errorDuplicated{
+		return nil, &duplicatedError{
 			Proto: "srtp", SSRC: header.SSRC, Index: uint32(header.SequenceNumber),
 		}
 	}

@@ -118,7 +118,7 @@ func (s *srtpSSRCState) nextRolloverCount(sequenceNumber uint16) (uint32, func()
 	localSeq := int32(s.index & (seqNumMax - 1))
 
 	guessRoc := localRoc
-	var difference int32 = 0
+	var difference int32
 
 	if s.rolloverHasProcessed {
 		// When localROC is equal to 0, and entering seq-localSeq > seqNumMedian
