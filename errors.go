@@ -25,16 +25,16 @@ var (
 	errFailedTypeAssertion = errors.New("failed to cast child")
 )
 
-type errorDuplicated struct {
+type duplicatedError struct {
 	Proto string // srtp or srtcp
 	SSRC  uint32
 	Index uint32 // sequence number or index
 }
 
-func (e *errorDuplicated) Error() string {
+func (e *duplicatedError) Error() string {
 	return fmt.Sprintf("%s ssrc=%d index=%d: %v", e.Proto, e.SSRC, e.Index, errDuplicated)
 }
 
-func (e *errorDuplicated) Unwrap() error {
+func (e *duplicatedError) Unwrap() error {
 	return errDuplicated
 }

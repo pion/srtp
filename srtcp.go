@@ -30,7 +30,7 @@ func (c *Context) decryptRTCP(dst, encrypted []byte) ([]byte, error) {
 	s := c.getSRTCPSSRCState(ssrc)
 	markAsValid, ok := s.replayDetector.Check(uint64(index))
 	if !ok {
-		return nil, &errorDuplicated{Proto: "srtcp", SSRC: ssrc, Index: index}
+		return nil, &duplicatedError{Proto: "srtcp", SSRC: ssrc, Index: index}
 	}
 
 	out, err = c.cipher.decryptRTCP(out, encrypted, index, ssrc)
