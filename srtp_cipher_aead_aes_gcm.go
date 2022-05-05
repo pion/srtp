@@ -70,15 +70,13 @@ func (s *srtpCipherAeadAesGcm) encryptRTP(dst []byte, header *rtp.Header, payloa
 	}
 	dst = growBufferSize(dst, header.MarshalSize()+len(payload)+authTagLen)
 
-	hdr, err := header.Marshal()
+	n, err := header.MarshalTo(dst)
 	if err != nil {
 		return nil, err
 	}
 
 	iv := s.rtpInitializationVector(header, roc)
-	nHdr := len(hdr)
-	s.srtpCipher.Seal(dst[nHdr:nHdr], iv[:], payload, hdr)
-	copy(dst[:nHdr], hdr)
+	s.srtpCipher.Seal(dst[n:n], iv[:], payload, dst[:n])
 	return dst, nil
 }
 
