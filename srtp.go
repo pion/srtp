@@ -20,7 +20,7 @@ func (c *Context) decryptRTP(dst, ciphertext []byte, header *rtp.Header, headerL
 		return nil, err
 	}
 	dst = growBufferSize(dst, len(ciphertext)-authTagLen)
-	roc, updateROC := s.nextRolloverCount(header.SequenceNumber)
+	roc, diff := s.nextRolloverCount(header.SequenceNumber)
 
 	dst, err = c.cipher.decryptRTP(dst, ciphertext, header, headerLen, roc)
 	if err != nil {
@@ -28,7 +28,7 @@ func (c *Context) decryptRTP(dst, ciphertext []byte, header *rtp.Header, headerL
 	}
 
 	markAsValid()
-	updateROC()
+	s.updateRolloverCount(header.SequenceNumber, diff)
 	return dst, nil
 }
 
@@ -67,8 +67,8 @@ func (c *Context) EncryptRTP(dst []byte, plaintext []byte, header *rtp.Header) (
 // Similar to above but faster because it can avoid unmarshaling the header and marshaling the payload.
 func (c *Context) encryptRTP(dst []byte, header *rtp.Header, payload []byte) (ciphertext []byte, err error) {
 	s := c.getSRTPSSRCState(header.SSRC)
-	roc, updateROC := s.nextRolloverCount(header.SequenceNumber)
-	updateROC()
+	roc, diff := s.nextRolloverCount(header.SequenceNumber)
+	s.updateRolloverCount(header.SequenceNumber, diff)
 
 	return c.cipher.encryptRTP(dst, header, payload, roc)
 }
