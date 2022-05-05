@@ -61,17 +61,26 @@ func TestBufferFactory(t *testing.T) {
 	wg.Wait()
 }
 
-func BenchmarkWrite(b *testing.B) {
+func benchmarkWrite(b *testing.B, profile ProtectionProfile) {
 	conn := newNoopConn()
+
+	keyLen, err := profile.keyLen()
+	if err != nil {
+		b.Fatal(err)
+	}
+	saltLen, err := profile.saltLen()
+	if err != nil {
+		b.Fatal(err)
+	}
 
 	config := &Config{
 		Keys: SessionKeys{
-			LocalMasterKey:   make([]byte, 16),
-			LocalMasterSalt:  make([]byte, 14),
-			RemoteMasterKey:  make([]byte, 16),
-			RemoteMasterSalt: make([]byte, 14),
+			LocalMasterKey:   make([]byte, keyLen),
+			LocalMasterSalt:  make([]byte, saltLen),
+			RemoteMasterKey:  make([]byte, keyLen),
+			RemoteMasterSalt: make([]byte, saltLen),
 		},
-		Profile: ProtectionProfileAes128CmHmacSha1_80,
+		Profile: profile,
 	}
 
 	session, err := NewSessionSRTP(conn, config)
@@ -115,19 +124,33 @@ func BenchmarkWrite(b *testing.B) {
 	}
 }
 
-func BenchmarkWriteRTP(b *testing.B) {
+func BenchmarkWrite(b *testing.B) {
+	b.Run("CTR", func(b *testing.B) { benchmarkWrite(b, profileCTR) })
+	b.Run("GCM", func(b *testing.B) { benchmarkWrite(b, profileGCM) })
+}
+
+func benchmarkWriteRTP(b *testing.B, profile ProtectionProfile) {
 	conn := &noopConn{
 		closed: make(chan struct{}),
 	}
 
+	keyLen, err := profile.keyLen()
+	if err != nil {
+		b.Fatal(err)
+	}
+	saltLen, err := profile.saltLen()
+	if err != nil {
+		b.Fatal(err)
+	}
+
 	config := &Config{
 		Keys: SessionKeys{
-			LocalMasterKey:   make([]byte, 16),
-			LocalMasterSalt:  make([]byte, 14),
-			RemoteMasterKey:  make([]byte, 16),
-			RemoteMasterSalt: make([]byte, 14),
+			LocalMasterKey:   make([]byte, keyLen),
+			LocalMasterSalt:  make([]byte, saltLen),
+			RemoteMasterKey:  make([]byte, keyLen),
+			RemoteMasterSalt: make([]byte, saltLen),
 		},
-		Profile: ProtectionProfileAes128CmHmacSha1_80,
+		Profile: profile,
 	}
 
 	session, err := NewSessionSRTP(conn, config)
@@ -163,4 +186,9 @@ func BenchmarkWriteRTP(b *testing.B) {
 	if err != nil {
 		b.Fatal(err)
 	}
+}
+
+func BenchmarkWriteRTP(b *testing.B) {
+	b.Run("CTR", func(b *testing.B) { benchmarkWriteRTP(b, profileCTR) })
+	b.Run("GCM", func(b *testing.B) { benchmarkWriteRTP(b, profileGCM) })
 }
