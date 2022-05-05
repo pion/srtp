@@ -112,7 +112,7 @@ func CreateContext(masterKey, masterSalt []byte, profile ProtectionProfile, opts
 }
 
 // https://tools.ietf.org/html/rfc3550#appendix-A.1
-func (s *srtpSSRCState) nextRolloverCount(sequenceNumber uint16) (uint32, func()) {
+func (s *srtpSSRCState) nextRolloverCount(sequenceNumber uint16) (uint32, int32) {
 	seq := int32(sequenceNumber)
 	localRoc := uint32(s.index >> 16)
 	localSeq := int32(s.index & (seqNumMax - 1))
@@ -147,15 +147,17 @@ func (s *srtpSSRCState) nextRolloverCount(sequenceNumber uint16) (uint32, func()
 		}
 	}
 
-	return guessRoc, func() {
-		if !s.rolloverHasProcessed {
-			s.index |= uint64(sequenceNumber)
-			s.rolloverHasProcessed = true
-			return
-		}
-		if difference > 0 {
-			s.index += uint64(difference)
-		}
+	return guessRoc, difference
+}
+
+func (s *srtpSSRCState) updateRolloverCount(sequenceNumber uint16, difference int32) {
+	if !s.rolloverHasProcessed {
+		s.index |= uint64(sequenceNumber)
+		s.rolloverHasProcessed = true
+		return
+	}
+	if difference > 0 {
+		s.index += uint64(difference)
 	}
 }
 

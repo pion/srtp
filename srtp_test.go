@@ -76,11 +76,11 @@ func TestRolloverCount(t *testing.T) {
 	s := &srtpSSRCState{ssrc: defaultSsrc}
 
 	// Set initial seqnum
-	roc, update := s.nextRolloverCount(65530)
+	roc, diff := s.nextRolloverCount(65530)
 	if roc != 0 {
 		t.Errorf("Initial rolloverCounter must be 0")
 	}
-	update()
+	s.updateRolloverCount(65530, diff)
 
 	// Invalid packets never update ROC
 	_, _ = s.nextRolloverCount(0)
@@ -90,50 +90,50 @@ func TestRolloverCount(t *testing.T) {
 	_, _ = s.nextRolloverCount(0)
 
 	// We rolled over to 0
-	roc, update = s.nextRolloverCount(0)
+	roc, diff = s.nextRolloverCount(0)
 	if roc != 1 {
 		t.Errorf("rolloverCounter was not updated after it crossed 0")
 	}
-	update()
+	s.updateRolloverCount(0, diff)
 
-	roc, update = s.nextRolloverCount(65530)
+	roc, diff = s.nextRolloverCount(65530)
 	if roc != 0 {
 		t.Errorf("rolloverCounter was not updated when it rolled back, failed to handle out of order")
 	}
-	update()
+	s.updateRolloverCount(65530, diff)
 
-	roc, update = s.nextRolloverCount(5)
+	roc, diff = s.nextRolloverCount(5)
 	if roc != 1 {
 		t.Errorf("rolloverCounter was not updated when it rolled over initial, to handle out of order")
 	}
-	update()
+	s.updateRolloverCount(5, diff)
 
-	_, update = s.nextRolloverCount(6)
-	update()
-	_, update = s.nextRolloverCount(7)
-	update()
-	roc, update = s.nextRolloverCount(8)
+	_, diff = s.nextRolloverCount(6)
+	s.updateRolloverCount(6, diff)
+	_, diff = s.nextRolloverCount(7)
+	s.updateRolloverCount(7, diff)
+	roc, diff = s.nextRolloverCount(8)
 	if roc != 1 {
 		t.Errorf("rolloverCounter was improperly updated for non-significant packets")
 	}
-	update()
+	s.updateRolloverCount(8, diff)
 
 	// valid packets never update ROC
-	roc, update = s.nextRolloverCount(0x4000)
+	roc, diff = s.nextRolloverCount(0x4000)
 	if roc != 1 {
 		t.Errorf("rolloverCounter was improperly updated for non-significant packets")
 	}
-	update()
-	roc, update = s.nextRolloverCount(0x8000)
+	s.updateRolloverCount(0x4000, diff)
+	roc, diff = s.nextRolloverCount(0x8000)
 	if roc != 1 {
 		t.Errorf("rolloverCounter was improperly updated for non-significant packets")
 	}
-	update()
-	roc, update = s.nextRolloverCount(0xFFFF)
+	s.updateRolloverCount(0x8000, diff)
+	roc, diff = s.nextRolloverCount(0xFFFF)
 	if roc != 1 {
 		t.Errorf("rolloverCounter was improperly updated for non-significant packets")
 	}
-	update()
+	s.updateRolloverCount(0x8000, diff)
 	roc, _ = s.nextRolloverCount(0)
 	if roc != 2 {
 		t.Errorf("rolloverCounter must be incremented after wrapping, got %d", roc)
@@ -521,58 +521,58 @@ func BenchmarkDecryptRTP(b *testing.B) {
 func TestRolloverCount2(t *testing.T) {
 	s := &srtpSSRCState{ssrc: defaultSsrc}
 
-	roc, update := s.nextRolloverCount(30123)
+	roc, diff := s.nextRolloverCount(30123)
 	if roc != 0 {
 		t.Errorf("Initial rolloverCounter must be 0")
 	}
-	update()
+	s.updateRolloverCount(30123, diff)
 
-	roc, update = s.nextRolloverCount(62892) // 30123 + (1 << 15) + 1
+	roc, diff = s.nextRolloverCount(62892) // 30123 + (1 << 15) + 1
 	if roc != 0 {
 		t.Errorf("Initial rolloverCounter must be 0")
 	}
-	update()
-	roc, update = s.nextRolloverCount(204)
+	s.updateRolloverCount(62892, diff)
+	roc, diff = s.nextRolloverCount(204)
 	if roc != 1 {
 		t.Errorf("rolloverCounter was not updated after it crossed 0")
 	}
-	update()
-	roc, update = s.nextRolloverCount(64535)
+	s.updateRolloverCount(62892, diff)
+	roc, diff = s.nextRolloverCount(64535)
 	if roc != 0 {
 		t.Errorf("rolloverCounter was not updated when it rolled back, failed to handle out of order")
 	}
-	update()
-	roc, update = s.nextRolloverCount(205)
+	s.updateRolloverCount(64535, diff)
+	roc, diff = s.nextRolloverCount(205)
 	if roc != 1 {
 		t.Errorf("rolloverCounter was improperly updated for non-significant packets")
 	}
-	update()
-	roc, update = s.nextRolloverCount(1)
+	s.updateRolloverCount(205, diff)
+	roc, diff = s.nextRolloverCount(1)
 	if roc != 1 {
 		t.Errorf("rolloverCounter was improperly updated for non-significant packets")
 	}
-	update()
+	s.updateRolloverCount(1, diff)
 
-	roc, update = s.nextRolloverCount(64532)
+	roc, diff = s.nextRolloverCount(64532)
 	if roc != 0 {
 		t.Errorf("rolloverCounter was improperly updated for non-significant packets")
 	}
-	update()
-	roc, update = s.nextRolloverCount(65534)
+	s.updateRolloverCount(64532, diff)
+	roc, diff = s.nextRolloverCount(65534)
 	if roc != 0 {
 		t.Errorf("index was improperly updated for non-significant packets")
 	}
-	update()
-	roc, update = s.nextRolloverCount(64532)
+	s.updateRolloverCount(65534, diff)
+	roc, diff = s.nextRolloverCount(64532)
 	if roc != 0 {
 		t.Errorf("index was improperly updated for non-significant packets")
 	}
-	update()
-	roc, update = s.nextRolloverCount(205)
+	s.updateRolloverCount(65532, diff)
+	roc, diff = s.nextRolloverCount(205)
 	if roc != 1 {
 		t.Errorf("index was not updated after it crossed 0")
 	}
-	update()
+	s.updateRolloverCount(65532, diff)
 }
 
 func TestProtectionProfileAes128CmHmacSha1_32(t *testing.T) {
