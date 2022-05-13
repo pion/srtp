@@ -288,11 +288,7 @@ func TestRTCPLifecyclePartialAllocation(t *testing.T) {
 	for caseName, testCase := range rtcpTestCases() {
 		testCase := testCase
 		t.Run(caseName, func(t *testing.T) {
-			if testCase.algo == ProtectionProfileAeadAes128Gcm {
-				t.Skip("FIXME: DecryptRTCP(nil, input, nil) for ProtectionProfileAeadAes128Gcm changes input data")
-			}
 			assert := assert.New(t)
-
 			encryptHeader := &rtcp.Header{}
 			encryptContext, err := CreateContext(testCase.masterKey, testCase.masterSalt, testCase.algo)
 			if err != nil {
