@@ -133,7 +133,7 @@ func TestRolloverCount(t *testing.T) {
 	if roc != 1 {
 		t.Errorf("rolloverCounter was improperly updated for non-significant packets")
 	}
-	s.updateRolloverCount(0x8000, diff)
+	s.updateRolloverCount(0xFFFF, diff)
 	roc, _ = s.nextRolloverCount(0)
 	if roc != 2 {
 		t.Errorf("rolloverCounter must be incremented after wrapping, got %d", roc)
