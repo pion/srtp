@@ -423,13 +423,13 @@ func TestRTPReplayProtection(t *testing.T) {
 	t.Run("GCM", func(t *testing.T) { testRTPReplayProtection(t, profileGCM) })
 }
 
-func benchmarkEncryptRTP(b *testing.B, profile ProtectionProfile) {
+func benchmarkEncryptRTP(b *testing.B, profile ProtectionProfile, size int) {
 	encryptContext, err := buildTestContext(profile)
 	if err != nil {
 		b.Fatal(err)
 	}
 
-	pkt := &rtp.Packet{Payload: make([]byte, 100)}
+	pkt := &rtp.Packet{Payload: make([]byte, size)}
 	pktRaw, err := pkt.Marshal()
 	if err != nil {
 		b.Fatal(err)
@@ -447,17 +447,27 @@ func benchmarkEncryptRTP(b *testing.B, profile ProtectionProfile) {
 }
 
 func BenchmarkEncryptRTP(b *testing.B) {
-	b.Run("CTR", func(b *testing.B) { benchmarkEncryptRTP(b, profileCTR) })
-	b.Run("GCM", func(b *testing.B) { benchmarkEncryptRTP(b, profileGCM) })
+	b.Run("CTR-100", func(b *testing.B) {
+		benchmarkEncryptRTP(b, profileCTR, 100)
+	})
+	b.Run("CTR-1000", func(b *testing.B) {
+		benchmarkEncryptRTP(b, profileCTR, 1000)
+	})
+	b.Run("GCM-100", func(b *testing.B) {
+		benchmarkEncryptRTP(b, profileGCM, 100)
+	})
+	b.Run("GCM-1000", func(b *testing.B) {
+		benchmarkEncryptRTP(b, profileGCM, 1000)
+	})
 }
 
-func benchmarkEncryptRTPInPlace(b *testing.B, profile ProtectionProfile) {
+func benchmarkEncryptRTPInPlace(b *testing.B, profile ProtectionProfile, size int) {
 	encryptContext, err := buildTestContext(profile)
 	if err != nil {
 		b.Fatal(err)
 	}
 
-	pkt := &rtp.Packet{Payload: make([]byte, 100)}
+	pkt := &rtp.Packet{Payload: make([]byte, size)}
 	pktRaw, err := pkt.Marshal()
 	if err != nil {
 		b.Fatal(err)
@@ -477,8 +487,18 @@ func benchmarkEncryptRTPInPlace(b *testing.B, profile ProtectionProfile) {
 }
 
 func BenchmarkEncryptRTPInPlace(b *testing.B) {
-	b.Run("CTR", func(b *testing.B) { benchmarkEncryptRTPInPlace(b, profileCTR) })
-	b.Run("GCM", func(b *testing.B) { benchmarkEncryptRTPInPlace(b, profileGCM) })
+	b.Run("CTR-100", func(b *testing.B) {
+		benchmarkEncryptRTPInPlace(b, profileCTR, 100)
+	})
+	b.Run("CTR-1000", func(b *testing.B) {
+		benchmarkEncryptRTPInPlace(b, profileCTR, 1000)
+	})
+	b.Run("GCM-100", func(b *testing.B) {
+		benchmarkEncryptRTPInPlace(b, profileGCM, 100)
+	})
+	b.Run("GCM-1000", func(b *testing.B) {
+		benchmarkEncryptRTPInPlace(b, profileGCM, 1000)
+	})
 }
 
 func benchmarkDecryptRTP(b *testing.B, profile ProtectionProfile) {

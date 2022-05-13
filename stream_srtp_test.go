@@ -61,7 +61,7 @@ func TestBufferFactory(t *testing.T) {
 	wg.Wait()
 }
 
-func benchmarkWrite(b *testing.B, profile ProtectionProfile) {
+func benchmarkWrite(b *testing.B, profile ProtectionProfile, size int) {
 	conn := newNoopConn()
 
 	keyLen, err := profile.keyLen()
@@ -98,7 +98,7 @@ func benchmarkWrite(b *testing.B, profile ProtectionProfile) {
 			Version: 2,
 			SSRC:    322,
 		},
-		Payload: make([]byte, 100),
+		Payload: make([]byte, size),
 	}
 
 	packetRaw, err := packet.Marshal()
@@ -125,11 +125,21 @@ func benchmarkWrite(b *testing.B, profile ProtectionProfile) {
 }
 
 func BenchmarkWrite(b *testing.B) {
-	b.Run("CTR", func(b *testing.B) { benchmarkWrite(b, profileCTR) })
-	b.Run("GCM", func(b *testing.B) { benchmarkWrite(b, profileGCM) })
+	b.Run("CTR-100", func(b *testing.B) {
+		benchmarkWrite(b, profileCTR, 100)
+	})
+	b.Run("CTR-1000", func(b *testing.B) {
+		benchmarkWrite(b, profileCTR, 1000)
+	})
+	b.Run("GCM-100", func(b *testing.B) {
+		benchmarkWrite(b, profileGCM, 100)
+	})
+	b.Run("GCM-1000", func(b *testing.B) {
+		benchmarkWrite(b, profileGCM, 1000)
+	})
 }
 
-func benchmarkWriteRTP(b *testing.B, profile ProtectionProfile) {
+func benchmarkWriteRTP(b *testing.B, profile ProtectionProfile, size int) {
 	conn := &noopConn{
 		closed: make(chan struct{}),
 	}
@@ -168,7 +178,7 @@ func benchmarkWriteRTP(b *testing.B, profile ProtectionProfile) {
 		SSRC:    322,
 	}
 
-	payload := make([]byte, 100)
+	payload := make([]byte, size)
 
 	b.SetBytes(int64(header.MarshalSize() + len(payload)))
 	b.ResetTimer()
@@ -189,6 +199,16 @@ func benchmarkWriteRTP(b *testing.B, profile ProtectionProfile) {
 }
 
 func BenchmarkWriteRTP(b *testing.B) {
-	b.Run("CTR", func(b *testing.B) { benchmarkWriteRTP(b, profileCTR) })
-	b.Run("GCM", func(b *testing.B) { benchmarkWriteRTP(b, profileGCM) })
+	b.Run("CTR-100", func(b *testing.B) {
+		benchmarkWriteRTP(b, profileCTR, 100)
+	})
+	b.Run("CTR-1400", func(b *testing.B) {
+		benchmarkWriteRTP(b, profileCTR, 1000)
+	})
+	b.Run("GCM-100", func(b *testing.B) {
+		benchmarkWriteRTP(b, profileGCM, 100)
+	})
+	b.Run("GCM-1000", func(b *testing.B) {
+		benchmarkWriteRTP(b, profileGCM, 1000)
+	})
 }
