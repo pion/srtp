@@ -202,7 +202,7 @@ func BenchmarkWriteRTP(b *testing.B) {
 	b.Run("CTR-100", func(b *testing.B) {
 		benchmarkWriteRTP(b, profileCTR, 100)
 	})
-	b.Run("CTR-1400", func(b *testing.B) {
+	b.Run("CTR-1000", func(b *testing.B) {
 		benchmarkWriteRTP(b, profileCTR, 1000)
 	})
 	b.Run("GCM-100", func(b *testing.B) {
