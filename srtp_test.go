@@ -133,7 +133,7 @@ func TestRolloverCount(t *testing.T) {
 	if roc != 1 {
 		t.Errorf("rolloverCounter was improperly updated for non-significant packets")
 	}
-	s.updateRolloverCount(0x8000, diff)
+	s.updateRolloverCount(0xFFFF, diff)
 	roc, _ = s.nextRolloverCount(0)
 	if roc != 2 {
 		t.Errorf("rolloverCounter must be incremented after wrapping, got %d", roc)
@@ -307,7 +307,11 @@ func testRTPLifecyleInPlace(t *testing.T, profile ProtectionProfile) {
 		}
 
 		// Copy packet, asserts that everything was done in place
-		encryptInput := make([]byte, len(decryptedRaw), len(decryptedRaw)+10)
+		slack := 10
+		if profile == profileGCM {
+			slack = 16
+		}
+		encryptInput := make([]byte, len(decryptedRaw), len(decryptedRaw)+slack)
 		copy(encryptInput, decryptedRaw)
 
 		actualEncrypted, err := encryptContext.EncryptRTP(encryptInput, encryptInput, encryptHeader)
@@ -315,11 +319,7 @@ func testRTPLifecyleInPlace(t *testing.T, profile ProtectionProfile) {
 		case err != nil:
 			t.Fatal(err)
 		case &encryptInput[0] != &actualEncrypted[0]:
-			if profile == profileCTR {
-				t.Errorf("EncryptRTP failed to encrypt in place")
-			} else {
-				t.Logf("Ignoring failure on GCM run")
-			}
+			t.Errorf("EncryptRTP failed to encrypt in place")
 		case encryptHeader.SequenceNumber != testCase.sequenceNumber:
 			t.Errorf("EncryptRTP failed to populate input rtp.Header")
 		}
@@ -378,7 +378,11 @@ func testRTPReplayProtection(t *testing.T, profile ProtectionProfile) {
 		}
 
 		// Copy packet, asserts that everything was done in place
-		encryptInput := make([]byte, len(decryptedRaw), len(decryptedRaw)+10)
+		slack := 10
+		if profile == profileGCM {
+			slack = 16
+		}
+		encryptInput := make([]byte, len(decryptedRaw), len(decryptedRaw)+slack)
 		copy(encryptInput, decryptedRaw)
 
 		actualEncrypted, err := encryptContext.EncryptRTP(encryptInput, encryptInput, encryptHeader)
@@ -386,11 +390,7 @@ func testRTPReplayProtection(t *testing.T, profile ProtectionProfile) {
 		case err != nil:
 			t.Fatal(err)
 		case &encryptInput[0] != &actualEncrypted[0]:
-			if profile == profileCTR {
-				t.Errorf("EncryptRTP failed to encrypt in place")
-			} else {
-				t.Logf("Ignoring failure on GCM run")
-			}
+			t.Errorf("EncryptRTP failed to encrypt in place")
 		case encryptHeader.SequenceNumber != testCase.sequenceNumber:
 			t.Fatal("EncryptRTP failed to populate input rtp.Header")
 		}
