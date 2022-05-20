@@ -46,3 +46,19 @@ func TestIndexOverKDR(t *testing.T) {
 	_, err := aesCmKeyDerivation(labelSRTPAuthenticationTag, []byte{}, []byte{}, 1, 0)
 	assert.Error(t, err)
 }
+
+func BenchmarkGenerateCounter(b *testing.B) {
+	masterKey := []byte{0x0d, 0xcd, 0x21, 0x3e, 0x4c, 0xbc, 0xf2, 0x8f, 0x01, 0x7f, 0x69, 0x94, 0x40, 0x1e, 0x28, 0x89}
+	masterSalt := []byte{0x62, 0x77, 0x60, 0x38, 0xc0, 0x6d, 0xc9, 0x41, 0x9f, 0x6d, 0xd9, 0x43, 0x3e, 0x7c}
+
+	s := &srtpSSRCState{ssrc: 4160032510}
+
+	srtpSessionSalt, err := aesCmKeyDerivation(labelSRTPSalt, masterKey, masterSalt, 0, len(masterSalt))
+	assert.NoError(b, err)
+
+	b.ResetTimer()
+
+	for i := 0; i < b.N; i++ {
+		generateCounter(32846, uint32(s.index>>16), s.ssrc, srtpSessionSalt)
+	}
+}
