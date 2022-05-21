@@ -2,6 +2,7 @@ package srtp
 
 import (
 	"crypto/cipher"
+	"unsafe"
 )
 
 // xorBytes computes the exclusive-or of src1 and src2 and stores it in dst.
@@ -15,7 +16,10 @@ func xorBytes(dst, src1, src2 []byte) int {
 		n = len(dst)
 	}
 
-	for i := 0; i < n; i++ {
+	for i := 0; i < n / 4; i++ {
+		(*(*[]uint32)(unsafe.Pointer(&dst)))[i] = (*(*[]uint32)(unsafe.Pointer(&src1)))[i] ^ (*(*[]uint32)(unsafe.Pointer(&src2)))[i]
+	}
+	for i := (n / 4) * 4; i < n; i++ {
 		dst[i] = src1[i] ^ src2[i]
 	}
 
