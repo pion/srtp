@@ -460,3 +460,22 @@ func TestEncryptRTCPSeparation(t *testing.T) {
 		})
 	}
 }
+
+func TestRTCPDecryptShortenedPacket(t *testing.T) {
+	for caseName, testCase := range rtcpTestCasesSingle() {
+		testCase := testCase
+		t.Run(caseName, func(t *testing.T) {
+			pkt := testCase.packets[0]
+			for i := 1; i < len(pkt.encrypted)-1; i++ {
+				packet := pkt.encrypted[:i]
+				decryptContext, err := CreateContext(testCase.masterKey, testCase.masterSalt, testCase.algo)
+				if err != nil {
+					t.Errorf("CreateContext failed: %v", err)
+				}
+				assert.NotPanics(t, func() {
+					_, _ = decryptContext.DecryptRTCP(nil, packet, nil)
+				}, "Panic on length %d/%d", i, len(pkt.encrypted))
+			}
+		})
+	}
+}

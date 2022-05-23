@@ -629,3 +629,34 @@ func TestProtectionProfileAes128CmHmacSha1_32(t *testing.T) {
 		t.Errorf("Decrypted % 02x does not match original % 02x", decrypted, pktRaw)
 	}
 }
+
+func TestRTPDecryptShotenedPacket(t *testing.T) {
+	profiles := map[string]ProtectionProfile{
+		"CTR": profileCTR,
+		"GCM": profileGCM,
+	}
+	for name, profile := range profiles {
+		profile := profile
+		t.Run(name, func(t *testing.T) {
+			for _, testCase := range rtpTestCases() {
+				decryptContext, err := buildTestContext(profile)
+				if err != nil {
+					t.Fatal(err)
+				}
+
+				encryptedPkt := &rtp.Packet{Payload: testCase.encrypted(profile), Header: rtp.Header{SequenceNumber: testCase.sequenceNumber}}
+				encryptedRaw, err := encryptedPkt.Marshal()
+				if err != nil {
+					t.Fatal(err)
+				}
+
+				for i := 1; i < len(encryptedRaw)-1; i++ {
+					packet := encryptedRaw[:i]
+					assert.NotPanics(t, func() {
+						_, _ = decryptContext.DecryptRTP(nil, packet, nil)
+					}, "Panic on length %d/%d", i, len(encryptedRaw))
+				}
+			}
+		})
+	}
+}
