@@ -2,6 +2,8 @@ package srtp
 
 import (
 	"crypto/cipher"
+
+	"github.com/pion/transport/utils/xor"
 )
 
 // xorBytes computes the exclusive-or of src1 and src2 and stores it in dst.
@@ -14,12 +16,7 @@ func xorBytes(dst, src1, src2 []byte) int {
 	if len(dst) < n {
 		n = len(dst)
 	}
-
-	for i := 0; i < n; i++ {
-		dst[i] = src1[i] ^ src2[i]
-	}
-
-	return n
+	return xor.XorBytes(dst[:n], src1[:n], src2[:n])
 }
 
 // incrementCTR increments a big-endian integer of arbitrary size.
