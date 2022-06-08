@@ -10,6 +10,7 @@ type ProtectionProfile uint16
 const (
 	ProtectionProfileAes128CmHmacSha1_80 ProtectionProfile = 0x0001
 	ProtectionProfileAes128CmHmacSha1_32 ProtectionProfile = 0x0002
+	ProtectionProfileAes256CmHmacSha1_80 ProtectionProfile = 0x0005  // don't sure this is right number
 	ProtectionProfileAeadAes128Gcm       ProtectionProfile = 0x0007
 )
 
@@ -17,6 +18,8 @@ func (p ProtectionProfile) keyLen() (int, error) {
 	switch p {
 	case ProtectionProfileAes128CmHmacSha1_32, ProtectionProfileAes128CmHmacSha1_80, ProtectionProfileAeadAes128Gcm:
 		return 16, nil
+	case ProtectionProfileAes256CmHmacSha1_80:
+		return 32, nil
 	default:
 		return 0, fmt.Errorf("%w: %#v", errNoSuchSRTPProfile, p)
 	}
@@ -24,7 +27,7 @@ func (p ProtectionProfile) keyLen() (int, error) {
 
 func (p ProtectionProfile) saltLen() (int, error) {
 	switch p {
-	case ProtectionProfileAes128CmHmacSha1_32, ProtectionProfileAes128CmHmacSha1_80:
+	case ProtectionProfileAes128CmHmacSha1_32, ProtectionProfileAes128CmHmacSha1_80, ProtectionProfileAes256CmHmacSha1_80:
 		return 14, nil
 	case ProtectionProfileAeadAes128Gcm:
 		return 12, nil
@@ -35,7 +38,7 @@ func (p ProtectionProfile) saltLen() (int, error) {
 
 func (p ProtectionProfile) rtpAuthTagLen() (int, error) {
 	switch p {
-	case ProtectionProfileAes128CmHmacSha1_80:
+	case ProtectionProfileAes128CmHmacSha1_80, ProtectionProfileAes256CmHmacSha1_80:
 		return 10, nil
 	case ProtectionProfileAes128CmHmacSha1_32:
 		return 4, nil
@@ -48,7 +51,7 @@ func (p ProtectionProfile) rtpAuthTagLen() (int, error) {
 
 func (p ProtectionProfile) rtcpAuthTagLen() (int, error) {
 	switch p {
-	case ProtectionProfileAes128CmHmacSha1_32, ProtectionProfileAes128CmHmacSha1_80:
+	case ProtectionProfileAes128CmHmacSha1_32, ProtectionProfileAes128CmHmacSha1_80, ProtectionProfileAes256CmHmacSha1_80:
 		return 10, nil
 	case ProtectionProfileAeadAes128Gcm:
 		return 0, nil
@@ -59,7 +62,7 @@ func (p ProtectionProfile) rtcpAuthTagLen() (int, error) {
 
 func (p ProtectionProfile) aeadAuthTagLen() (int, error) {
 	switch p {
-	case ProtectionProfileAes128CmHmacSha1_32, ProtectionProfileAes128CmHmacSha1_80:
+	case ProtectionProfileAes128CmHmacSha1_32, ProtectionProfileAes128CmHmacSha1_80, ProtectionProfileAes256CmHmacSha1_80:
 		return 0, nil
 	case ProtectionProfileAeadAes128Gcm:
 		return 16, nil
@@ -70,7 +73,7 @@ func (p ProtectionProfile) aeadAuthTagLen() (int, error) {
 
 func (p ProtectionProfile) authKeyLen() (int, error) {
 	switch p {
-	case ProtectionProfileAes128CmHmacSha1_32, ProtectionProfileAes128CmHmacSha1_80:
+	case ProtectionProfileAes128CmHmacSha1_32, ProtectionProfileAes128CmHmacSha1_80, ProtectionProfileAes256CmHmacSha1_80:
 		return 20, nil
 	case ProtectionProfileAeadAes128Gcm:
 		return 0, nil
