@@ -26,8 +26,8 @@ const (
 // Encrypt/Decrypt state for a single SRTP SSRC
 type srtpSSRCState struct {
 	ssrc                 uint32
-	index                uint64
 	rolloverHasProcessed bool
+	index                uint64
 	replayDetector       replaydetector.ReplayDetector
 }
 
