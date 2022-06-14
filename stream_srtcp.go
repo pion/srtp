@@ -20,11 +20,11 @@ const srtcpBufferSize = 100 * 1000
 type ReadStreamSRTCP struct {
 	mu sync.Mutex
 
-	isInited bool
 	isClosed chan bool
 
-	session *SessionSRTCP
-	ssrc    uint32
+	session  *SessionSRTCP
+	ssrc     uint32
+	isInited bool
 
 	buffer io.ReadWriteCloser
 }
