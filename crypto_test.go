@@ -62,22 +62,3 @@ func TestXorBytesCTRInvalidIvLength(t *testing.T) {
 	test(make([]byte, block.BlockSize()-1))
 	test(make([]byte, block.BlockSize()+1))
 }
-
-func TestXorBytesBufferSize(t *testing.T) {
-	a := []byte{3}
-	b := []byte{5, 6}
-	dst := make([]byte, 3)
-
-	xorBytes(dst, a, b)
-	require.Equal(t, dst, []byte{6, 0, 0})
-
-	xorBytes(dst, b, a)
-	require.Equal(t, dst, []byte{6, 0, 0})
-
-	a = []byte{1, 1, 1, 1}
-	b = []byte{2, 2, 2, 2}
-	dst = make([]byte, 3)
-
-	xorBytes(dst, a, b)
-	require.Equal(t, dst, []byte{3, 3, 3})
-}
