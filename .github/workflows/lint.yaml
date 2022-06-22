@@ -16,6 +16,10 @@ on:
       - opened
       - edited
       - synchronize
+
+permissions:
+  contents: read
+
 jobs:
   lint-commit-message:
     name: Metadata
@@ -36,8 +40,14 @@ jobs:
         - name: Functions
           run: .github/lint-disallowed-functions-in-library.sh
 
+        - name: Logging messages should not have trailing newlines
+          run: .github/lint-no-trailing-newline-in-log-messages.sh
+
   lint-go:
     name: Go
+    permissions:
+      contents: read
+      pull-requests: read
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -47,5 +57,5 @@ jobs:
       - name: golangci-lint
         uses: golangci/golangci-lint-action@v3
         with:
-          version: v1.31
+          version: v1.45.2
           args: $GOLANGCI_LINT_EXRA_ARGS

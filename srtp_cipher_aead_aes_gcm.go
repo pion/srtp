@@ -13,13 +13,15 @@ const (
 )
 
 type srtpCipherAeadAesGcm struct {
+	ProtectionProfile
+
 	srtpCipher, srtcpCipher cipher.AEAD
 
 	srtpSessionSalt, srtcpSessionSalt []byte
 }
 
-func newSrtpCipherAeadAesGcm(masterKey, masterSalt []byte) (*srtpCipherAeadAesGcm, error) {
-	s := &srtpCipherAeadAesGcm{}
+func newSrtpCipherAeadAesGcm(profile ProtectionProfile, masterKey, masterSalt []byte) (*srtpCipherAeadAesGcm, error) {
+	s := &srtpCipherAeadAesGcm{ProtectionProfile: profile}
 
 	srtpSessionKey, err := aesCmKeyDerivation(labelSRTPEncryption, masterKey, masterSalt, 0, len(masterKey))
 	if err != nil {
@@ -60,33 +62,31 @@ func newSrtpCipherAeadAesGcm(masterKey, masterSalt []byte) (*srtpCipherAeadAesGc
 	return s, nil
 }
 
-func (s *srtpCipherAeadAesGcm) authTagLen() int {
-	return 0
-}
-
-func (s *srtpCipherAeadAesGcm) aeadAuthTagLen() int {
-	return 16
-}
-
 func (s *srtpCipherAeadAesGcm) encryptRTP(dst []byte, header *rtp.Header, payload []byte, roc uint32) (ciphertext []byte, err error) {
 	// Grow the given buffer to fit the output.
-	dst = growBufferSize(dst, header.MarshalSize()+len(payload)+s.aeadAuthTagLen())
+	authTagLen, err := s.aeadAuthTagLen()
+	if err != nil {
+		return nil, err
+	}
+	dst = growBufferSize(dst, header.MarshalSize()+len(payload)+authTagLen)
 
-	hdr, err := header.Marshal()
+	n, err := header.MarshalTo(dst)
 	if err != nil {
 		return nil, err
 	}
 
 	iv := s.rtpInitializationVector(header, roc)
-	nHdr := len(hdr)
-	s.srtpCipher.Seal(dst[nHdr:nHdr], iv[:], payload, hdr)
-	copy(dst[:nHdr], hdr)
+	s.srtpCipher.Seal(dst[n:n], iv[:], payload, dst[:n])
 	return dst, nil
 }
 
 func (s *srtpCipherAeadAesGcm) decryptRTP(dst, ciphertext []byte, header *rtp.Header, headerLen int, roc uint32) ([]byte, error) {
 	// Grow the given buffer to fit the output.
-	nDst := len(ciphertext) - s.aeadAuthTagLen()
+	authTagLen, err := s.aeadAuthTagLen()
+	if err != nil {
+		return nil, err
+	}
+	nDst := len(ciphertext) - authTagLen
 	if nDst < 0 {
 		// Size of ciphertext is shorter than AEAD auth tag len.
 		return nil, errFailedToVerifyAuthTag
@@ -106,7 +106,11 @@ func (s *srtpCipherAeadAesGcm) decryptRTP(dst, ciphertext []byte, header *rtp.He
 }
 
 func (s *srtpCipherAeadAesGcm) encryptRTCP(dst, decrypted []byte, srtcpIndex uint32, ssrc uint32) ([]byte, error) {
-	aadPos := len(decrypted) + s.aeadAuthTagLen()
+	authTagLen, err := s.aeadAuthTagLen()
+	if err != nil {
+		return nil, err
+	}
+	aadPos := len(decrypted) + authTagLen
 	// Grow the given buffer to fit the output.
 	dst = growBufferSize(dst, aadPos+srtcpIndexSize)
 
@@ -123,7 +127,11 @@ func (s *srtpCipherAeadAesGcm) encryptRTCP(dst, decrypted []byte, srtcpIndex uin
 func (s *srtpCipherAeadAesGcm) decryptRTCP(dst, encrypted []byte, srtcpIndex, ssrc uint32) ([]byte, error) {
 	aadPos := len(encrypted) - srtcpIndexSize
 	// Grow the given buffer to fit the output.
-	nDst := aadPos - s.aeadAuthTagLen()
+	authTagLen, err := s.aeadAuthTagLen()
+	if err != nil {
+		return nil, err
+	}
+	nDst := aadPos - authTagLen
 	if nDst < 0 {
 		// Size of ciphertext is shorter than AEAD auth tag len.
 		return nil, errFailedToVerifyAuthTag

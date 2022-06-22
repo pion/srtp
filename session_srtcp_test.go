@@ -2,6 +2,7 @@ package srtp
 
 import (
 	"bytes"
+	"errors"
 	"io"
 	"net"
 	"reflect"
@@ -259,7 +260,7 @@ func TestSessionSRTCPReplayProtection(t *testing.T) {
 		for {
 			if ssrc, perr := getSenderSSRC(t, bReadStream); perr == nil {
 				receivedSSRC = append(receivedSSRC, ssrc)
-			} else if perr == io.EOF {
+			} else if errors.Is(perr, io.EOF) {
 				return
 			}
 		}
@@ -301,7 +302,7 @@ func TestSessionSRTCPReplayProtection(t *testing.T) {
 }
 
 func getSenderSSRC(t *testing.T, stream *ReadStreamSRTCP) (ssrc uint32, err error) {
-	authTagSize, err := ProtectionProfileAes128CmHmacSha1_80.authTagLen()
+	authTagSize, err := ProtectionProfileAes128CmHmacSha1_80.rtcpAuthTagLen()
 	if err != nil {
 		return 0, err
 	}
@@ -309,7 +310,7 @@ func getSenderSSRC(t *testing.T, stream *ReadStreamSRTCP) (ssrc uint32, err erro
 	const pliPacketSize = 8
 	readBuffer := make([]byte, pliPacketSize+authTagSize+srtcpIndexSize)
 	n, _, err := stream.ReadRTCP(readBuffer)
-	if err == io.EOF {
+	if errors.Is(err, io.EOF) {
 		return 0, err
 	}
 	if err != nil {

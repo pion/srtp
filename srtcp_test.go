@@ -226,7 +226,7 @@ func TestRTCPLifecycleInPlace(t *testing.T) {
 		testCase := testCase
 		t.Run(caseName, func(t *testing.T) {
 			assert := assert.New(t)
-			authTagLen, err := testCase.algo.authTagLen()
+			authTagLen, err := testCase.algo.rtcpAuthTagLen()
 			assert.NoError(err)
 
 			aeadAuthTagLen, err := testCase.algo.aeadAuthTagLen()
@@ -288,11 +288,7 @@ func TestRTCPLifecyclePartialAllocation(t *testing.T) {
 	for caseName, testCase := range rtcpTestCases() {
 		testCase := testCase
 		t.Run(caseName, func(t *testing.T) {
-			if testCase.algo == ProtectionProfileAeadAes128Gcm {
-				t.Skip("FIXME: DecryptRTCP(nil, input, nil) for ProtectionProfileAeadAes128Gcm changes input data")
-			}
 			assert := assert.New(t)
-
 			encryptHeader := &rtcp.Header{}
 			encryptContext, err := CreateContext(testCase.masterKey, testCase.masterSalt, testCase.algo)
 			if err != nil {
@@ -338,7 +334,7 @@ func TestRTCPInvalidAuthTag(t *testing.T) {
 		testCase := testCase
 		t.Run(caseName, func(t *testing.T) {
 			assert := assert.New(t)
-			authTagLen, err := testCase.algo.authTagLen()
+			authTagLen, err := testCase.algo.rtcpAuthTagLen()
 			assert.NoError(err)
 
 			aeadAuthTagLen, err := testCase.algo.aeadAuthTagLen()
@@ -420,7 +416,7 @@ func TestEncryptRTCPSeparation(t *testing.T) {
 			encryptContext, err := CreateContext(testCase.masterKey, testCase.masterSalt, testCase.algo)
 			assert.NoError(err)
 
-			authTagLen, err := testCase.algo.authTagLen()
+			authTagLen, err := testCase.algo.rtcpAuthTagLen()
 			assert.NoError(err)
 
 			decryptContext, err := CreateContext(
@@ -460,6 +456,25 @@ func TestEncryptRTCPSeparation(t *testing.T) {
 				decrypted, err := decryptContext.DecryptRTCP(nil, output, encryptHeader)
 				assert.NoError(err)
 				assert.Equal(decrypted, inputs[i])
+			}
+		})
+	}
+}
+
+func TestRTCPDecryptShortenedPacket(t *testing.T) {
+	for caseName, testCase := range rtcpTestCasesSingle() {
+		testCase := testCase
+		t.Run(caseName, func(t *testing.T) {
+			pkt := testCase.packets[0]
+			for i := 1; i < len(pkt.encrypted)-1; i++ {
+				packet := pkt.encrypted[:i]
+				decryptContext, err := CreateContext(testCase.masterKey, testCase.masterSalt, testCase.algo)
+				if err != nil {
+					t.Errorf("CreateContext failed: %v", err)
+				}
+				assert.NotPanics(t, func() {
+					_, _ = decryptContext.DecryptRTCP(nil, packet, nil)
+				}, "Panic on length %d/%d", i, len(pkt.encrypted))
 			}
 		})
 	}

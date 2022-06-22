@@ -2,6 +2,7 @@ package srtp
 
 import (
 	"bytes"
+	"errors"
 	"io"
 	"net"
 	"reflect"
@@ -313,7 +314,7 @@ func TestSessionSRTPReplayProtection(t *testing.T) {
 		for {
 			if seq, perr := assertPayloadSRTP(t, bReadStream, rtpHeaderSize, testPayload); perr == nil {
 				receivedSequenceNumber = append(receivedSequenceNumber, seq)
-			} else if perr == io.EOF {
+			} else if errors.Is(perr, io.EOF) {
 				return
 			}
 		}
@@ -357,7 +358,7 @@ func TestSessionSRTPReplayProtection(t *testing.T) {
 func assertPayloadSRTP(t *testing.T, stream *ReadStreamSRTP, headerSize int, expectedPayload []byte) (seq uint16, err error) {
 	readBuffer := make([]byte, headerSize+len(expectedPayload))
 	n, hdr, err := stream.ReadRTP(readBuffer)
-	if err == io.EOF {
+	if errors.Is(err, io.EOF) {
 		return 0, err
 	}
 	if err != nil {

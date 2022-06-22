@@ -5,7 +5,7 @@ import (
 )
 
 func TestContextROC(t *testing.T) {
-	c, err := CreateContext(make([]byte, 16), make([]byte, 14), cipherContextAlgo)
+	c, err := CreateContext(make([]byte, 16), make([]byte, 14), profileCTR)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -24,7 +24,7 @@ func TestContextROC(t *testing.T) {
 }
 
 func TestContextIndex(t *testing.T) {
-	c, err := CreateContext(make([]byte, 16), make([]byte, 14), cipherContextAlgo)
+	c, err := CreateContext(make([]byte, 16), make([]byte, 14), profileCTR)
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -61,17 +61,26 @@ func TestBufferFactory(t *testing.T) {
 	wg.Wait()
 }
 
-func BenchmarkWrite(b *testing.B) {
+func benchmarkWrite(b *testing.B, profile ProtectionProfile, size int) {
 	conn := newNoopConn()
+
+	keyLen, err := profile.keyLen()
+	if err != nil {
+		b.Fatal(err)
+	}
+	saltLen, err := profile.saltLen()
+	if err != nil {
+		b.Fatal(err)
+	}
 
 	config := &Config{
 		Keys: SessionKeys{
-			LocalMasterKey:   make([]byte, 16),
-			LocalMasterSalt:  make([]byte, 14),
-			RemoteMasterKey:  make([]byte, 16),
-			RemoteMasterSalt: make([]byte, 14),
+			LocalMasterKey:   make([]byte, keyLen),
+			LocalMasterSalt:  make([]byte, saltLen),
+			RemoteMasterKey:  make([]byte, keyLen),
+			RemoteMasterSalt: make([]byte, saltLen),
 		},
-		Profile: ProtectionProfileAes128CmHmacSha1_80,
+		Profile: profile,
 	}
 
 	session, err := NewSessionSRTP(conn, config)
@@ -89,7 +98,7 @@ func BenchmarkWrite(b *testing.B) {
 			Version: 2,
 			SSRC:    322,
 		},
-		Payload: make([]byte, 100),
+		Payload: make([]byte, size),
 	}
 
 	packetRaw, err := packet.Marshal()
@@ -97,6 +106,7 @@ func BenchmarkWrite(b *testing.B) {
 		b.Fatal(err)
 	}
 
+	b.SetBytes(int64(len(packetRaw)))
 	b.ResetTimer()
 
 	for i := 0; i < b.N; i++ {
@@ -114,19 +124,43 @@ func BenchmarkWrite(b *testing.B) {
 	}
 }
 
-func BenchmarkWriteRTP(b *testing.B) {
+func BenchmarkWrite(b *testing.B) {
+	b.Run("CTR-100", func(b *testing.B) {
+		benchmarkWrite(b, profileCTR, 100)
+	})
+	b.Run("CTR-1000", func(b *testing.B) {
+		benchmarkWrite(b, profileCTR, 1000)
+	})
+	b.Run("GCM-100", func(b *testing.B) {
+		benchmarkWrite(b, profileGCM, 100)
+	})
+	b.Run("GCM-1000", func(b *testing.B) {
+		benchmarkWrite(b, profileGCM, 1000)
+	})
+}
+
+func benchmarkWriteRTP(b *testing.B, profile ProtectionProfile, size int) {
 	conn := &noopConn{
 		closed: make(chan struct{}),
 	}
 
+	keyLen, err := profile.keyLen()
+	if err != nil {
+		b.Fatal(err)
+	}
+	saltLen, err := profile.saltLen()
+	if err != nil {
+		b.Fatal(err)
+	}
+
 	config := &Config{
 		Keys: SessionKeys{
-			LocalMasterKey:   make([]byte, 16),
-			LocalMasterSalt:  make([]byte, 14),
-			RemoteMasterKey:  make([]byte, 16),
-			RemoteMasterSalt: make([]byte, 14),
+			LocalMasterKey:   make([]byte, keyLen),
+			LocalMasterSalt:  make([]byte, saltLen),
+			RemoteMasterKey:  make([]byte, keyLen),
+			RemoteMasterSalt: make([]byte, saltLen),
 		},
-		Profile: ProtectionProfileAes128CmHmacSha1_80,
+		Profile: profile,
 	}
 
 	session, err := NewSessionSRTP(conn, config)
@@ -144,8 +178,9 @@ func BenchmarkWriteRTP(b *testing.B) {
 		SSRC:    322,
 	}
 
-	payload := make([]byte, 100)
+	payload := make([]byte, size)
 
+	b.SetBytes(int64(header.MarshalSize() + len(payload)))
 	b.ResetTimer()
 
 	for i := 0; i < b.N; i++ {
@@ -161,4 +196,19 @@ func BenchmarkWriteRTP(b *testing.B) {
 	if err != nil {
 		b.Fatal(err)
 	}
+}
+
+func BenchmarkWriteRTP(b *testing.B) {
+	b.Run("CTR-100", func(b *testing.B) {
+		benchmarkWriteRTP(b, profileCTR, 100)
+	})
+	b.Run("CTR-1000", func(b *testing.B) {
+		benchmarkWriteRTP(b, profileCTR, 1000)
+	})
+	b.Run("GCM-100", func(b *testing.B) {
+		benchmarkWriteRTP(b, profileGCM, 100)
+	})
+	b.Run("GCM-1000", func(b *testing.B) {
+		benchmarkWriteRTP(b, profileGCM, 1000)
+	})
 }
