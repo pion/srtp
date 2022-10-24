@@ -7,6 +7,6 @@ require (
 	github.com/pion/rtcp v1.2.10
 	github.com/pion/rtp v1.7.13
 	github.com/pion/transport v0.13.1
-	github.com/stretchr/testify v1.7.1
+	github.com/stretchr/testify v1.8.1
 	golang.org/x/sys v0.0.0-20220622161953-175b2fd9d664 // indirect
 )
