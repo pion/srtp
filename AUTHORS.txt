@@ -25,3 +25,6 @@ Sean DuBois <sean@siobud.com>
 Tobias Fridén <tobias.friden@gmail.com>
 Woodrow Douglass <wdouglass@carnegierobotics.com>
 Yutaka Takeda <yt0916@gmail.com>
+
+# List of contributors not appearing in Git history
+
