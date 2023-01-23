@@ -11,7 +11,7 @@ import (
 	"time"
 
 	"github.com/pion/rtp"
-	"github.com/pion/transport/test"
+	"github.com/pion/transport/v2/test"
 )
 
 func TestSessionSRTPBadInit(t *testing.T) {
