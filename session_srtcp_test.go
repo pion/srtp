@@ -12,7 +12,7 @@ import (
 	"time"
 
 	"github.com/pion/rtcp"
-	"github.com/pion/transport/test"
+	"github.com/pion/transport/v2/test"
 )
 
 const rtcpHeaderSize = 4
