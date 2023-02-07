@@ -774,3 +774,78 @@ func TestRTPMaxPackets(t *testing.T) {
 		})
 	}
 }
+
+func TestRTPBurstLossWithSetROC(t *testing.T) {
+	profiles := map[string]ProtectionProfile{
+		"CTR": profileCTR,
+		"GCM": profileGCM,
+	}
+	for name, profile := range profiles {
+		profile := profile
+		t.Run(name, func(t *testing.T) {
+			assert := assert.New(t)
+
+			encryptContext, err := buildTestContext(profile)
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			type packetWithROC struct {
+				pkt rtp.Packet
+				enc []byte
+				raw []byte
+
+				roc uint32
+			}
+
+			var pkts []*packetWithROC
+			encryptContext.SetROC(1, 3)
+			for i := 0x8C00; i < 0x20400; i += 0x100 {
+				p := &packetWithROC{
+					pkt: rtp.Packet{
+						Payload: []byte{
+							byte(i >> 16),
+							byte(i >> 8),
+							byte(i),
+						},
+						Header: rtp.Header{
+							Marker:         true,
+							SSRC:           1,
+							SequenceNumber: uint16(i),
+						},
+					},
+				}
+				b, errMarshal := p.pkt.Marshal()
+				if errMarshal != nil {
+					t.Fatal(errMarshal)
+				}
+				p.raw = b
+				enc, errEnc := encryptContext.EncryptRTP(nil, b, nil)
+				if errEnc != nil {
+					t.Fatal(errEnc)
+				}
+				p.roc, _ = encryptContext.ROC(1)
+				if 0x9000 < i && i < 0x20100 {
+					continue
+				}
+				p.enc = enc
+				pkts = append(pkts, p)
+			}
+
+			decryptContext, err := buildTestContext(profile)
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			for _, p := range pkts {
+				decryptContext.SetROC(1, p.roc)
+				pkt, err := decryptContext.DecryptRTP(nil, p.enc, nil)
+				if err != nil {
+					t.Errorf("roc=%d, seq=%d: %v", p.roc, p.pkt.SequenceNumber, err)
+					continue
+				}
+				assert.Equal(p.raw, pkt)
+			}
+		})
+	}
+}
