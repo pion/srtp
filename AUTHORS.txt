@@ -22,6 +22,7 @@ Novel Corpse <romandafe94@gmail.com>
 OrlandoCo <luisorlando.co@gmail.com>
 Sean DuBois <seaduboi@amazon.com>
 Sean DuBois <sean@siobud.com>
+Steffen Vogel <post@steffenvogel.de>
 Tobias Fridén <tobias.friden@gmail.com>
 Woodrow Douglass <wdouglass@carnegierobotics.com>
 Yutaka Takeda <yt0916@gmail.com>
