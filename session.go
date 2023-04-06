@@ -5,6 +5,7 @@ import (
 	"io"
 	"net"
 	"sync"
+	"sync/atomic"
 
 	"github.com/pion/logging"
 	"github.com/pion/transport/v2/packetio"
@@ -18,7 +19,8 @@ type streamSession interface {
 
 type session struct {
 	localContextMutex           sync.Mutex
-	localContext, remoteContext *Context
+	localContext                *Context
+	remoteContext               atomic.Value // *Context
 	localOptions, remoteOptions []ContextOption
 
 	newStream chan readStream
@@ -107,13 +109,15 @@ func (s *session) close() error {
 }
 
 func (s *session) start(localMasterKey, localMasterSalt, remoteMasterKey, remoteMasterSalt []byte, profile ProtectionProfile, child streamSession) error {
-	var err error
-	s.localContext, err = CreateContext(localMasterKey, localMasterSalt, profile, s.localOptions...)
-	if err != nil {
-		return err
-	}
-
-	s.remoteContext, err = CreateContext(remoteMasterKey, remoteMasterSalt, profile, s.remoteOptions...)
+	err := s.UpdateContext(&Config{
+		Keys: SessionKeys{
+			LocalMasterKey:   localMasterKey,
+			LocalMasterSalt:  localMasterSalt,
+			RemoteMasterKey:  remoteMasterKey,
+			RemoteMasterSalt: remoteMasterSalt,
+		},
+		Profile: profile,
+	})
 	if err != nil {
 		return err
 	}
@@ -146,6 +150,26 @@ func (s *session) start(localMasterKey, localMasterSalt, remoteMasterKey, remote
 	}()
 
 	close(s.started)
+
+	return nil
+}
+
+// UpdateContext updates the local and remote context of the session.
+func (s *session) UpdateContext(config *Config) error {
+	localContext, err := CreateContext(config.Keys.LocalMasterKey, config.Keys.LocalMasterSalt, config.Profile, s.localOptions...)
+	if err != nil {
+		return err
+	}
+	remoteContext, err := CreateContext(config.Keys.RemoteMasterKey, config.Keys.RemoteMasterSalt, config.Profile, s.remoteOptions...)
+	if err != nil {
+		return err
+	}
+
+	s.localContextMutex.Lock()
+	s.localContext = localContext
+	s.localContextMutex.Unlock()
+
+	s.remoteContext.Store(remoteContext)
 
 	return nil
 }

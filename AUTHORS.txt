@@ -6,6 +6,8 @@
 adamroach <adam@nostrum.com>
 Adrian Cable <adrian.cable@gmail.com>
 Agniva De Sarker <agnivade@yahoo.co.in>
+Antoine Baché <antoine@tenten.app>
+Antoine Baché <Antonito@users.noreply.github.com>
 Atsushi Watanabe <atsushi.w@ieee.org>
 backkem <mail@backkem.me>
 chenkaiC4 <chenkaic4@gmail.com>
