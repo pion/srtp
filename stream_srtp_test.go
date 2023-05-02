@@ -14,15 +14,15 @@ import (
 
 type noopConn struct{ closed chan struct{} }
 
-func newNoopConn() *noopConn                           { return &noopConn{closed: make(chan struct{})} }
-func (c *noopConn) Read(b []byte) (n int, err error)   { <-c.closed; return 0, io.EOF }
-func (c *noopConn) Write(b []byte) (n int, err error)  { return len(b), nil }
-func (c *noopConn) Close() error                       { close(c.closed); return nil }
-func (c *noopConn) LocalAddr() net.Addr                { return nil }
-func (c *noopConn) RemoteAddr() net.Addr               { return nil }
-func (c *noopConn) SetDeadline(t time.Time) error      { return nil }
-func (c *noopConn) SetReadDeadline(t time.Time) error  { return nil }
-func (c *noopConn) SetWriteDeadline(t time.Time) error { return nil }
+func newNoopConn() *noopConn                          { return &noopConn{closed: make(chan struct{})} }
+func (c *noopConn) Read([]byte) (n int, err error)    { <-c.closed; return 0, io.EOF }
+func (c *noopConn) Write(b []byte) (n int, err error) { return len(b), nil }
+func (c *noopConn) Close() error                      { close(c.closed); return nil }
+func (c *noopConn) LocalAddr() net.Addr               { return nil }
+func (c *noopConn) RemoteAddr() net.Addr              { return nil }
+func (c *noopConn) SetDeadline(time.Time) error       { return nil }
+func (c *noopConn) SetReadDeadline(time.Time) error   { return nil }
+func (c *noopConn) SetWriteDeadline(time.Time) error  { return nil }
 
 func TestBufferFactory(t *testing.T) {
 	wg := sync.WaitGroup{}
