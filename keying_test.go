@@ -11,7 +11,7 @@ type mockKeyingMaterialExporter struct {
 	exported []byte
 }
 
-func (m *mockKeyingMaterialExporter) ExportKeyingMaterial(label string, context []byte, length int) ([]byte, error) {
+func (m *mockKeyingMaterialExporter) ExportKeyingMaterial(label string, _ []byte, length int) ([]byte, error) {
 	if label != labelExtractorDtlsSrtp {
 		return nil, fmt.Errorf("%w: expected(%s) actual(%s)", errExporterWrongLabel, label, labelExtractorDtlsSrtp)
 	}

@@ -46,15 +46,16 @@ func NewSessionSRTCP(conn net.Conn, config *Config) (*SessionSRTCP, error) { //n
 
 	s := &SessionSRTCP{
 		session: session{
-			nextConn:      conn,
-			localOptions:  localOpts,
-			remoteOptions: remoteOpts,
-			readStreams:   map[uint32]readStream{},
-			newStream:     make(chan readStream),
-			started:       make(chan interface{}),
-			closed:        make(chan interface{}),
-			bufferFactory: config.BufferFactory,
-			log:           loggerFactory.NewLogger("srtp"),
+			nextConn:            conn,
+			localOptions:        localOpts,
+			remoteOptions:       remoteOpts,
+			readStreams:         map[uint32]readStream{},
+			newStream:           make(chan readStream),
+			acceptStreamTimeout: config.AcceptStreamTimeout,
+			started:             make(chan interface{}),
+			closed:              make(chan interface{}),
+			bufferFactory:       config.BufferFactory,
+			log:                 loggerFactory.NewLogger("srtp"),
 		},
 	}
 	s.writeStream = &WriteStreamSRTCP{s}
@@ -165,6 +166,9 @@ func (s *SessionSRTCP) decrypt(buf []byte) error {
 		if r == nil {
 			return nil // Session has been closed
 		} else if isNew {
+			if !s.session.acceptStreamTimeout.IsZero() {
+				_ = s.session.nextConn.SetReadDeadline(time.Time{})
+			}
 			s.session.newStream <- r // Notify AcceptStream
 		}
 
