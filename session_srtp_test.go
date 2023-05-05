@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2023 The Pion community <https://pion.ly>
+// SPDX-License-Identifier: MIT
+
 package srtp
 
 import (
@@ -11,7 +14,7 @@ import (
 	"time"
 
 	"github.com/pion/rtp"
-	"github.com/pion/transport/test"
+	"github.com/pion/transport/v2/test"
 )
 
 func TestSessionSRTPBadInit(t *testing.T) {
@@ -352,6 +355,42 @@ func TestSessionSRTPReplayProtection(t *testing.T) {
 		t.Errorf("Expected and received sequence number differs,\nexpected:\n%v\nreceived:\n%v",
 			expectedSequenceNumber, receivedSequenceNumber,
 		)
+	}
+}
+
+// nolint: dupl
+func TestSessionSRTPAcceptStreamTimeout(t *testing.T) {
+	lim := test.TimeOut(time.Second * 5)
+	defer lim.Stop()
+
+	report := test.CheckRoutines(t)
+	defer report()
+
+	pipe, _ := net.Pipe()
+	config := &Config{
+		Profile: ProtectionProfileAes128CmHmacSha1_80,
+		Keys: SessionKeys{
+			[]byte{0xE1, 0xF9, 0x7A, 0x0D, 0x3E, 0x01, 0x8B, 0xE0, 0xD6, 0x4F, 0xA3, 0x2C, 0x06, 0xDE, 0x41, 0x39},
+			[]byte{0x0E, 0xC6, 0x75, 0xAD, 0x49, 0x8A, 0xFE, 0xEB, 0xB6, 0x96, 0x0B, 0x3A, 0xAB, 0xE6},
+			[]byte{0xE1, 0xF9, 0x7A, 0x0D, 0x3E, 0x01, 0x8B, 0xE0, 0xD6, 0x4F, 0xA3, 0x2C, 0x06, 0xDE, 0x41, 0x39},
+			[]byte{0x0E, 0xC6, 0x75, 0xAD, 0x49, 0x8A, 0xFE, 0xEB, 0xB6, 0x96, 0x0B, 0x3A, 0xAB, 0xE6},
+		},
+		AcceptStreamTimeout: time.Now().Add(3 * time.Second),
+	}
+
+	newSession, err := NewSessionSRTP(pipe, config)
+	if err != nil {
+		t.Fatal(err)
+	} else if newSession == nil {
+		t.Fatal("NewSessionSRTP did not error, but returned nil session")
+	}
+
+	if _, _, err = newSession.AcceptStream(); err == nil || !errors.Is(err, errStreamAlreadyClosed) {
+		t.Fatal(err)
+	}
+
+	if err = newSession.Close(); err != nil {
+		t.Fatal(err)
 	}
 }
 

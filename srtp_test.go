@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2023 The Pion community <https://pion.ly>
+// SPDX-License-Identifier: MIT
+
 package srtp
 
 import (
@@ -76,67 +79,103 @@ func TestRolloverCount(t *testing.T) {
 	s := &srtpSSRCState{ssrc: defaultSsrc}
 
 	// Set initial seqnum
-	roc, diff := s.nextRolloverCount(65530)
+	roc, diff, ovf := s.nextRolloverCount(65530)
 	if roc != 0 {
 		t.Errorf("Initial rolloverCounter must be 0")
+	}
+	if ovf {
+		t.Error("Should not overflow")
 	}
 	s.updateRolloverCount(65530, diff)
 
 	// Invalid packets never update ROC
-	_, _ = s.nextRolloverCount(0)
-	_, _ = s.nextRolloverCount(0x4000)
-	_, _ = s.nextRolloverCount(0x8000)
-	_, _ = s.nextRolloverCount(0xFFFF)
-	_, _ = s.nextRolloverCount(0)
+	s.nextRolloverCount(0)
+	s.nextRolloverCount(0x4000)
+	s.nextRolloverCount(0x8000)
+	s.nextRolloverCount(0xFFFF)
+	s.nextRolloverCount(0)
 
 	// We rolled over to 0
-	roc, diff = s.nextRolloverCount(0)
+	roc, diff, ovf = s.nextRolloverCount(0)
 	if roc != 1 {
 		t.Errorf("rolloverCounter was not updated after it crossed 0")
 	}
+	if ovf {
+		t.Error("Should not overflow")
+	}
 	s.updateRolloverCount(0, diff)
 
-	roc, diff = s.nextRolloverCount(65530)
+	roc, diff, ovf = s.nextRolloverCount(65530)
 	if roc != 0 {
 		t.Errorf("rolloverCounter was not updated when it rolled back, failed to handle out of order")
 	}
+	if ovf {
+		t.Error("Should not overflow")
+	}
 	s.updateRolloverCount(65530, diff)
 
-	roc, diff = s.nextRolloverCount(5)
+	roc, diff, ovf = s.nextRolloverCount(5)
 	if roc != 1 {
 		t.Errorf("rolloverCounter was not updated when it rolled over initial, to handle out of order")
 	}
+	if ovf {
+		t.Error("Should not overflow")
+	}
 	s.updateRolloverCount(5, diff)
 
-	_, diff = s.nextRolloverCount(6)
+	_, diff, _ = s.nextRolloverCount(6)
 	s.updateRolloverCount(6, diff)
-	_, diff = s.nextRolloverCount(7)
+	_, diff, _ = s.nextRolloverCount(7)
 	s.updateRolloverCount(7, diff)
-	roc, diff = s.nextRolloverCount(8)
+	roc, diff, _ = s.nextRolloverCount(8)
 	if roc != 1 {
 		t.Errorf("rolloverCounter was improperly updated for non-significant packets")
 	}
 	s.updateRolloverCount(8, diff)
 
 	// valid packets never update ROC
-	roc, diff = s.nextRolloverCount(0x4000)
+	roc, diff, ovf = s.nextRolloverCount(0x4000)
 	if roc != 1 {
 		t.Errorf("rolloverCounter was improperly updated for non-significant packets")
+	}
+	if ovf {
+		t.Error("Should not overflow")
 	}
 	s.updateRolloverCount(0x4000, diff)
-	roc, diff = s.nextRolloverCount(0x8000)
+	roc, diff, ovf = s.nextRolloverCount(0x8000)
 	if roc != 1 {
 		t.Errorf("rolloverCounter was improperly updated for non-significant packets")
+	}
+	if ovf {
+		t.Error("Should not overflow")
 	}
 	s.updateRolloverCount(0x8000, diff)
-	roc, diff = s.nextRolloverCount(0xFFFF)
+	roc, diff, ovf = s.nextRolloverCount(0xFFFF)
 	if roc != 1 {
 		t.Errorf("rolloverCounter was improperly updated for non-significant packets")
 	}
+	if ovf {
+		t.Error("Should not overflow")
+	}
 	s.updateRolloverCount(0xFFFF, diff)
-	roc, _ = s.nextRolloverCount(0)
+	roc, _, ovf = s.nextRolloverCount(0)
 	if roc != 2 {
 		t.Errorf("rolloverCounter must be incremented after wrapping, got %d", roc)
+	}
+	if ovf {
+		t.Error("Should not overflow")
+	}
+}
+
+func TestRolloverCountOverflow(t *testing.T) {
+	s := &srtpSSRCState{
+		ssrc:  defaultSsrc,
+		index: maxROC << 16,
+	}
+	s.updateRolloverCount(0xFFFF, 0)
+	_, _, ovf := s.nextRolloverCount(0)
+	if !ovf {
+		t.Error("Should overflow")
 	}
 }
 
@@ -541,56 +580,86 @@ func BenchmarkDecryptRTP(b *testing.B) {
 func TestRolloverCount2(t *testing.T) {
 	s := &srtpSSRCState{ssrc: defaultSsrc}
 
-	roc, diff := s.nextRolloverCount(30123)
+	roc, diff, ovf := s.nextRolloverCount(30123)
 	if roc != 0 {
 		t.Errorf("Initial rolloverCounter must be 0")
+	}
+	if ovf {
+		t.Error("Should not overflow")
 	}
 	s.updateRolloverCount(30123, diff)
 
-	roc, diff = s.nextRolloverCount(62892) // 30123 + (1 << 15) + 1
+	roc, diff, ovf = s.nextRolloverCount(62892) // 30123 + (1 << 15) + 1
 	if roc != 0 {
 		t.Errorf("Initial rolloverCounter must be 0")
 	}
+	if ovf {
+		t.Error("Should not overflow")
+	}
 	s.updateRolloverCount(62892, diff)
-	roc, diff = s.nextRolloverCount(204)
+	roc, diff, ovf = s.nextRolloverCount(204)
 	if roc != 1 {
 		t.Errorf("rolloverCounter was not updated after it crossed 0")
 	}
+	if ovf {
+		t.Error("Should not overflow")
+	}
 	s.updateRolloverCount(62892, diff)
-	roc, diff = s.nextRolloverCount(64535)
+	roc, diff, ovf = s.nextRolloverCount(64535)
 	if roc != 0 {
 		t.Errorf("rolloverCounter was not updated when it rolled back, failed to handle out of order")
 	}
+	if ovf {
+		t.Error("Should not overflow")
+	}
 	s.updateRolloverCount(64535, diff)
-	roc, diff = s.nextRolloverCount(205)
+	roc, diff, ovf = s.nextRolloverCount(205)
 	if roc != 1 {
 		t.Errorf("rolloverCounter was improperly updated for non-significant packets")
 	}
+	if ovf {
+		t.Error("Should not overflow")
+	}
 	s.updateRolloverCount(205, diff)
-	roc, diff = s.nextRolloverCount(1)
+	roc, diff, ovf = s.nextRolloverCount(1)
 	if roc != 1 {
 		t.Errorf("rolloverCounter was improperly updated for non-significant packets")
+	}
+	if ovf {
+		t.Error("Should not overflow")
 	}
 	s.updateRolloverCount(1, diff)
 
-	roc, diff = s.nextRolloverCount(64532)
+	roc, diff, ovf = s.nextRolloverCount(64532)
 	if roc != 0 {
 		t.Errorf("rolloverCounter was improperly updated for non-significant packets")
 	}
+	if ovf {
+		t.Error("Should not overflow")
+	}
 	s.updateRolloverCount(64532, diff)
-	roc, diff = s.nextRolloverCount(65534)
+	roc, diff, ovf = s.nextRolloverCount(65534)
 	if roc != 0 {
 		t.Errorf("index was improperly updated for non-significant packets")
+	}
+	if ovf {
+		t.Error("Should not overflow")
 	}
 	s.updateRolloverCount(65534, diff)
-	roc, diff = s.nextRolloverCount(64532)
+	roc, diff, ovf = s.nextRolloverCount(64532)
 	if roc != 0 {
 		t.Errorf("index was improperly updated for non-significant packets")
 	}
+	if ovf {
+		t.Error("Should not overflow")
+	}
 	s.updateRolloverCount(65532, diff)
-	roc, diff = s.nextRolloverCount(205)
+	roc, diff, ovf = s.nextRolloverCount(205)
 	if roc != 1 {
 		t.Errorf("index was not updated after it crossed 0")
+	}
+	if ovf {
+		t.Error("Should not overflow")
 	}
 	s.updateRolloverCount(65532, diff)
 }
@@ -656,6 +725,129 @@ func TestRTPDecryptShotenedPacket(t *testing.T) {
 						_, _ = decryptContext.DecryptRTP(nil, packet, nil)
 					}, "Panic on length %d/%d", i, len(encryptedRaw))
 				}
+			}
+		})
+	}
+}
+
+func TestRTPMaxPackets(t *testing.T) {
+	profiles := map[string]ProtectionProfile{
+		"CTR": profileCTR,
+		"GCM": profileGCM,
+	}
+	for name, profile := range profiles {
+		profile := profile
+		t.Run(name, func(t *testing.T) {
+			context, err := buildTestContext(profile)
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			context.SetROC(1, (1<<32)-1)
+
+			pkt0 := &rtp.Packet{
+				Header: rtp.Header{
+					SSRC:           1,
+					SequenceNumber: 0xffff,
+				},
+				Payload: []byte{0, 1},
+			}
+			raw0, err0 := pkt0.Marshal()
+			if err0 != nil {
+				t.Fatal(err0)
+			}
+			if _, errEnc := context.EncryptRTP(nil, raw0, nil); errEnc != nil {
+				t.Fatal(errEnc)
+			}
+
+			pkt1 := &rtp.Packet{
+				Header: rtp.Header{
+					SSRC:           1,
+					SequenceNumber: 0x0,
+				},
+				Payload: []byte{0, 1},
+			}
+			raw1, err1 := pkt1.Marshal()
+			if err1 != nil {
+				t.Fatal(err1)
+			}
+			if _, errEnc := context.EncryptRTP(nil, raw1, nil); !errors.Is(errEnc, errExceededMaxPackets) {
+				t.Fatalf("Expected error '%v', got '%v'", errExceededMaxPackets, errEnc)
+			}
+		})
+	}
+}
+
+func TestRTPBurstLossWithSetROC(t *testing.T) {
+	profiles := map[string]ProtectionProfile{
+		"CTR": profileCTR,
+		"GCM": profileGCM,
+	}
+	for name, profile := range profiles {
+		profile := profile
+		t.Run(name, func(t *testing.T) {
+			assert := assert.New(t)
+
+			encryptContext, err := buildTestContext(profile)
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			type packetWithROC struct {
+				pkt rtp.Packet
+				enc []byte
+				raw []byte
+
+				roc uint32
+			}
+
+			var pkts []*packetWithROC
+			encryptContext.SetROC(1, 3)
+			for i := 0x8C00; i < 0x20400; i += 0x100 {
+				p := &packetWithROC{
+					pkt: rtp.Packet{
+						Payload: []byte{
+							byte(i >> 16),
+							byte(i >> 8),
+							byte(i),
+						},
+						Header: rtp.Header{
+							Marker:         true,
+							SSRC:           1,
+							SequenceNumber: uint16(i),
+						},
+					},
+				}
+				b, errMarshal := p.pkt.Marshal()
+				if errMarshal != nil {
+					t.Fatal(errMarshal)
+				}
+				p.raw = b
+				enc, errEnc := encryptContext.EncryptRTP(nil, b, nil)
+				if errEnc != nil {
+					t.Fatal(errEnc)
+				}
+				p.roc, _ = encryptContext.ROC(1)
+				if 0x9000 < i && i < 0x20100 {
+					continue
+				}
+				p.enc = enc
+				pkts = append(pkts, p)
+			}
+
+			decryptContext, err := buildTestContext(profile)
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			for _, p := range pkts {
+				decryptContext.SetROC(1, p.roc)
+				pkt, err := decryptContext.DecryptRTP(nil, p.enc, nil)
+				if err != nil {
+					t.Errorf("roc=%d, seq=%d: %v", p.roc, p.pkt.SequenceNumber, err)
+					continue
+				}
+				assert.Equal(p.raw, pkt)
 			}
 		})
 	}

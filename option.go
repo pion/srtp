@@ -1,7 +1,10 @@
+// SPDX-FileCopyrightText: 2023 The Pion community <https://pion.ly>
+// SPDX-License-Identifier: MIT
+
 package srtp
 
 import (
-	"github.com/pion/transport/replaydetector"
+	"github.com/pion/transport/v2/replaydetector"
 )
 
 // ContextOption represents option of Context using the functional options pattern.
@@ -11,7 +14,7 @@ type ContextOption func(*Context) error
 func SRTPReplayProtection(windowSize uint) ContextOption { // nolint:revive
 	return func(c *Context) error {
 		c.newSRTPReplayDetector = func() replaydetector.ReplayDetector {
-			return replaydetector.WithWrap(windowSize, maxSequenceNumber)
+			return replaydetector.New(windowSize, maxROC<<16|maxSequenceNumber)
 		}
 		return nil
 	}
@@ -21,7 +24,7 @@ func SRTPReplayProtection(windowSize uint) ContextOption { // nolint:revive
 func SRTCPReplayProtection(windowSize uint) ContextOption {
 	return func(c *Context) error {
 		c.newSRTCPReplayDetector = func() replaydetector.ReplayDetector {
-			return replaydetector.WithWrap(windowSize, maxSRTCPIndex)
+			return replaydetector.New(windowSize, maxSRTCPIndex)
 		}
 		return nil
 	}
