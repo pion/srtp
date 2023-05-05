@@ -23,6 +23,7 @@ OrlandoCo <luisorlando.co@gmail.com>
 Sean DuBois <seaduboi@amazon.com>
 Sean DuBois <sean@siobud.com>
 SeongGyu Park <tawny.port@kakaoenterprise.com>
+Steffen <post@steffenvogel.de>
 Steffen Vogel <post@steffenvogel.de>
 Tobias Fridén <tobias.friden@gmail.com>
 Woodrow Douglass <wdouglass@carnegierobotics.com>
