@@ -88,7 +88,7 @@ func CreateContext(masterKey, masterSalt []byte, profile ProtectionProfile, opts
 	}
 
 	switch profile {
-	case ProtectionProfileAeadAes128Gcm:
+	case ProtectionProfileAeadAes128Gcm, ProtectionProfileAeadAes256Gcm:
 		c.cipher, err = newSrtpCipherAeadAesGcm(profile, masterKey, masterSalt)
 	case ProtectionProfileAes128CmHmacSha1_32, ProtectionProfileAes128CmHmacSha1_80:
 		c.cipher, err = newSrtpCipherAesCmHmacSha1(profile, masterKey, masterSalt)
