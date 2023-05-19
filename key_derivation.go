@@ -22,7 +22,7 @@ func aesCmKeyDerivation(label byte, masterKey, masterSalt []byte, indexOverKdr i
 	nMasterKey := len(masterKey)
 	nMasterSalt := len(masterSalt)
 
-	prfIn := make([]byte, nMasterKey)
+	prfIn := make([]byte, 16)
 	copy(prfIn[:nMasterSalt], masterSalt)
 
 	prfIn[7] ^= label
@@ -35,8 +35,8 @@ func aesCmKeyDerivation(label byte, masterKey, masterSalt []byte, indexOverKdr i
 
 	out := make([]byte, ((outLen+nMasterKey)/nMasterKey)*nMasterKey)
 	var i uint16
-	for n := 0; n < outLen; n += nMasterKey {
-		binary.BigEndian.PutUint16(prfIn[nMasterKey-2:], i)
+	for n := 0; n < outLen; n += block.BlockSize() {
+		binary.BigEndian.PutUint16(prfIn[len(prfIn)-2:], i)
 		block.Encrypt(out[n:n+nMasterKey], prfIn)
 		i++
 	}
