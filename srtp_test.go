@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/pion/rtp"
+	"github.com/pion/transport/v2/replaydetector"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -460,6 +461,37 @@ func testRTPReplayProtection(t *testing.T, profile ProtectionProfile) {
 func TestRTPReplayProtection(t *testing.T) {
 	t.Run("CTR", func(t *testing.T) { testRTPReplayProtection(t, profileCTR) })
 	t.Run("GCM", func(t *testing.T) { testRTPReplayProtection(t, profileGCM) })
+}
+
+func TestRTPReplayDetectorFactory(t *testing.T) {
+	assert := assert.New(t)
+	profile := profileCTR
+	data := rtpTestCases()[0]
+
+	var cntFactory int
+	decryptContext, err := buildTestContext(
+		profile, SRTPReplayDetectorFactory(func() replaydetector.ReplayDetector {
+			cntFactory++
+			return &nopReplayDetector{}
+		}),
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	pkt := &rtp.Packet{
+		Payload: data.encrypted(profile),
+		Header:  rtp.Header{SequenceNumber: data.sequenceNumber},
+	}
+	in, err := pkt.Marshal()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := decryptContext.DecryptRTP(nil, in, nil); err != nil {
+		t.Fatal(err)
+	}
+	assert.Equal(1, cntFactory)
 }
 
 func benchmarkEncryptRTP(b *testing.B, profile ProtectionProfile, size int) {
