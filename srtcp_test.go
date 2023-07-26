@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/pion/rtcp"
+	"github.com/pion/transport/v2/replaydetector"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -569,4 +570,27 @@ func TestRTCPMaxPackets(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestRTCPReplayDetectorFactory(t *testing.T) {
+	assert := assert.New(t)
+	testCase := rtcpTestCases()["AEAD_AES_128_GCM"]
+	data := testCase.packets[0]
+
+	var cntFactory int
+	decryptContext, err := CreateContext(
+		testCase.masterKey, testCase.masterSalt, testCase.algo,
+		SRTCPReplayDetectorFactory(func() replaydetector.ReplayDetector {
+			cntFactory++
+			return &nopReplayDetector{}
+		}),
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := decryptContext.DecryptRTCP(nil, data.encrypted, nil); err != nil {
+		t.Fatal(err)
+	}
+	assert.Equal(1, cntFactory)
 }
