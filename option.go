@@ -68,6 +68,6 @@ func SRTCPReplayDetectorFactory(fn func() replaydetector.ReplayDetector) Context
 
 type nopReplayDetector struct{}
 
-func (s *nopReplayDetector) Check(uint64) (func(), bool) {
-	return func() {}, true
+func (s *nopReplayDetector) Check(uint64) (func() bool, bool) {
+	return func() bool { return true }, true
 }
