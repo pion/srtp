@@ -6,7 +6,7 @@ package srtp
 import (
 	"crypto/cipher"
 
-	"github.com/pion/transport/v2/utils/xor"
+	"github.com/pion/transport/v3/utils/xor"
 )
 
 // incrementCTR increments a big-endian integer of arbitrary size.

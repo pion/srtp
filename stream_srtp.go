@@ -10,7 +10,7 @@ import (
 	"time"
 
 	"github.com/pion/rtp"
-	"github.com/pion/transport/v2/packetio"
+	"github.com/pion/transport/v3/packetio"
 )
 
 // Limit the buffer size to 1MB

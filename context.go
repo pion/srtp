@@ -6,7 +6,7 @@ package srtp
 import (
 	"fmt"
 
-	"github.com/pion/transport/v2/replaydetector"
+	"github.com/pion/transport/v3/replaydetector"
 )
 
 const (
