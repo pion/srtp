@@ -4,7 +4,7 @@
 package srtp
 
 import (
-	"github.com/pion/transport/v2/replaydetector"
+	"github.com/pion/transport/v3/replaydetector"
 )
 
 // ContextOption represents option of Context using the functional options pattern.
@@ -68,6 +68,6 @@ func SRTCPReplayDetectorFactory(fn func() replaydetector.ReplayDetector) Context
 
 type nopReplayDetector struct{}
 
-func (s *nopReplayDetector) Check(uint64) (func(), bool) {
-	return func() {}, true
+func (s *nopReplayDetector) Check(uint64) (func() bool, bool) {
+	return func() bool { return true }, true
 }
