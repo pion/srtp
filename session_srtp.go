@@ -76,6 +76,16 @@ func NewSessionSRTP(conn net.Conn, config *Config) (*SessionSRTP, error) { //nol
 	return s, nil
 }
 
+// GetNextConn returns the global next connection for the Session
+func (s *SessionSRTP) GetNextConn() net.Conn {
+       return s.nextConn
+}
+
+// GetLocalContext returns the local context for the Session
+func (s *SessionSRTP) GetLocalContext() *Context {
+       return s.localContext
+}
+
 // OpenWriteStream returns the global write stream for the Session
 func (s *SessionSRTP) OpenWriteStream() (*WriteStreamSRTP, error) {
 	return s.writeStream, nil
@@ -135,6 +145,11 @@ var bufferpool = sync.Pool{ // nolint:gochecknoglobals
 	New: func() interface{} {
 		return make([]byte, 1492)
 	},
+}
+
+// WriteRTP encrypts and write a header and payload to nextConn
+func (s *SessionSRTP) WriteRTP(header *rtp.Header, payload []byte) (int, error) {
+       return s.writeRTP(header, payload)
 }
 
 func (s *SessionSRTP) writeRTP(header *rtp.Header, payload []byte) (int, error) {
