@@ -17,7 +17,8 @@ const (
 	ProtectionProfileAeadAes256Gcm       ProtectionProfile = 0x0008
 )
 
-func (p ProtectionProfile) keyLen() (int, error) {
+// KeyLen returns length of encryption key in bytes.
+func (p ProtectionProfile) KeyLen() (int, error) {
 	switch p {
 	case ProtectionProfileAes128CmHmacSha1_32, ProtectionProfileAes128CmHmacSha1_80, ProtectionProfileAeadAes128Gcm:
 		return 16, nil
@@ -28,7 +29,8 @@ func (p ProtectionProfile) keyLen() (int, error) {
 	}
 }
 
-func (p ProtectionProfile) saltLen() (int, error) {
+// SaltLen returns length of salt key in bytes.
+func (p ProtectionProfile) SaltLen() (int, error) {
 	switch p {
 	case ProtectionProfileAes128CmHmacSha1_32, ProtectionProfileAes128CmHmacSha1_80:
 		return 14, nil
@@ -39,7 +41,8 @@ func (p ProtectionProfile) saltLen() (int, error) {
 	}
 }
 
-func (p ProtectionProfile) rtpAuthTagLen() (int, error) {
+// AuthTagRTPLen returns length of RTP authentication tag in bytes for AES protection profiles. For AEAD ones it returns zero.
+func (p ProtectionProfile) AuthTagRTPLen() (int, error) {
 	switch p {
 	case ProtectionProfileAes128CmHmacSha1_80:
 		return 10, nil
@@ -52,7 +55,8 @@ func (p ProtectionProfile) rtpAuthTagLen() (int, error) {
 	}
 }
 
-func (p ProtectionProfile) rtcpAuthTagLen() (int, error) {
+// AuthTagRTCPLen returns length of RTCP authentication tag in bytes for AES protection profiles. For AEAD ones it returns zero.
+func (p ProtectionProfile) AuthTagRTCPLen() (int, error) {
 	switch p {
 	case ProtectionProfileAes128CmHmacSha1_32, ProtectionProfileAes128CmHmacSha1_80:
 		return 10, nil
@@ -63,7 +67,8 @@ func (p ProtectionProfile) rtcpAuthTagLen() (int, error) {
 	}
 }
 
-func (p ProtectionProfile) aeadAuthTagLen() (int, error) {
+// AEADAuthTagLen returns length of authentication tag in bytes for AEAD protection profiles. For AES ones it returns zero.
+func (p ProtectionProfile) AEADAuthTagLen() (int, error) {
 	switch p {
 	case ProtectionProfileAes128CmHmacSha1_32, ProtectionProfileAes128CmHmacSha1_80:
 		return 0, nil
@@ -74,7 +79,8 @@ func (p ProtectionProfile) aeadAuthTagLen() (int, error) {
 	}
 }
 
-func (p ProtectionProfile) authKeyLen() (int, error) {
+// AuthKeyLen returns length of authentication key in bytes for AES protection profiles. For AEAD ones it returns zero.
+func (p ProtectionProfile) AuthKeyLen() (int, error) {
 	switch p {
 	case ProtectionProfileAes128CmHmacSha1_32, ProtectionProfileAes128CmHmacSha1_80:
 		return 20, nil
@@ -85,6 +91,7 @@ func (p ProtectionProfile) authKeyLen() (int, error) {
 	}
 }
 
+// String returns the name of the protection profile.
 func (p ProtectionProfile) String() string {
 	switch p {
 	case ProtectionProfileAes128CmHmacSha1_80:
