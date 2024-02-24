@@ -37,10 +37,10 @@ func (tc rtpTestCase) encrypted(profile ProtectionProfile) []byte {
 }
 
 func testKeyLen(t *testing.T, profile ProtectionProfile) {
-	keyLen, err := profile.keyLen()
+	keyLen, err := profile.KeyLen()
 	assert.NoError(t, err)
 
-	saltLen, err := profile.saltLen()
+	saltLen, err := profile.SaltLen()
 	assert.NoError(t, err)
 
 	if _, err := CreateContext([]byte{}, make([]byte, saltLen), profile); err == nil {
@@ -181,11 +181,11 @@ func TestRolloverCountOverflow(t *testing.T) {
 }
 
 func buildTestContext(profile ProtectionProfile, opts ...ContextOption) (*Context, error) {
-	keyLen, err := profile.keyLen()
+	keyLen, err := profile.KeyLen()
 	if err != nil {
 		return nil, err
 	}
-	saltLen, err := profile.saltLen()
+	saltLen, err := profile.SaltLen()
 	if err != nil {
 		return nil, err
 	}
@@ -270,7 +270,7 @@ func rtpTestCases() []rtpTestCase {
 func testRTPLifecyleNewAlloc(t *testing.T, profile ProtectionProfile) {
 	assert := assert.New(t)
 
-	authTagLen, err := profile.rtpAuthTagLen()
+	authTagLen, err := profile.AuthTagRTPLen()
 	assert.NoError(err)
 
 	for _, testCase := range rtpTestCases() {
