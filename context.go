@@ -66,12 +66,12 @@ type Context struct {
 //
 //	decCtx, err := srtp.CreateContext(key, salt, profile, srtp.SRTPReplayProtection(256))
 func CreateContext(masterKey, masterSalt []byte, profile ProtectionProfile, opts ...ContextOption) (c *Context, err error) {
-	keyLen, err := profile.keyLen()
+	keyLen, err := profile.KeyLen()
 	if err != nil {
 		return nil, err
 	}
 
-	saltLen, err := profile.saltLen()
+	saltLen, err := profile.SaltLen()
 	if err != nil {
 		return nil, err
 	}

@@ -67,11 +67,11 @@ func TestBufferFactory(t *testing.T) {
 func benchmarkWrite(b *testing.B, profile ProtectionProfile, size int) {
 	conn := newNoopConn()
 
-	keyLen, err := profile.keyLen()
+	keyLen, err := profile.KeyLen()
 	if err != nil {
 		b.Fatal(err)
 	}
-	saltLen, err := profile.saltLen()
+	saltLen, err := profile.SaltLen()
 	if err != nil {
 		b.Fatal(err)
 	}
@@ -147,11 +147,11 @@ func benchmarkWriteRTP(b *testing.B, profile ProtectionProfile, size int) {
 		closed: make(chan struct{}),
 	}
 
-	keyLen, err := profile.keyLen()
+	keyLen, err := profile.KeyLen()
 	if err != nil {
 		b.Fatal(err)
 	}
-	saltLen, err := profile.saltLen()
+	saltLen, err := profile.SaltLen()
 	if err != nil {
 		b.Fatal(err)
 	}

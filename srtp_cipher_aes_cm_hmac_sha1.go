@@ -49,7 +49,7 @@ func newSrtpCipherAesCmHmacSha1(profile ProtectionProfile, masterKey, masterSalt
 		return nil, err
 	}
 
-	authKeyLen, err := profile.authKeyLen()
+	authKeyLen, err := profile.AuthKeyLen()
 	if err != nil {
 		return nil, err
 	}
@@ -71,7 +71,7 @@ func newSrtpCipherAesCmHmacSha1(profile ProtectionProfile, masterKey, masterSalt
 
 func (s *srtpCipherAesCmHmacSha1) encryptRTP(dst []byte, header *rtp.Header, payload []byte, roc uint32) (ciphertext []byte, err error) {
 	// Grow the given buffer to fit the output.
-	authTagLen, err := s.rtpAuthTagLen()
+	authTagLen, err := s.AuthTagRTPLen()
 	if err != nil {
 		return nil, err
 	}
@@ -104,7 +104,7 @@ func (s *srtpCipherAesCmHmacSha1) encryptRTP(dst []byte, header *rtp.Header, pay
 
 func (s *srtpCipherAesCmHmacSha1) decryptRTP(dst, ciphertext []byte, header *rtp.Header, headerLen int, roc uint32) ([]byte, error) {
 	// Split the auth tag and the cipher text into two parts.
-	authTagLen, err := s.rtpAuthTagLen()
+	authTagLen, err := s.AuthTagRTPLen()
 	if err != nil {
 		return nil, err
 	}
@@ -156,7 +156,7 @@ func (s *srtpCipherAesCmHmacSha1) encryptRTCP(dst, decrypted []byte, srtcpIndex 
 }
 
 func (s *srtpCipherAesCmHmacSha1) decryptRTCP(out, encrypted []byte, index, ssrc uint32) ([]byte, error) {
-	authTagLen, err := s.rtcpAuthTagLen()
+	authTagLen, err := s.AuthTagRTCPLen()
 	if err != nil {
 		return nil, err
 	}
@@ -213,7 +213,7 @@ func (s *srtpCipherAesCmHmacSha1) generateSrtpAuthTag(buf []byte, roc uint32) ([
 	}
 
 	// Truncate the hash to the size indicated by the profile
-	authTagLen, err := s.rtpAuthTagLen()
+	authTagLen, err := s.AuthTagRTPLen()
 	if err != nil {
 		return nil, err
 	}
@@ -237,7 +237,7 @@ func (s *srtpCipherAesCmHmacSha1) generateSrtcpAuthTag(buf []byte) ([]byte, erro
 	if _, err := s.srtcpSessionAuth.Write(buf); err != nil {
 		return nil, err
 	}
-	authTagLen, err := s.rtcpAuthTagLen()
+	authTagLen, err := s.AuthTagRTCPLen()
 	if err != nil {
 		return nil, err
 	}
@@ -246,7 +246,7 @@ func (s *srtpCipherAesCmHmacSha1) generateSrtcpAuthTag(buf []byte) ([]byte, erro
 }
 
 func (s *srtpCipherAesCmHmacSha1) getRTCPIndex(in []byte) uint32 {
-	authTagLen, _ := s.rtcpAuthTagLen()
+	authTagLen, _ := s.AuthTagRTCPLen()
 	tailOffset := len(in) - (authTagLen + srtcpIndexSize)
 	srtcpIndexBuffer := in[tailOffset : tailOffset+srtcpIndexSize]
 	return binary.BigEndian.Uint32(srtcpIndexBuffer) &^ (1 << 31)

@@ -9,7 +9,7 @@ import (
 )
 
 func (c *Context) decryptRTP(dst, ciphertext []byte, header *rtp.Header, headerLen int) ([]byte, error) {
-	authTagLen, err := c.cipher.rtpAuthTagLen()
+	authTagLen, err := c.cipher.AuthTagRTPLen()
 	if err != nil {
 		return nil, err
 	}

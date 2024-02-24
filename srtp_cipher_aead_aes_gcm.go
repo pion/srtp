@@ -67,7 +67,7 @@ func newSrtpCipherAeadAesGcm(profile ProtectionProfile, masterKey, masterSalt []
 
 func (s *srtpCipherAeadAesGcm) encryptRTP(dst []byte, header *rtp.Header, payload []byte, roc uint32) (ciphertext []byte, err error) {
 	// Grow the given buffer to fit the output.
-	authTagLen, err := s.aeadAuthTagLen()
+	authTagLen, err := s.AEADAuthTagLen()
 	if err != nil {
 		return nil, err
 	}
@@ -85,7 +85,7 @@ func (s *srtpCipherAeadAesGcm) encryptRTP(dst []byte, header *rtp.Header, payloa
 
 func (s *srtpCipherAeadAesGcm) decryptRTP(dst, ciphertext []byte, header *rtp.Header, headerLen int, roc uint32) ([]byte, error) {
 	// Grow the given buffer to fit the output.
-	authTagLen, err := s.aeadAuthTagLen()
+	authTagLen, err := s.AEADAuthTagLen()
 	if err != nil {
 		return nil, err
 	}
@@ -109,7 +109,7 @@ func (s *srtpCipherAeadAesGcm) decryptRTP(dst, ciphertext []byte, header *rtp.He
 }
 
 func (s *srtpCipherAeadAesGcm) encryptRTCP(dst, decrypted []byte, srtcpIndex uint32, ssrc uint32) ([]byte, error) {
-	authTagLen, err := s.aeadAuthTagLen()
+	authTagLen, err := s.AEADAuthTagLen()
 	if err != nil {
 		return nil, err
 	}
@@ -130,7 +130,7 @@ func (s *srtpCipherAeadAesGcm) encryptRTCP(dst, decrypted []byte, srtcpIndex uin
 func (s *srtpCipherAeadAesGcm) decryptRTCP(dst, encrypted []byte, srtcpIndex, ssrc uint32) ([]byte, error) {
 	aadPos := len(encrypted) - srtcpIndexSize
 	// Grow the given buffer to fit the output.
-	authTagLen, err := s.aeadAuthTagLen()
+	authTagLen, err := s.AEADAuthTagLen()
 	if err != nil {
 		return nil, err
 	}
