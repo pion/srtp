@@ -119,11 +119,11 @@ func createTestCiphers() []testCipher {
 	}
 
 	for k, v := range tests {
-		keyLen, err := v.profile.keyLen()
+		keyLen, err := v.profile.KeyLen()
 		if err != nil {
 			panic(err)
 		}
-		saltLen, err := v.profile.saltLen()
+		saltLen, err := v.profile.SaltLen()
 		if err != nil {
 			panic(err)
 		}

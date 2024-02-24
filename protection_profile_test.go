@@ -12,9 +12,9 @@ import (
 func TestInvalidProtectionProfile(t *testing.T) {
 	var invalidProtectionProfile ProtectionProfile
 
-	_, err := invalidProtectionProfile.keyLen()
+	_, err := invalidProtectionProfile.KeyLen()
 	assert.Error(t, err)
 
-	_, err = invalidProtectionProfile.saltLen()
+	_, err = invalidProtectionProfile.SaltLen()
 	assert.Error(t, err)
 }
