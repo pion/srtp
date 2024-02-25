@@ -341,7 +341,7 @@ func TestSessionSRTCPAcceptStreamTimeout(t *testing.T) {
 }
 
 func getSenderSSRC(t *testing.T, stream *ReadStreamSRTCP) (ssrc uint32, err error) {
-	authTagSize, err := ProtectionProfileAes128CmHmacSha1_80.rtcpAuthTagLen()
+	authTagSize, err := ProtectionProfileAes128CmHmacSha1_80.AuthTagRTCPLen()
 	if err != nil {
 		return 0, err
 	}

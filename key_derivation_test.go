@@ -32,7 +32,7 @@ func TestValidSessionKeys(t *testing.T) {
 		t.Errorf("Session Salt % 02x does not match expected % 02x", sessionSalt, expectedSessionSalt)
 	}
 
-	authKeyLen, err := ProtectionProfileAes128CmHmacSha1_80.authKeyLen()
+	authKeyLen, err := ProtectionProfileAes128CmHmacSha1_80.AuthKeyLen()
 	assert.NoError(t, err)
 
 	sessionAuthTag, err := aesCmKeyDerivation(labelSRTPAuthenticationTag, masterKey, masterSalt, 0, authKeyLen)

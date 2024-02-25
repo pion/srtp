@@ -15,11 +15,11 @@ const maxSRTCPIndex = 0x7FFFFFFF
 func (c *Context) decryptRTCP(dst, encrypted []byte) ([]byte, error) {
 	out := allocateIfMismatch(dst, encrypted)
 
-	authTagLen, err := c.cipher.rtcpAuthTagLen()
+	authTagLen, err := c.cipher.AuthTagRTCPLen()
 	if err != nil {
 		return nil, err
 	}
-	aeadAuthTagLen, err := c.cipher.aeadAuthTagLen()
+	aeadAuthTagLen, err := c.cipher.AEADAuthTagLen()
 	if err != nil {
 		return nil, err
 	}
