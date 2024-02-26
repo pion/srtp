@@ -62,11 +62,6 @@ func (c *Context) DecryptRTCP(dst, encrypted []byte, header *rtcp.Header) ([]byt
 	return c.decryptRTCP(dst, encrypted)
 }
 
-// EncryptRTCP encrypts a buffer that contains a RTCP packet
-func (c *Context) EncryptRTCP(dst, decrypted []byte) ([]byte, error) {
-       return c.encryptRTCP(dst, decrypted)
-}
-
 func (c *Context) encryptRTCP(dst, decrypted []byte) ([]byte, error) {
 	ssrc := binary.BigEndian.Uint32(decrypted[4:])
 	s := c.getSRTCPSSRCState(ssrc)
