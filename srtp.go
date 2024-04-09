@@ -21,7 +21,7 @@ func (c *Context) decryptRTP(dst, ciphertext []byte, header *rtp.Header, headerL
 		}
 	}
 
-	authTagLen, err := c.cipher.rtpAuthTagLen()
+	authTagLen, err := c.cipher.AuthTagRTPLen()
 	if err != nil {
 		return nil, err
 	}
