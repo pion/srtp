@@ -53,7 +53,7 @@ func NewSessionSRTCP(conn net.Conn, config *Config) (*SessionSRTCP, error) { //n
 			localOptions:        localOpts,
 			remoteOptions:       remoteOpts,
 			readStreams:         map[uint32]readStream{},
-			newStream:           make(chan readStream),
+			newStream:           make(chan newStream),
 			acceptStreamTimeout: config.AcceptStreamTimeout,
 			started:             make(chan interface{}),
 			closed:              make(chan interface{}),
@@ -93,17 +93,17 @@ func (s *SessionSRTCP) OpenReadStream(ssrc uint32) (*ReadStreamSRTCP, error) {
 
 // AcceptStream returns a stream to handle RTCP for a single SSRC
 func (s *SessionSRTCP) AcceptStream() (*ReadStreamSRTCP, uint32, error) {
-	stream, ok := <-s.newStream
+	newStream, ok := <-s.newStream
 	if !ok {
 		return nil, 0, errStreamAlreadyClosed
 	}
 
-	readStream, ok := stream.(*ReadStreamSRTCP)
+	readStream, ok := newStream.readStream.(*ReadStreamSRTCP)
 	if !ok {
 		return nil, 0, errFailedTypeAssertion
 	}
 
-	return readStream, stream.GetSSRC(), nil
+	return readStream, readStream.GetSSRC(), nil
 }
 
 // Close ends the session
@@ -172,7 +172,7 @@ func (s *SessionSRTCP) decrypt(buf []byte) error {
 			if !s.session.acceptStreamTimeout.IsZero() {
 				_ = s.session.nextConn.SetReadDeadline(time.Time{})
 			}
-			s.session.newStream <- r // Notify AcceptStream
+			s.session.newStream <- newStream{readStream: r} // Notify AcceptStream
 		}
 
 		readStream, ok := r.(*ReadStreamSRTCP)

@@ -20,12 +20,17 @@ type streamSession interface {
 	decrypt([]byte) error
 }
 
+type newStream struct {
+	readStream  readStream
+	payloadType uint8
+}
+
 type session struct {
 	localContextMutex           sync.Mutex
 	localContext, remoteContext *Context
 	localOptions, remoteOptions []ContextOption
 
-	newStream           chan readStream
+	newStream           chan newStream
 	acceptStreamTimeout time.Time
 
 	started chan interface{}
