@@ -14,7 +14,7 @@ func (c *Context) decryptRTP(dst, ciphertext []byte, header *rtp.Header, headerL
 		return nil, err
 	}
 
-	if len(ciphertext) < headerLen+authTagLen {
+	if len(ciphertext) < headerLen+len(c.sendMKI)+authTagLen {
 		return nil, errTooShortRTP
 	}
 
@@ -30,9 +30,19 @@ func (c *Context) decryptRTP(dst, ciphertext []byte, header *rtp.Header, headerL
 		}
 	}
 
-	dst = growBufferSize(dst, len(ciphertext)-authTagLen)
+	cipher := c.cipher
+	if len(c.mkis) > 0 {
+		// Find cipher for MKI
+		actualMKI := c.cipher.getMKI(ciphertext, true)
+		cipher, ok = c.mkis[string(actualMKI)]
+		if !ok {
+			return nil, ErrMKINotFound
+		}
+	}
 
-	dst, err = c.cipher.decryptRTP(dst, ciphertext, header, headerLen, roc)
+	dst = growBufferSize(dst, len(ciphertext)-authTagLen-len(c.sendMKI))
+
+	dst, err = cipher.decryptRTP(dst, ciphertext, header, headerLen, roc)
 	if err != nil {
 		return nil, err
 	}

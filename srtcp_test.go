@@ -618,3 +618,163 @@ func TestEncryptInvalidRTCP(t *testing.T) {
 	_, err = decryptContext.EncryptRTCP(nil, packet, nil)
 	assert.Error(err)
 }
+
+func TestRTCPInvalidMKI(t *testing.T) {
+	mki1 := []byte{0x01, 0x02, 0x03, 0x04}
+	mki2 := []byte{0x02, 0x03, 0x04, 0x05}
+
+	for caseName, testCase := range rtcpTestCases() {
+		testCase := testCase
+		t.Run(caseName, func(t *testing.T) {
+			encryptContext, err := CreateContext(testCase.masterKey, testCase.masterSalt, testCase.algo, MasterKeyIndicator(mki1))
+			if err != nil {
+				t.Errorf("CreateContext failed: %v", err)
+			}
+
+			decryptContext, err := CreateContext(testCase.masterKey, testCase.masterSalt, testCase.algo, MasterKeyIndicator(mki2))
+			if err != nil {
+				t.Errorf("CreateContext failed: %v", err)
+			}
+
+			for _, pkt := range testCase.packets {
+				rtcpPacket := append([]byte{}, pkt.decrypted...)
+				encrypted, err := encryptContext.encryptRTCP(nil, rtcpPacket)
+				if err != nil {
+					t.Error(err)
+				}
+
+				_, err = decryptContext.DecryptRTCP(nil, encrypted, nil)
+				if err == nil {
+					t.Errorf("Managed to decrypt with incorrect MKI for packet with SSRC: %d", pkt.ssrc)
+				} else {
+					assert.ErrorIs(t, err, ErrMKINotFound)
+				}
+			}
+		})
+	}
+}
+
+func TestRTCPHandleMultipleMKI(t *testing.T) {
+	mki1 := []byte{0x01, 0x02, 0x03, 0x04}
+	mki2 := []byte{0x02, 0x03, 0x04, 0x05}
+
+	for caseName, testCase := range rtcpTestCases() {
+		testCase := testCase
+		t.Run(caseName, func(t *testing.T) {
+			masterKey2 := make([]byte, len(testCase.masterKey))
+			copy(masterKey2, testCase.masterKey)
+			masterKey2[0] = ^masterKey2[0]
+
+			encryptContext1, err := CreateContext(testCase.masterKey, testCase.masterSalt, testCase.algo, MasterKeyIndicator(mki1))
+			if err != nil {
+				t.Errorf("CreateContext failed: %v", err)
+			}
+			encryptContext2, err := CreateContext(masterKey2, testCase.masterSalt, testCase.algo, MasterKeyIndicator(mki2))
+			if err != nil {
+				t.Errorf("CreateContext failed: %v", err)
+			}
+
+			decryptContext, err := CreateContext(testCase.masterKey, testCase.masterSalt, testCase.algo, MasterKeyIndicator(mki1))
+			if err != nil {
+				t.Errorf("CreateContext failed: %v", err)
+			}
+			err = decryptContext.AddCipherForMKI(mki2, masterKey2, testCase.masterSalt)
+			if err != nil {
+				t.Errorf("AddCipherForMKI failed: %v", err)
+			}
+
+			for _, pkt := range testCase.packets {
+				rtcpPacket := append([]byte{}, pkt.decrypted...)
+				encrypted1, err := encryptContext1.encryptRTCP(nil, rtcpPacket)
+				if err != nil {
+					t.Error(err)
+				}
+				encrypted2, err := encryptContext2.encryptRTCP(nil, rtcpPacket)
+				if err != nil {
+					t.Error(err)
+				}
+
+				decrypted1, err := decryptContext.DecryptRTCP(nil, encrypted1, nil)
+				if err != nil {
+					t.Fatal(err)
+				}
+				decrypted2, err := decryptContext.DecryptRTCP(nil, encrypted2, nil)
+				if err != nil {
+					t.Fatal(err)
+				}
+
+				assert.Equal(t, rtcpPacket, decrypted1)
+				assert.Equal(t, rtcpPacket, decrypted2)
+			}
+		})
+	}
+}
+
+func TestRTCPSwitchMKI(t *testing.T) {
+	mki1 := []byte{0x01, 0x02, 0x03, 0x04}
+	mki2 := []byte{0x02, 0x03, 0x04, 0x05}
+
+	for caseName, testCase := range rtcpTestCases() {
+		testCase := testCase
+		t.Run(caseName, func(t *testing.T) {
+			masterKey2 := make([]byte, len(testCase.masterKey))
+			copy(masterKey2, testCase.masterKey)
+			masterKey2[0] = ^masterKey2[0]
+
+			encryptContext, err := CreateContext(testCase.masterKey, testCase.masterSalt, testCase.algo, MasterKeyIndicator(mki1))
+			if err != nil {
+				t.Errorf("CreateContext failed: %v", err)
+			}
+			err = encryptContext.AddCipherForMKI(mki2, masterKey2, testCase.masterSalt)
+			if err != nil {
+				t.Errorf("AddCipherForMKI failed: %v", err)
+			}
+
+			decryptContext1, err := CreateContext(testCase.masterKey, testCase.masterSalt, testCase.algo, MasterKeyIndicator(mki1))
+			if err != nil {
+				t.Errorf("CreateContext failed: %v", err)
+			}
+			decryptContext2, err := CreateContext(masterKey2, testCase.masterSalt, testCase.algo, MasterKeyIndicator(mki2))
+			if err != nil {
+				t.Errorf("CreateContext failed: %v", err)
+			}
+
+			for _, pkt := range testCase.packets {
+				rtcpPacket := append([]byte{}, pkt.decrypted...)
+				encrypted1, err := encryptContext.encryptRTCP(nil, rtcpPacket)
+				if err != nil {
+					t.Error(err)
+				}
+
+				err = encryptContext.SetSendMKI(mki2)
+				if err != nil {
+					t.Fatal(err)
+				}
+
+				encrypted2, err := encryptContext.encryptRTCP(nil, rtcpPacket)
+				if err != nil {
+					t.Error(err)
+				}
+
+				assert.NotEqual(t, encrypted1, encrypted2)
+
+				decrypted1, err := decryptContext1.DecryptRTCP(nil, encrypted1, nil)
+				if err != nil {
+					t.Fatal(err)
+				}
+				decrypted2, err := decryptContext2.DecryptRTCP(nil, encrypted2, nil)
+				if err != nil {
+					t.Fatal(err)
+				}
+
+				assert.Equal(t, rtcpPacket, decrypted1)
+				assert.Equal(t, rtcpPacket, decrypted2)
+
+				err = encryptContext.SetSendMKI(mki1)
+				if err != nil {
+					t.Fatal(err)
+				}
+			}
+		})
+	}
+}

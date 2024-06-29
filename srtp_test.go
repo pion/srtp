@@ -896,3 +896,161 @@ func TestDecryptInvalidSRTP(t *testing.T) {
 	_, err = decryptContext.DecryptRTP(nil, packet, nil)
 	assert.Error(err)
 }
+
+func TestRTPInvalidMKI(t *testing.T) {
+	mki1 := []byte{0x01, 0x02, 0x03, 0x04}
+	mki2 := []byte{0x02, 0x03, 0x04, 0x05}
+
+	encryptContext, err := buildTestContext(profileCTR, MasterKeyIndicator(mki1))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	decryptContext, err := buildTestContext(profileCTR, MasterKeyIndicator(mki2))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	for _, testCase := range rtpTestCases() {
+		pkt := &rtp.Packet{Payload: rtpTestCaseDecrypted(), Header: rtp.Header{SequenceNumber: testCase.sequenceNumber}}
+		pktRaw, err := pkt.Marshal()
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		out, err := encryptContext.EncryptRTP(nil, pktRaw, nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		if _, err := decryptContext.DecryptRTP(nil, out, nil); err == nil {
+			t.Errorf("Managed to decrypt with incorrect MKI for packet with SeqNum: %d", testCase.sequenceNumber)
+		} else {
+			assert.ErrorIs(t, err, ErrMKINotFound)
+		}
+	}
+}
+
+func TestRTPHandleMultipleMKI(t *testing.T) {
+	mki1 := []byte{0x01, 0x02, 0x03, 0x04}
+	mki2 := []byte{0x02, 0x03, 0x04, 0x05}
+
+	masterKey2 := []byte{0xff, 0xcd, 0x21, 0x3e, 0x4c, 0xbc, 0xf2, 0x8f, 0x01, 0x7f, 0x69, 0x94, 0x40, 0x1e, 0x28, 0x89}
+	masterSalt2 := []byte{0xff, 0x77, 0x60, 0x38, 0xc0, 0x6d, 0xc9, 0x41, 0x9f, 0x6d, 0xd9, 0x43, 0x3e, 0x7c}
+
+	encryptContext1, err := buildTestContext(profileCTR, MasterKeyIndicator(mki1))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	encryptContext2, err := CreateContext(masterKey2, masterSalt2, profileCTR, MasterKeyIndicator(mki2))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	decryptContext, err := buildTestContext(profileCTR, MasterKeyIndicator(mki1))
+	if err != nil {
+		t.Fatal(err)
+	}
+	err = decryptContext.AddCipherForMKI(mki2, masterKey2, masterSalt2)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	for _, testCase := range rtpTestCases() {
+		pkt := &rtp.Packet{Payload: rtpTestCaseDecrypted(), Header: rtp.Header{SequenceNumber: testCase.sequenceNumber}}
+		pktRaw, err := pkt.Marshal()
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		encrypted1, err := encryptContext1.EncryptRTP(nil, pktRaw, nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		encrypted2, err := encryptContext2.EncryptRTP(nil, pktRaw, nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		decrypted1, err := decryptContext.DecryptRTP(nil, encrypted1, nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		decrypted2, err := decryptContext.DecryptRTP(nil, encrypted2, nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		assert.Equal(t, pktRaw, decrypted1)
+		assert.Equal(t, pktRaw, decrypted2)
+	}
+}
+
+func TestRTPSwitchMKI(t *testing.T) {
+	mki1 := []byte{0x01, 0x02, 0x03, 0x04}
+	mki2 := []byte{0x02, 0x03, 0x04, 0x05}
+
+	masterKey2 := []byte{0xff, 0xcd, 0x21, 0x3e, 0x4c, 0xbc, 0xf2, 0x8f, 0x01, 0x7f, 0x69, 0x94, 0x40, 0x1e, 0x28, 0x89}
+	masterSalt2 := []byte{0xff, 0x77, 0x60, 0x38, 0xc0, 0x6d, 0xc9, 0x41, 0x9f, 0x6d, 0xd9, 0x43, 0x3e, 0x7c}
+
+	encryptContext, err := buildTestContext(profileCTR, MasterKeyIndicator(mki1))
+	if err != nil {
+		t.Fatal(err)
+	}
+	err = encryptContext.AddCipherForMKI(mki2, masterKey2, masterSalt2)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	decryptContext1, err := buildTestContext(profileCTR, MasterKeyIndicator(mki1))
+	if err != nil {
+		t.Fatal(err)
+	}
+	decryptContext2, err := CreateContext(masterKey2, masterSalt2, profileCTR, MasterKeyIndicator(mki2))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	for _, testCase := range rtpTestCases() {
+		pkt := &rtp.Packet{Payload: rtpTestCaseDecrypted(), Header: rtp.Header{SequenceNumber: testCase.sequenceNumber}}
+		pktRaw, err := pkt.Marshal()
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		encrypted1, err := encryptContext.EncryptRTP(nil, pktRaw, nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		err = encryptContext.SetSendMKI(mki2)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		encrypted2, err := encryptContext.EncryptRTP(nil, pktRaw, nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		assert.NotEqual(t, encrypted1, encrypted2)
+
+		decrypted1, err := decryptContext1.DecryptRTP(nil, encrypted1, nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		decrypted2, err := decryptContext2.DecryptRTP(nil, encrypted2, nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		assert.Equal(t, pktRaw, decrypted1)
+		assert.Equal(t, pktRaw, decrypted2)
+
+		err = encryptContext.SetSendMKI(mki1)
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+}

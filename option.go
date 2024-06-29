@@ -71,3 +71,16 @@ type nopReplayDetector struct{}
 func (s *nopReplayDetector) Check(uint64) (func() bool, bool) {
 	return func() bool { return true }, true
 }
+
+// MasterKeyIndicator sets RTP/RTCP MKI for the initial master key. Array passed as an argument will be
+// copied as-is to encrypted SRTP/SRTCP packets, so it must be of proper length and in Big Endian format.
+// All MKIs added later using Context.AddCipherForMKI must have the same length as the one used here.
+func MasterKeyIndicator(mki []byte) ContextOption {
+	return func(c *Context) error {
+		if len(mki) > 0 {
+			c.sendMKI = make([]byte, len(mki))
+			copy(c.sendMKI, mki)
+		}
+		return nil
+	}
+}
