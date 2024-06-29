@@ -9,6 +9,14 @@ import (
 )
 
 func (c *Context) decryptRTP(dst, ciphertext []byte, header *rtp.Header, headerLen int) ([]byte, error) {
+	authTagLen, err := c.cipher.rtpAuthTagLen()
+	if err != nil {
+		return nil, err
+	}
+	if len(ciphertext) < headerLen+len(c.sendMKI)+authTagLen {
+		return nil, errTooShortRTP
+	}
+
 	s := c.getSRTPSSRCState(header.SSRC)
 
 	roc, diff, _ := s.nextRolloverCount(header.SequenceNumber)
@@ -21,13 +29,19 @@ func (c *Context) decryptRTP(dst, ciphertext []byte, header *rtp.Header, headerL
 		}
 	}
 
-	authTagLen, err := c.cipher.rtpAuthTagLen()
-	if err != nil {
-		return nil, err
+	cipher := c.cipher
+	if len(c.mkis) > 0 {
+		// Find cipher for MKI
+		actualMKI := c.cipher.getMKI(ciphertext, true)
+		cipher, ok = c.mkis[string(actualMKI)]
+		if !ok {
+			return nil, ErrMKINotFound
+		}
 	}
-	dst = growBufferSize(dst, len(ciphertext)-authTagLen)
 
-	dst, err = c.cipher.decryptRTP(dst, ciphertext, header, headerLen, roc)
+	dst = growBufferSize(dst, len(ciphertext)-authTagLen-len(c.sendMKI))
+
+	dst, err = cipher.decryptRTP(dst, ciphertext, header, headerLen, roc)
 	if err != nil {
 		return nil, err
 	}
