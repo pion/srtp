@@ -23,7 +23,8 @@ func (c *Context) decryptRTCP(dst, encrypted []byte) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	tailOffset := len(encrypted) - (authTagLen + srtcpIndexSize)
+	mkiLen := len(c.sendMKI)
+	tailOffset := len(encrypted) - (authTagLen + mkiLen + srtcpIndexSize)
 
 	if tailOffset < aeadAuthTagLen {
 		return nil, fmt.Errorf("%w: %d", errTooShortRTCP, len(encrypted))
@@ -40,7 +41,17 @@ func (c *Context) decryptRTCP(dst, encrypted []byte) ([]byte, error) {
 		return nil, &duplicatedError{Proto: "srtcp", SSRC: ssrc, Index: index}
 	}
 
-	out, err = c.cipher.decryptRTCP(out, encrypted, index, ssrc)
+	cipher := c.cipher
+	if len(c.mkis) > 0 {
+		// Find cipher for MKI
+		actualMKI := c.cipher.getMKI(encrypted, false)
+		cipher, ok = c.mkis[string(actualMKI)]
+		if !ok {
+			return nil, ErrMKINotFound
+		}
+	}
+
+	out, err = cipher.decryptRTCP(out, encrypted, index, ssrc)
 	if err != nil {
 		return nil, err
 	}
