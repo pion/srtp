@@ -21,9 +21,11 @@ type srtpCipherAeadAesGcm struct {
 	srtpCipher, srtcpCipher cipher.AEAD
 
 	srtpSessionSalt, srtcpSessionSalt []byte
+
+	mki []byte
 }
 
-func newSrtpCipherAeadAesGcm(profile ProtectionProfile, masterKey, masterSalt []byte) (*srtpCipherAeadAesGcm, error) {
+func newSrtpCipherAeadAesGcm(profile ProtectionProfile, masterKey, masterSalt, mki []byte) (*srtpCipherAeadAesGcm, error) {
 	s := &srtpCipherAeadAesGcm{ProtectionProfile: profile}
 
 	srtpSessionKey, err := aesCmKeyDerivation(labelSRTPEncryption, masterKey, masterSalt, 0, len(masterKey))
@@ -62,6 +64,12 @@ func newSrtpCipherAeadAesGcm(profile ProtectionProfile, masterKey, masterSalt []
 		return nil, err
 	}
 
+	mkiLen := len(mki)
+	if mkiLen > 0 {
+		s.mki = make([]byte, mkiLen)
+		copy(s.mki, mki)
+	}
+
 	return s, nil
 }
 
@@ -71,7 +79,7 @@ func (s *srtpCipherAeadAesGcm) encryptRTP(dst []byte, header *rtp.Header, payloa
 	if err != nil {
 		return nil, err
 	}
-	dst = growBufferSize(dst, header.MarshalSize()+len(payload)+authTagLen)
+	dst = growBufferSize(dst, header.MarshalSize()+len(payload)+authTagLen+len(s.mki))
 
 	n, err := header.MarshalTo(dst)
 	if err != nil {
@@ -80,6 +88,12 @@ func (s *srtpCipherAeadAesGcm) encryptRTP(dst []byte, header *rtp.Header, payloa
 
 	iv := s.rtpInitializationVector(header, roc)
 	s.srtpCipher.Seal(dst[n:n], iv[:], payload, dst[:n])
+
+	// Add MKI after the encrypted payload
+	if len(s.mki) > 0 {
+		copy(dst[len(dst)-len(s.mki):], s.mki)
+	}
+
 	return dst, nil
 }
 
@@ -89,17 +103,18 @@ func (s *srtpCipherAeadAesGcm) decryptRTP(dst, ciphertext []byte, header *rtp.He
 	if err != nil {
 		return nil, err
 	}
-	nDst := len(ciphertext) - authTagLen
-	if nDst < 0 {
+	nDst := len(ciphertext) - authTagLen - len(s.mki)
+	if nDst < headerLen {
 		// Size of ciphertext is shorter than AEAD auth tag len.
-		return nil, errFailedToVerifyAuthTag
+		return nil, ErrFailedToVerifyAuthTag
 	}
 	dst = growBufferSize(dst, nDst)
 
 	iv := s.rtpInitializationVector(header, roc)
 
+	nEnd := len(ciphertext) - len(s.mki)
 	if _, err := s.srtpCipher.Open(
-		dst[headerLen:headerLen], iv[:], ciphertext[headerLen:], ciphertext[:headerLen],
+		dst[headerLen:headerLen], iv[:], ciphertext[headerLen:nEnd], ciphertext[:headerLen],
 	); err != nil {
 		return nil, err
 	}
@@ -115,7 +130,7 @@ func (s *srtpCipherAeadAesGcm) encryptRTCP(dst, decrypted []byte, srtcpIndex uin
 	}
 	aadPos := len(decrypted) + authTagLen
 	// Grow the given buffer to fit the output.
-	dst = growBufferSize(dst, aadPos+srtcpIndexSize)
+	dst = growBufferSize(dst, aadPos+srtcpIndexSize+len(s.mki))
 
 	iv := s.rtcpInitializationVector(srtcpIndex, ssrc)
 	aad := s.rtcpAdditionalAuthenticatedData(decrypted, srtcpIndex)
@@ -124,11 +139,12 @@ func (s *srtpCipherAeadAesGcm) encryptRTCP(dst, decrypted []byte, srtcpIndex uin
 
 	copy(dst[:8], decrypted[:8])
 	copy(dst[aadPos:aadPos+4], aad[8:12])
+	copy(dst[aadPos+4:], s.mki)
 	return dst, nil
 }
 
 func (s *srtpCipherAeadAesGcm) decryptRTCP(dst, encrypted []byte, srtcpIndex, ssrc uint32) ([]byte, error) {
-	aadPos := len(encrypted) - srtcpIndexSize
+	aadPos := len(encrypted) - srtcpIndexSize - len(s.mki)
 	// Grow the given buffer to fit the output.
 	authTagLen, err := s.AEADAuthTagLen()
 	if err != nil {
@@ -137,7 +153,7 @@ func (s *srtpCipherAeadAesGcm) decryptRTCP(dst, encrypted []byte, srtcpIndex, ss
 	nDst := aadPos - authTagLen
 	if nDst < 0 {
 		// Size of ciphertext is shorter than AEAD auth tag len.
-		return nil, errFailedToVerifyAuthTag
+		return nil, ErrFailedToVerifyAuthTag
 	}
 	dst = growBufferSize(dst, nDst)
 
@@ -205,5 +221,15 @@ func (s *srtpCipherAeadAesGcm) rtcpAdditionalAuthenticatedData(rtcpPacket []byte
 }
 
 func (s *srtpCipherAeadAesGcm) getRTCPIndex(in []byte) uint32 {
-	return binary.BigEndian.Uint32(in[len(in)-4:]) &^ (rtcpEncryptionFlag << 24)
+	return binary.BigEndian.Uint32(in[len(in)-len(s.mki)-4:]) &^ (rtcpEncryptionFlag << 24)
+}
+
+func (s *srtpCipherAeadAesGcm) getMKI(in []byte, _ bool) []byte {
+	mkiLen := len(s.mki)
+	if mkiLen == 0 {
+		return nil
+	}
+
+	tailOffset := len(in) - mkiLen
+	return in[tailOffset:]
 }

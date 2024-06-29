@@ -25,9 +25,11 @@ type srtpCipherAesCmHmacSha1 struct {
 	srtcpSessionSalt []byte
 	srtcpSessionAuth hash.Hash
 	srtcpBlock       cipher.Block
+
+	mki []byte
 }
 
-func newSrtpCipherAesCmHmacSha1(profile ProtectionProfile, masterKey, masterSalt []byte) (*srtpCipherAesCmHmacSha1, error) {
+func newSrtpCipherAesCmHmacSha1(profile ProtectionProfile, masterKey, masterSalt, mki []byte) (*srtpCipherAesCmHmacSha1, error) {
 	s := &srtpCipherAesCmHmacSha1{ProtectionProfile: profile}
 	srtpSessionKey, err := aesCmKeyDerivation(labelSRTPEncryption, masterKey, masterSalt, 0, len(masterKey))
 	if err != nil {
@@ -66,6 +68,13 @@ func newSrtpCipherAesCmHmacSha1(profile ProtectionProfile, masterKey, masterSalt
 
 	s.srtcpSessionAuth = hmac.New(sha1.New, srtcpSessionAuthTag)
 	s.srtpSessionAuth = hmac.New(sha1.New, srtpSessionAuthTag)
+
+	mkiLen := len(mki)
+	if mkiLen > 0 {
+		s.mki = make([]byte, mkiLen)
+		copy(s.mki, mki)
+	}
+
 	return s, nil
 }
 
@@ -75,7 +84,7 @@ func (s *srtpCipherAesCmHmacSha1) encryptRTP(dst []byte, header *rtp.Header, pay
 	if err != nil {
 		return nil, err
 	}
-	dst = growBufferSize(dst, header.MarshalSize()+len(payload)+authTagLen)
+	dst = growBufferSize(dst, header.MarshalSize()+len(payload)+len(s.mki)+authTagLen)
 
 	// Copy the header unencrypted.
 	n, err := header.MarshalTo(dst)
@@ -96,6 +105,12 @@ func (s *srtpCipherAesCmHmacSha1) encryptRTP(dst []byte, header *rtp.Header, pay
 		return nil, err
 	}
 
+	// Append the MKI (if used)
+	if len(s.mki) > 0 {
+		copy(dst[n:], s.mki)
+		n += len(s.mki)
+	}
+
 	// Write the auth tag to the dest.
 	copy(dst[n:], authTag)
 
@@ -108,8 +123,10 @@ func (s *srtpCipherAesCmHmacSha1) decryptRTP(dst, ciphertext []byte, header *rtp
 	if err != nil {
 		return nil, err
 	}
+
+	// Split the auth tag and the cipher text into two parts.
 	actualTag := ciphertext[len(ciphertext)-authTagLen:]
-	ciphertext = ciphertext[:len(ciphertext)-authTagLen]
+	ciphertext = ciphertext[:len(ciphertext)-len(s.mki)-authTagLen]
 
 	// Generate the auth tag we expect to see from the ciphertext.
 	expectedTag, err := s.generateSrtpAuthTag(ciphertext, roc)
@@ -120,7 +137,7 @@ func (s *srtpCipherAesCmHmacSha1) decryptRTP(dst, ciphertext []byte, header *rtp
 	// See if the auth tag actually matches.
 	// We use a constant time comparison to prevent timing attacks.
 	if subtle.ConstantTimeCompare(actualTag, expectedTag) != 1 {
-		return nil, errFailedToVerifyAuthTag
+		return nil, ErrFailedToVerifyAuthTag
 	}
 
 	// Write the plaintext header to the destination buffer.
@@ -148,10 +165,18 @@ func (s *srtpCipherAesCmHmacSha1) encryptRTCP(dst, decrypted []byte, srtcpIndex 
 	binary.BigEndian.PutUint32(dst[len(dst)-4:], srtcpIndex)
 	dst[len(dst)-4] |= 0x80
 
+	// Generate the authentication tag
 	authTag, err := s.generateSrtcpAuthTag(dst)
 	if err != nil {
 		return nil, err
 	}
+
+	// Include the MKI if provided
+	if len(s.mki) > 0 {
+		dst = append(dst, s.mki...)
+	}
+
+	// Append the auth tag at the end of the buffer
 	return append(dst, authTag...), nil
 }
 
@@ -160,20 +185,20 @@ func (s *srtpCipherAesCmHmacSha1) decryptRTCP(out, encrypted []byte, index, ssrc
 	if err != nil {
 		return nil, err
 	}
-	tailOffset := len(encrypted) - (authTagLen + srtcpIndexSize)
+	tailOffset := len(encrypted) - (authTagLen + len(s.mki) + srtcpIndexSize)
 	if tailOffset < 8 {
 		return nil, errTooShortRTCP
 	}
 	out = out[0:tailOffset]
 
-	expectedTag, err := s.generateSrtcpAuthTag(encrypted[:len(encrypted)-authTagLen])
+	expectedTag, err := s.generateSrtcpAuthTag(encrypted[:len(encrypted)-len(s.mki)-authTagLen])
 	if err != nil {
 		return nil, err
 	}
 
 	actualTag := encrypted[len(encrypted)-authTagLen:]
 	if subtle.ConstantTimeCompare(actualTag, expectedTag) != 1 {
-		return nil, errFailedToVerifyAuthTag
+		return nil, ErrFailedToVerifyAuthTag
 	}
 
 	counter := generateCounter(uint16(index&0xffff), index>>16, ssrc, s.srtcpSessionSalt)
@@ -247,7 +272,23 @@ func (s *srtpCipherAesCmHmacSha1) generateSrtcpAuthTag(buf []byte) ([]byte, erro
 
 func (s *srtpCipherAesCmHmacSha1) getRTCPIndex(in []byte) uint32 {
 	authTagLen, _ := s.AuthTagRTCPLen()
-	tailOffset := len(in) - (authTagLen + srtcpIndexSize)
+	tailOffset := len(in) - (authTagLen + srtcpIndexSize + len(s.mki))
 	srtcpIndexBuffer := in[tailOffset : tailOffset+srtcpIndexSize]
 	return binary.BigEndian.Uint32(srtcpIndexBuffer) &^ (1 << 31)
+}
+
+func (s *srtpCipherAesCmHmacSha1) getMKI(in []byte, rtp bool) []byte {
+	mkiLen := len(s.mki)
+	if mkiLen == 0 {
+		return nil
+	}
+
+	var authTagLen int
+	if rtp {
+		authTagLen, _ = s.AuthTagRTPLen()
+	} else {
+		authTagLen, _ = s.AuthTagRTCPLen()
+	}
+	tailOffset := len(in) - (authTagLen + mkiLen)
+	return in[tailOffset : tailOffset+mkiLen]
 }
