@@ -10,9 +10,16 @@ type ProtectionProfile uint16
 
 // Supported protection profiles
 // See https://www.iana.org/assignments/srtp-protection/srtp-protection.xhtml
+//
+// AES128_CM_HMAC_SHA1_80 and AES128_CM_HMAC_SHA1_32 are valid SRTP profiles, but they do not have an DTLS-SRTP Protection Profiles ID assigned
+// in RFC 5764. They were in earlier draft of this RFC: https://datatracker.ietf.org/doc/html/draft-ietf-avt-dtls-srtp-03#section-4.1.2
+// Their IDs are now marked as reserved in the IANA registry. Despite this Chrome supports them:
+// https://chromium.googlesource.com/chromium/deps/libsrtp/+/84122798bb16927b1e676bd4f938a6e48e5bf2fe/srtp/include/srtp.h#694
 const (
 	ProtectionProfileAes128CmHmacSha1_80 ProtectionProfile = 0x0001
 	ProtectionProfileAes128CmHmacSha1_32 ProtectionProfile = 0x0002
+	ProtectionProfileAes256CmHmacSha1_80 ProtectionProfile = 0x0003
+	ProtectionProfileAes256CmHmacSha1_32 ProtectionProfile = 0x0004
 	ProtectionProfileAeadAes128Gcm       ProtectionProfile = 0x0007
 	ProtectionProfileAeadAes256Gcm       ProtectionProfile = 0x0008
 )
@@ -22,7 +29,7 @@ func (p ProtectionProfile) KeyLen() (int, error) {
 	switch p {
 	case ProtectionProfileAes128CmHmacSha1_32, ProtectionProfileAes128CmHmacSha1_80, ProtectionProfileAeadAes128Gcm:
 		return 16, nil
-	case ProtectionProfileAeadAes256Gcm:
+	case ProtectionProfileAeadAes256Gcm, ProtectionProfileAes256CmHmacSha1_32, ProtectionProfileAes256CmHmacSha1_80:
 		return 32, nil
 	default:
 		return 0, fmt.Errorf("%w: %#v", errNoSuchSRTPProfile, p)
@@ -32,7 +39,7 @@ func (p ProtectionProfile) KeyLen() (int, error) {
 // SaltLen returns length of salt key in bytes.
 func (p ProtectionProfile) SaltLen() (int, error) {
 	switch p {
-	case ProtectionProfileAes128CmHmacSha1_32, ProtectionProfileAes128CmHmacSha1_80:
+	case ProtectionProfileAes128CmHmacSha1_32, ProtectionProfileAes128CmHmacSha1_80, ProtectionProfileAes256CmHmacSha1_32, ProtectionProfileAes256CmHmacSha1_80:
 		return 14, nil
 	case ProtectionProfileAeadAes128Gcm, ProtectionProfileAeadAes256Gcm:
 		return 12, nil
@@ -44,9 +51,9 @@ func (p ProtectionProfile) SaltLen() (int, error) {
 // AuthTagRTPLen returns length of RTP authentication tag in bytes for AES protection profiles. For AEAD ones it returns zero.
 func (p ProtectionProfile) AuthTagRTPLen() (int, error) {
 	switch p {
-	case ProtectionProfileAes128CmHmacSha1_80:
+	case ProtectionProfileAes128CmHmacSha1_80, ProtectionProfileAes256CmHmacSha1_80:
 		return 10, nil
-	case ProtectionProfileAes128CmHmacSha1_32:
+	case ProtectionProfileAes128CmHmacSha1_32, ProtectionProfileAes256CmHmacSha1_32:
 		return 4, nil
 	case ProtectionProfileAeadAes128Gcm, ProtectionProfileAeadAes256Gcm:
 		return 0, nil
@@ -58,7 +65,7 @@ func (p ProtectionProfile) AuthTagRTPLen() (int, error) {
 // AuthTagRTCPLen returns length of RTCP authentication tag in bytes for AES protection profiles. For AEAD ones it returns zero.
 func (p ProtectionProfile) AuthTagRTCPLen() (int, error) {
 	switch p {
-	case ProtectionProfileAes128CmHmacSha1_32, ProtectionProfileAes128CmHmacSha1_80:
+	case ProtectionProfileAes128CmHmacSha1_32, ProtectionProfileAes128CmHmacSha1_80, ProtectionProfileAes256CmHmacSha1_32, ProtectionProfileAes256CmHmacSha1_80:
 		return 10, nil
 	case ProtectionProfileAeadAes128Gcm, ProtectionProfileAeadAes256Gcm:
 		return 0, nil
@@ -70,7 +77,7 @@ func (p ProtectionProfile) AuthTagRTCPLen() (int, error) {
 // AEADAuthTagLen returns length of authentication tag in bytes for AEAD protection profiles. For AES ones it returns zero.
 func (p ProtectionProfile) AEADAuthTagLen() (int, error) {
 	switch p {
-	case ProtectionProfileAes128CmHmacSha1_32, ProtectionProfileAes128CmHmacSha1_80:
+	case ProtectionProfileAes128CmHmacSha1_32, ProtectionProfileAes128CmHmacSha1_80, ProtectionProfileAes256CmHmacSha1_32, ProtectionProfileAes256CmHmacSha1_80:
 		return 0, nil
 	case ProtectionProfileAeadAes128Gcm, ProtectionProfileAeadAes256Gcm:
 		return 16, nil
@@ -82,7 +89,7 @@ func (p ProtectionProfile) AEADAuthTagLen() (int, error) {
 // AuthKeyLen returns length of authentication key in bytes for AES protection profiles. For AEAD ones it returns zero.
 func (p ProtectionProfile) AuthKeyLen() (int, error) {
 	switch p {
-	case ProtectionProfileAes128CmHmacSha1_32, ProtectionProfileAes128CmHmacSha1_80:
+	case ProtectionProfileAes128CmHmacSha1_32, ProtectionProfileAes128CmHmacSha1_80, ProtectionProfileAes256CmHmacSha1_32, ProtectionProfileAes256CmHmacSha1_80:
 		return 20, nil
 	case ProtectionProfileAeadAes128Gcm, ProtectionProfileAeadAes256Gcm:
 		return 0, nil
@@ -98,6 +105,10 @@ func (p ProtectionProfile) String() string {
 		return "SRTP_AES128_CM_HMAC_SHA1_80"
 	case ProtectionProfileAes128CmHmacSha1_32:
 		return "SRTP_AES128_CM_HMAC_SHA1_32"
+	case ProtectionProfileAes256CmHmacSha1_80:
+		return "SRTP_AES256_CM_HMAC_SHA1_80"
+	case ProtectionProfileAes256CmHmacSha1_32:
+		return "SRTP_AES256_CM_HMAC_SHA1_32"
 	case ProtectionProfileAeadAes128Gcm:
 		return "SRTP_AEAD_AES_128_GCM"
 	case ProtectionProfileAeadAes256Gcm:
