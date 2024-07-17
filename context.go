@@ -62,6 +62,9 @@ type Context struct {
 
 	sendMKI []byte                // Master Key Identifier used for encrypting RTP/RTCP packets. Set to nil if MKI is not enabled.
 	mkis    map[string]srtpCipher // Master Key Identifier to cipher mapping. Used for decrypting packets. Empty if MKI is not enabled.
+
+	encryptSRTP  bool
+	encryptSRTCP bool
 }
 
 // CreateContext creates a new SRTP Context.
@@ -83,6 +86,8 @@ func CreateContext(masterKey, masterSalt []byte, profile ProtectionProfile, opts
 		[]ContextOption{ // Default options
 			SRTPNoReplayProtection(),
 			SRTCPNoReplayProtection(),
+			SRTPEncryption(),
+			SRTCPEncryption(),
 		},
 		opts..., // User specified options
 	) {
@@ -91,7 +96,7 @@ func CreateContext(masterKey, masterSalt []byte, profile ProtectionProfile, opts
 		}
 	}
 
-	c.cipher, err = c.createCipher(c.sendMKI, masterKey, masterSalt)
+	c.cipher, err = c.createCipher(c.sendMKI, masterKey, masterSalt, c.encryptSRTP, c.encryptSRTCP)
 	if err != nil {
 		return nil, err
 	}
@@ -116,7 +121,7 @@ func (c *Context) AddCipherForMKI(mki, masterKey, masterSalt []byte) error {
 		return errMKIAlreadyInUse
 	}
 
-	cipher, err := c.createCipher(mki, masterKey, masterSalt)
+	cipher, err := c.createCipher(mki, masterKey, masterSalt, c.encryptSRTP, c.encryptSRTCP)
 	if err != nil {
 		return err
 	}
@@ -124,7 +129,7 @@ func (c *Context) AddCipherForMKI(mki, masterKey, masterSalt []byte) error {
 	return nil
 }
 
-func (c *Context) createCipher(mki, masterKey, masterSalt []byte) (srtpCipher, error) {
+func (c *Context) createCipher(mki, masterKey, masterSalt []byte, encryptSRTP, encryptSRTCP bool) (srtpCipher, error) {
 	keyLen, err := c.profile.KeyLen()
 	if err != nil {
 		return nil, err
@@ -143,9 +148,11 @@ func (c *Context) createCipher(mki, masterKey, masterSalt []byte) (srtpCipher, e
 
 	switch c.profile {
 	case ProtectionProfileAeadAes128Gcm, ProtectionProfileAeadAes256Gcm:
-		return newSrtpCipherAeadAesGcm(c.profile, masterKey, masterSalt, mki)
+		return newSrtpCipherAeadAesGcm(c.profile, masterKey, masterSalt, mki, encryptSRTP, encryptSRTCP)
 	case ProtectionProfileAes128CmHmacSha1_32, ProtectionProfileAes128CmHmacSha1_80, ProtectionProfileAes256CmHmacSha1_32, ProtectionProfileAes256CmHmacSha1_80:
-		return newSrtpCipherAesCmHmacSha1(c.profile, masterKey, masterSalt, mki)
+		return newSrtpCipherAesCmHmacSha1(c.profile, masterKey, masterSalt, mki, encryptSRTP, encryptSRTCP)
+	case ProtectionProfileNullHmacSha1_32, ProtectionProfileNullHmacSha1_80:
+		return newSrtpCipherAesCmHmacSha1(c.profile, masterKey, masterSalt, mki, false, false)
 	default:
 		return nil, fmt.Errorf("%w: %#v", errNoSuchSRTPProfile, c.profile)
 	}
