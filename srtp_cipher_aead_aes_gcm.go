@@ -7,6 +7,7 @@ import (
 	"crypto/aes"
 	"crypto/cipher"
 	"encoding/binary"
+	"fmt"
 
 	"github.com/pion/rtp"
 )
@@ -23,10 +24,16 @@ type srtpCipherAeadAesGcm struct {
 	srtpSessionSalt, srtcpSessionSalt []byte
 
 	mki []byte
+
+	srtpEncrypted, srtcpEncrypted bool
 }
 
-func newSrtpCipherAeadAesGcm(profile ProtectionProfile, masterKey, masterSalt, mki []byte) (*srtpCipherAeadAesGcm, error) {
-	s := &srtpCipherAeadAesGcm{ProtectionProfile: profile}
+func newSrtpCipherAeadAesGcm(profile ProtectionProfile, masterKey, masterSalt, mki []byte, encryptSRTP, encryptSRTCP bool) (*srtpCipherAeadAesGcm, error) {
+	s := &srtpCipherAeadAesGcm{
+		ProtectionProfile: profile,
+		srtpEncrypted:     encryptSRTP,
+		srtcpEncrypted:    encryptSRTCP,
+	}
 
 	srtpSessionKey, err := aesCmKeyDerivation(labelSRTPEncryption, masterKey, masterSalt, 0, len(masterKey))
 	if err != nil {
@@ -87,7 +94,13 @@ func (s *srtpCipherAeadAesGcm) encryptRTP(dst []byte, header *rtp.Header, payloa
 	}
 
 	iv := s.rtpInitializationVector(header, roc)
-	s.srtpCipher.Seal(dst[n:n], iv[:], payload, dst[:n])
+	if s.srtpEncrypted {
+		s.srtpCipher.Seal(dst[n:n], iv[:], payload, dst[:n])
+	} else {
+		clearLen := n + len(payload)
+		copy(dst[n:], payload)
+		s.srtpCipher.Seal(dst[clearLen:clearLen], iv[:], nil, dst[:clearLen])
+	}
 
 	// Add MKI after the encrypted payload
 	if len(s.mki) > 0 {
@@ -113,10 +126,20 @@ func (s *srtpCipherAeadAesGcm) decryptRTP(dst, ciphertext []byte, header *rtp.He
 	iv := s.rtpInitializationVector(header, roc)
 
 	nEnd := len(ciphertext) - len(s.mki)
-	if _, err := s.srtpCipher.Open(
-		dst[headerLen:headerLen], iv[:], ciphertext[headerLen:nEnd], ciphertext[:headerLen],
-	); err != nil {
-		return nil, err
+	if s.srtpEncrypted {
+		if _, err := s.srtpCipher.Open(
+			dst[headerLen:headerLen], iv[:], ciphertext[headerLen:nEnd], ciphertext[:headerLen],
+		); err != nil {
+			return nil, fmt.Errorf("%s: %s", ErrFailedToVerifyAuthTag, err)
+		}
+	} else {
+		nDataEnd := nEnd - authTagLen
+		if _, err := s.srtpCipher.Open(
+			nil, iv[:], ciphertext[nDataEnd:nEnd], ciphertext[:nDataEnd],
+		); err != nil {
+			return nil, fmt.Errorf("%s: %w", ErrFailedToVerifyAuthTag, err)
+		}
+		copy(dst[headerLen:], ciphertext[headerLen:nDataEnd])
 	}
 
 	copy(dst[:headerLen], ciphertext[:headerLen])
@@ -133,12 +156,25 @@ func (s *srtpCipherAeadAesGcm) encryptRTCP(dst, decrypted []byte, srtcpIndex uin
 	dst = growBufferSize(dst, aadPos+srtcpIndexSize+len(s.mki))
 
 	iv := s.rtcpInitializationVector(srtcpIndex, ssrc)
-	aad := s.rtcpAdditionalAuthenticatedData(decrypted, srtcpIndex)
+	if s.srtcpEncrypted {
+		aad := s.rtcpAdditionalAuthenticatedData(decrypted, srtcpIndex)
+		copy(dst[:8], decrypted[:8])
+		copy(dst[aadPos:aadPos+4], aad[8:12])
+		s.srtcpCipher.Seal(dst[8:8], iv[:], decrypted[8:], aad[:])
+	} else {
+		// Copy the packet unencrypted.
+		copy(dst, decrypted)
+		// Append the SRTCP index to the end of the packet - this will form the AAD.
+		binary.BigEndian.PutUint32(dst[len(decrypted):], srtcpIndex)
+		// Generate the authentication tag.
+		tag := make([]byte, authTagLen)
+		s.srtcpCipher.Seal(tag[0:0], iv[:], nil, dst[:len(decrypted)+4])
+		// Copy index to the proper place.
+		copy(dst[aadPos:], dst[len(decrypted):len(decrypted)+4])
+		// Copy the auth tag after RTCP payload.
+		copy(dst[len(decrypted):], tag)
+	}
 
-	s.srtcpCipher.Seal(dst[8:8], iv[:], decrypted[8:], aad[:])
-
-	copy(dst[:8], decrypted[:8])
-	copy(dst[aadPos:aadPos+4], aad[8:12])
 	copy(dst[aadPos+4:], s.mki)
 	return dst, nil
 }
@@ -157,11 +193,25 @@ func (s *srtpCipherAeadAesGcm) decryptRTCP(dst, encrypted []byte, srtcpIndex, ss
 	}
 	dst = growBufferSize(dst, nDst)
 
+	isEncrypted := encrypted[aadPos]>>7 != 0
 	iv := s.rtcpInitializationVector(srtcpIndex, ssrc)
-	aad := s.rtcpAdditionalAuthenticatedData(encrypted, srtcpIndex)
-
-	if _, err := s.srtcpCipher.Open(dst[8:8], iv[:], encrypted[8:aadPos], aad[:]); err != nil {
-		return nil, err
+	if isEncrypted {
+		aad := s.rtcpAdditionalAuthenticatedData(encrypted, srtcpIndex)
+		if _, err := s.srtcpCipher.Open(dst[8:8], iv[:], encrypted[8:aadPos], aad[:]); err != nil {
+			return nil, fmt.Errorf("%s: %w", ErrFailedToVerifyAuthTag, err)
+		}
+	} else {
+		// Prepare AAD for received packet.
+		dataEnd := aadPos - authTagLen
+		aad := make([]byte, dataEnd+4)
+		copy(aad, encrypted[:dataEnd])
+		copy(aad[dataEnd:], encrypted[aadPos:aadPos+4])
+		// Verify the auth tag.
+		if _, err := s.srtcpCipher.Open(nil, iv[:], encrypted[dataEnd:aadPos], aad); err != nil {
+			return nil, fmt.Errorf("%s: %w", ErrFailedToVerifyAuthTag, err)
+		}
+		// Copy the unencrypted payload.
+		copy(dst[8:], encrypted[8:dataEnd])
 	}
 
 	copy(dst[:8], encrypted[:8])
