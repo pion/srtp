@@ -21,16 +21,28 @@ type srtpCipherAesCmHmacSha1 struct {
 	srtpSessionSalt []byte
 	srtpSessionAuth hash.Hash
 	srtpBlock       cipher.Block
+	srtpEncrypted   bool
 
 	srtcpSessionSalt []byte
 	srtcpSessionAuth hash.Hash
 	srtcpBlock       cipher.Block
+	srtcpEncrypted   bool
 
 	mki []byte
 }
 
-func newSrtpCipherAesCmHmacSha1(profile ProtectionProfile, masterKey, masterSalt, mki []byte) (*srtpCipherAesCmHmacSha1, error) {
-	s := &srtpCipherAesCmHmacSha1{ProtectionProfile: profile}
+func newSrtpCipherAesCmHmacSha1(profile ProtectionProfile, masterKey, masterSalt, mki []byte, encryptSRTP, encryptSRTCP bool) (*srtpCipherAesCmHmacSha1, error) {
+	if profile == ProtectionProfileNullHmacSha1_80 || profile == ProtectionProfileNullHmacSha1_32 {
+		encryptSRTP = false
+		encryptSRTCP = false
+	}
+
+	s := &srtpCipherAesCmHmacSha1{
+		ProtectionProfile: profile,
+		srtpEncrypted:     encryptSRTP,
+		srtcpEncrypted:    encryptSRTCP,
+	}
+
 	srtpSessionKey, err := aesCmKeyDerivation(labelSRTPEncryption, masterKey, masterSalt, 0, len(masterKey))
 	if err != nil {
 		return nil, err
@@ -93,9 +105,13 @@ func (s *srtpCipherAesCmHmacSha1) encryptRTP(dst []byte, header *rtp.Header, pay
 	}
 
 	// Encrypt the payload
-	counter := generateCounter(header.SequenceNumber, roc, header.SSRC, s.srtpSessionSalt)
-	if err = xorBytesCTR(s.srtpBlock, counter[:], dst[n:], payload); err != nil {
-		return nil, err
+	if s.srtpEncrypted {
+		counter := generateCounter(header.SequenceNumber, roc, header.SSRC, s.srtpSessionSalt)
+		if err = xorBytesCTR(s.srtpBlock, counter[:], dst[n:], payload); err != nil {
+			return nil, err
+		}
+	} else {
+		copy(dst[n:], payload)
 	}
 	n += len(payload)
 
@@ -144,26 +160,42 @@ func (s *srtpCipherAesCmHmacSha1) decryptRTP(dst, ciphertext []byte, header *rtp
 	copy(dst, ciphertext[:headerLen])
 
 	// Decrypt the ciphertext for the payload.
-	counter := generateCounter(header.SequenceNumber, roc, header.SSRC, s.srtpSessionSalt)
-	err = xorBytesCTR(
-		s.srtpBlock, counter[:], dst[headerLen:], ciphertext[headerLen:],
-	)
-	return dst, err
+	if s.srtpEncrypted {
+		counter := generateCounter(header.SequenceNumber, roc, header.SSRC, s.srtpSessionSalt)
+		err = xorBytesCTR(
+			s.srtpBlock, counter[:], dst[headerLen:], ciphertext[headerLen:],
+		)
+		if err != nil {
+			return nil, err
+		}
+	} else {
+		copy(dst[headerLen:], ciphertext[headerLen:])
+	}
+	return dst, nil
 }
 
 func (s *srtpCipherAesCmHmacSha1) encryptRTCP(dst, decrypted []byte, srtcpIndex uint32, ssrc uint32) ([]byte, error) {
 	dst = allocateIfMismatch(dst, decrypted)
 
 	// Encrypt everything after header
-	counter := generateCounter(uint16(srtcpIndex&0xffff), srtcpIndex>>16, ssrc, s.srtcpSessionSalt)
-	if err := xorBytesCTR(s.srtcpBlock, counter[:], dst[8:], dst[8:]); err != nil {
-		return nil, err
-	}
+	if s.srtcpEncrypted {
+		counter := generateCounter(uint16(srtcpIndex&0xffff), srtcpIndex>>16, ssrc, s.srtcpSessionSalt)
+		if err := xorBytesCTR(s.srtcpBlock, counter[:], dst[8:], dst[8:]); err != nil {
+			return nil, err
+		}
 
-	// Add SRTCP Index and set Encryption bit
-	dst = append(dst, make([]byte, 4)...)
-	binary.BigEndian.PutUint32(dst[len(dst)-4:], srtcpIndex)
-	dst[len(dst)-4] |= 0x80
+		// Add SRTCP Index and set Encryption bit
+		dst = append(dst, make([]byte, 4)...)
+		binary.BigEndian.PutUint32(dst[len(dst)-4:], srtcpIndex)
+		dst[len(dst)-4] |= 0x80
+	} else {
+		// Copy the decrypted payload as is
+		copy(dst[8:], decrypted[8:])
+
+		// Add SRTCP Index with Encryption bit cleared
+		dst = append(dst, make([]byte, 4)...)
+		binary.BigEndian.PutUint32(dst[len(dst)-4:], srtcpIndex)
+	}
 
 	// Generate the authentication tag
 	authTag, err := s.generateSrtcpAuthTag(dst)
@@ -201,8 +233,13 @@ func (s *srtpCipherAesCmHmacSha1) decryptRTCP(out, encrypted []byte, index, ssrc
 		return nil, ErrFailedToVerifyAuthTag
 	}
 
-	counter := generateCounter(uint16(index&0xffff), index>>16, ssrc, s.srtcpSessionSalt)
-	err = xorBytesCTR(s.srtcpBlock, counter[:], out[8:], out[8:])
+	isEncrypted := encrypted[tailOffset]>>7 != 0
+	if isEncrypted {
+		counter := generateCounter(uint16(index&0xffff), index>>16, ssrc, s.srtcpSessionSalt)
+		err = xorBytesCTR(s.srtcpBlock, counter[:], out[8:], out[8:])
+	} else {
+		copy(out[8:], encrypted[8:])
+	}
 
 	return out, err
 }
