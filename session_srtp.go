@@ -54,7 +54,7 @@ func NewSessionSRTP(conn net.Conn, config *Config) (*SessionSRTP, error) { //nol
 			localOptions:        localOpts,
 			remoteOptions:       remoteOpts,
 			readStreams:         map[uint32]readStream{},
-			newStream:           make(chan readStream),
+			newStream:           make(chan newStream),
 			acceptStreamTimeout: config.AcceptStreamTimeout,
 			started:             make(chan interface{}),
 			closed:              make(chan interface{}),
@@ -93,19 +93,26 @@ func (s *SessionSRTP) OpenReadStream(ssrc uint32) (*ReadStreamSRTP, error) {
 	return nil, errFailedTypeAssertion
 }
 
-// AcceptStream returns a stream to handle RTCP for a single SSRC
+// AcceptStream returns a stream to handle RTP for a single SSRC
 func (s *SessionSRTP) AcceptStream() (*ReadStreamSRTP, uint32, error) {
-	stream, ok := <-s.newStream
+	readStream, ssrc, _, err := s.AcceptStreamWithPayloadType()
+	return readStream, ssrc, err
+}
+
+// AcceptStreamWithPayloadType returns a stream to handle RTP for a single SSRC.
+// It returns the payload type as well as the SSRC.
+func (s *SessionSRTP) AcceptStreamWithPayloadType() (*ReadStreamSRTP, uint32, uint8, error) {
+	newStream, ok := <-s.newStream
 	if !ok {
-		return nil, 0, errStreamAlreadyClosed
+		return nil, 0, 0, errStreamAlreadyClosed
 	}
 
-	readStream, ok := stream.(*ReadStreamSRTP)
+	readStream, ok := newStream.readStream.(*ReadStreamSRTP)
 	if !ok {
-		return nil, 0, errFailedTypeAssertion
+		return nil, 0, 0, errFailedTypeAssertion
 	}
 
-	return readStream, stream.GetSSRC(), nil
+	return readStream, readStream.GetSSRC(), newStream.payloadType, nil
 }
 
 // Close ends the session
@@ -178,7 +185,8 @@ func (s *SessionSRTP) decrypt(buf []byte) error {
 		if !s.session.acceptStreamTimeout.IsZero() {
 			_ = s.session.nextConn.SetReadDeadline(time.Time{})
 		}
-		s.session.newStream <- r // Notify AcceptStream
+		// notify AcceptStream
+		s.session.newStream <- newStream{readStream: r, payloadType: h.PayloadType}
 	}
 
 	readStream, ok := r.(*ReadStreamSRTP)

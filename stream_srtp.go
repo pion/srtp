@@ -7,6 +7,7 @@ import (
 	"errors"
 	"io"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/pion/rtp"
@@ -27,6 +28,10 @@ type ReadStreamSRTP struct {
 	isInited bool
 
 	buffer io.ReadWriteCloser
+
+	peekedPacket        []byte
+	peekedPacketMu      sync.Mutex
+	peekedPacketPresent atomic.Bool
 }
 
 // Used by getOrCreateReadStream
@@ -74,8 +79,43 @@ func (r *ReadStreamSRTP) write(buf []byte) (n int, err error) {
 	return n, err
 }
 
+// Peek reads the next full RTP packet from the nextConn, but queues it internally.
+// The next call to Read (or the next call to Peek without a call to Read in between)
+// will return the same packet again.
+func (r *ReadStreamSRTP) Peek(buf []byte) (int, error) {
+	r.peekedPacketMu.Lock()
+	defer r.peekedPacketMu.Unlock()
+	if r.peekedPacketPresent.Load() {
+		return copy(buf, r.peekedPacket), nil
+	}
+	n, err := r.buffer.Read(buf)
+	if err != nil {
+		return n, err
+	}
+	if cap(r.peekedPacket) < n {
+		size := 1500
+		if size < n {
+			size = n
+		}
+		r.peekedPacket = make([]byte, size)
+	}
+	r.peekedPacket = r.peekedPacket[:n]
+	copy(r.peekedPacket, buf)
+	r.peekedPacketPresent.Store(true)
+	return n, nil
+}
+
 // Read reads and decrypts full RTP packet from the nextConn
 func (r *ReadStreamSRTP) Read(buf []byte) (int, error) {
+	if r.peekedPacketPresent.Load() {
+		r.peekedPacketMu.Lock()
+		if r.peekedPacketPresent.Swap(false) {
+			n := copy(buf, r.peekedPacket)
+			r.peekedPacketMu.Unlock()
+			return n, nil
+		}
+		r.peekedPacketMu.Unlock()
+	}
 	return r.buffer.Read(buf)
 }
 
