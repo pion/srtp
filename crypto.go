@@ -5,6 +5,7 @@ package srtp
 
 import (
 	"crypto/cipher"
+	"sync"
 
 	"github.com/pion/transport/v3/utils/xor"
 )
@@ -19,6 +20,12 @@ func incrementCTR(ctr []byte) {
 	}
 }
 
+var xorBufferPool = sync.Pool{ // nolint:gochecknoglobals
+	New: func() interface{} {
+		return make([]byte, 1500)
+	},
+}
+
 // xorBytesCTR performs CTR encryption and decryption.
 // It is equivalent to cipher.NewCTR followed by XORKeyStream.
 func xorBytesCTR(block cipher.Block, iv []byte, dst, src []byte) error {
@@ -26,10 +33,17 @@ func xorBytesCTR(block cipher.Block, iv []byte, dst, src []byte) error {
 		return errBadIVLength
 	}
 
-	ctr := make([]byte, len(iv))
+	xorBuf := xorBufferPool.Get()
+	defer xorBufferPool.Put(xorBuf)
+	buffer, ok := xorBuf.([]byte)
+	if !ok {
+		return errFailedTypeAssertion
+	}
+
+	ctr := buffer[:len(iv)]
 	copy(ctr, iv)
 	bs := block.BlockSize()
-	stream := make([]byte, bs)
+	stream := buffer[len(iv) : len(iv)+bs]
 
 	i := 0
 	for i < len(src) {
