@@ -6,7 +6,7 @@ package srtp
 import "github.com/pion/rtp"
 
 // cipher represents a implementation of one
-// of the SRTP Specific ciphers
+// of the SRTP Specific ciphers.
 type srtpCipher interface {
 	// AuthTagRTPLen/AuthTagRTCPLen return auth key length of the cipher.
 	// See the note below.

@@ -15,7 +15,7 @@ type testRfcAesCipher struct {
 	keystream []byte
 }
 
-// createRfcAesTestCiphers returns a list of test ciphers for the RFC test vectors
+// createRfcAesTestCiphers returns a list of test ciphers for the RFC test vectors.
 func createRfcAesTestCiphers() []testRfcAesCipher {
 	tests := []testRfcAesCipher{}
 
@@ -54,8 +54,8 @@ func createRfcAesTestCiphers() []testRfcAesCipher {
 }
 
 func TestAesCiphersWithRfcTestVectors(t *testing.T) {
-	for _, c := range createRfcAesTestCiphers() {
-		t.Run(c.profile.String(), func(t *testing.T) {
+	for _, testCase := range createRfcAesTestCiphers() {
+		t.Run(testCase.profile.String(), func(t *testing.T) {
 			// Use zero SSRC and sequence number as specified in RFC
 			rtpHeader := []byte{
 				0x80, 0x0f, 0x00, 0x00, 0xde, 0xca, 0xfb, 0xad,
@@ -63,20 +63,21 @@ func TestAesCiphersWithRfcTestVectors(t *testing.T) {
 			}
 
 			t.Run("Keystream generation", func(t *testing.T) {
-				cipher, err := newSrtpCipherAesCmHmacSha1WithDerivedKeys(c.profile, c.keys, true, true)
+				cipher, err := newSrtpCipherAesCmHmacSha1WithDerivedKeys(testCase.profile, testCase.keys, true, true)
 				assert.NoError(t, err)
-				ctx, err := createContextWithCipher(c.profile, cipher)
+				ctx, err := createContextWithCipher(testCase.profile, cipher)
 				assert.NoError(t, err)
 
-				// Generated AES keystream will be XOR'ed with zeroes in RTP packet payload, so SRTP payload will be equal to keystream
-				decryptedRTPPacket := make([]byte, len(rtpHeader)+len(c.keystream))
+				// Generated AES keystream will be XOR'ed with zeroes in RTP packet payload,
+				// so SRTP payload will be equal to keystream
+				decryptedRTPPacket := make([]byte, len(rtpHeader)+len(testCase.keystream))
 				copy(decryptedRTPPacket, rtpHeader)
 
 				actualEncrypted, err := ctx.EncryptRTP(nil, decryptedRTPPacket, nil)
 				assert.NoError(t, err)
 
 				assert.Equal(t, rtpHeader, actualEncrypted[:len(rtpHeader)])
-				assert.Equal(t, c.keystream, actualEncrypted[len(rtpHeader):len(rtpHeader)+len(c.keystream)])
+				assert.Equal(t, testCase.keystream, actualEncrypted[len(rtpHeader):len(rtpHeader)+len(testCase.keystream)])
 			})
 		})
 	}

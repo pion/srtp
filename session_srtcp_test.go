@@ -28,7 +28,9 @@ func TestSessionSRTCPBadInit(t *testing.T) {
 	}
 }
 
-func buildSessionSRTCP(t *testing.T) (*SessionSRTCP, net.Conn, *Config) {
+func buildSessionSRTCP(t *testing.T) (*SessionSRTCP, net.Conn, *Config) { //nolint:dupl
+	t.Helper()
+
 	aPipe, bPipe := net.Pipe()
 	config := &Config{
 		Profile: ProtectionProfileAes128CmHmacSha1_80,
@@ -51,6 +53,8 @@ func buildSessionSRTCP(t *testing.T) (*SessionSRTCP, net.Conn, *Config) {
 }
 
 func buildSessionSRTCPPair(t *testing.T) (*SessionSRTCP, *SessionSRTCP) { //nolint:dupl
+	t.Helper()
+
 	aSession, bPipe, config := buildSessionSRTCP(t)
 	bSession, err := NewSessionSRTCP(bPipe, config)
 	if err != nil {
@@ -107,7 +111,7 @@ func TestSessionSRTCP(t *testing.T) {
 	}
 }
 
-func TestSessionSRTCPWithIODeadline(t *testing.T) {
+func TestSessionSRTCPWithIODeadline(t *testing.T) { //nolint:cyclop
 	lim := test.TimeOut(time.Second * 10)
 	defer lim.Stop()
 
@@ -222,7 +226,7 @@ func TestSessionSRTCPOpenReadStream(t *testing.T) {
 	}
 }
 
-func TestSessionSRTCPReplayProtection(t *testing.T) {
+func TestSessionSRTCPReplayProtection(t *testing.T) { //nolint:cyclop
 	lim := test.TimeOut(time.Second * 5)
 	defer lim.Stop()
 
@@ -341,6 +345,8 @@ func TestSessionSRTCPAcceptStreamTimeout(t *testing.T) {
 }
 
 func getSenderSSRC(t *testing.T, stream *ReadStreamSRTCP) (ssrc uint32, err error) {
+	t.Helper()
+
 	authTagSize, err := ProtectionProfileAes128CmHmacSha1_80.AuthTagRTCPLen()
 	if err != nil {
 		return 0, err
@@ -354,13 +360,16 @@ func getSenderSSRC(t *testing.T, stream *ReadStreamSRTCP) (ssrc uint32, err erro
 	}
 	if err != nil {
 		t.Error(err)
+
 		return 0, err
 	}
 	pli := &rtcp.PictureLossIndication{}
 	if uerr := pli.Unmarshal(readBuffer[:n]); uerr != nil {
 		t.Error(uerr)
+
 		return 0, uerr
 	}
+
 	return pli.SenderSSRC, nil
 }
 
@@ -375,6 +384,7 @@ func encryptSRTCP(context *Context, pkt rtcp.Packet) ([]byte, error) {
 	if eerr != nil {
 		return nil, eerr
 	}
+
 	return encrypted, nil
 }
 
@@ -389,5 +399,6 @@ func errIsTimeout(err error) bool {
 	case strings.Contains(s, "deadline exceeded"): // error message when timeout after go1.15.
 		return true
 	}
+
 	return false
 }

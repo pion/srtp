@@ -193,9 +193,17 @@ func TestRTCPLifecycleInPlace(t *testing.T) {
 				case decryptHeader.Type != pkt.pktType:
 					t.Fatalf("DecryptRTCP failed to populate input rtcp.Header, expected: %d, got %d", pkt.pktType, decryptHeader.Type)
 				case !bytes.Equal(decryptInput[:len(decryptInput)-(authTagLen+aeadAuthTagLen+srtcpIndexSize)], actualDecrypted):
-					t.Fatalf("DecryptRTP failed to decrypt in place\nexpected: %v\n     got: %v", decryptInput[:len(decryptInput)-(authTagLen+srtcpIndexSize)], actualDecrypted)
+					t.Fatalf(
+						"DecryptRTP failed to decrypt in place\nexpected: %v\n     got: %v",
+						decryptInput[:len(decryptInput)-(authTagLen+srtcpIndexSize)],
+						actualDecrypted,
+					)
 				}
-				assert.Equal(decryptInput[:len(decryptInput)-(authTagLen+aeadAuthTagLen+srtcpIndexSize)], actualDecrypted, "DecryptRTP failed to decrypt in place")
+				assert.Equal(
+					decryptInput[:len(decryptInput)-(authTagLen+aeadAuthTagLen+srtcpIndexSize)],
+					actualDecrypted,
+					"DecryptRTP failed to decrypt in place",
+				)
 
 				assert.Equal(pkt.decrypted, actualDecrypted, "RTCP failed to decrypt")
 
@@ -213,7 +221,11 @@ func TestRTCPLifecycleInPlace(t *testing.T) {
 				case encryptHeader.Type != pkt.pktType:
 					t.Fatalf("EncryptRTCP failed to populate input rtcp.Header, expected: %d, got %d", pkt.pktType, encryptHeader.Type)
 				}
-				assert.Equal(actualEncrypted[:len(actualEncrypted)-(authTagLen+aeadAuthTagLen+srtcpIndexSize)], encryptInput, "EncryptRTCP failed to encrypt in place")
+				assert.Equal(
+					actualEncrypted[:len(actualEncrypted)-(authTagLen+aeadAuthTagLen+srtcpIndexSize)],
+					encryptInput,
+					"EncryptRTCP failed to encrypt in place",
+				)
 
 				assert.Equal(pkt.encrypted, actualEncrypted, "RTCP failed to encrypt")
 			}
@@ -221,7 +233,7 @@ func TestRTCPLifecycleInPlace(t *testing.T) {
 	}
 }
 
-// Assert that passing a dst buffer that is too short doesn't result in a failure
+// Assert that passing a dst buffer that is too short doesn't result in a failure.
 func TestRTCPLifecyclePartialAllocation(t *testing.T) {
 	for caseName, testCase := range rtcpTestCases() {
 		testCase := testCase
@@ -343,6 +355,7 @@ func TestRTCPReplayDetectorSeparation(t *testing.T) {
 func getRTCPIndex(encrypted []byte, authTagLen int) uint32 {
 	tailOffset := len(encrypted) - (authTagLen + srtcpIndexSize)
 	srtcpIndexBuffer := encrypted[tailOffset : tailOffset+srtcpIndexSize]
+
 	return binary.BigEndian.Uint32(srtcpIndexBuffer) &^ (1 << 31)
 }
 
@@ -538,7 +551,12 @@ func TestRTCPMaxPackets(t *testing.T) {
 				t.Errorf("CreateContext failed: %v", err)
 			}
 
-			decryptContext, err := CreateContext(testCase.masterKey, testCase.masterSalt, testCase.algo, SRTCPReplayProtection(10))
+			decryptContext, err := CreateContext(
+				testCase.masterKey,
+				testCase.masterSalt,
+				testCase.algo,
+				SRTCPReplayProtection(10),
+			)
 			if err != nil {
 				t.Errorf("CreateContext failed: %v", err)
 			}
@@ -582,6 +600,7 @@ func TestRTCPReplayDetectorFactory(t *testing.T) {
 		testCase.masterKey, testCase.masterSalt, testCase.algo,
 		SRTCPReplayDetectorFactory(func() replaydetector.ReplayDetector {
 			cntFactory++
+
 			return &nopReplayDetector{}
 		}),
 	)
@@ -626,12 +645,22 @@ func TestRTCPInvalidMKI(t *testing.T) {
 	for caseName, testCase := range rtcpTestCases() {
 		testCase := testCase
 		t.Run(caseName, func(t *testing.T) {
-			encryptContext, err := CreateContext(testCase.masterKey, testCase.masterSalt, testCase.algo, MasterKeyIndicator(mki1))
+			encryptContext, err := CreateContext(
+				testCase.masterKey,
+				testCase.masterSalt,
+				testCase.algo,
+				MasterKeyIndicator(mki1),
+			)
 			if err != nil {
 				t.Errorf("CreateContext failed: %v", err)
 			}
 
-			decryptContext, err := CreateContext(testCase.masterKey, testCase.masterSalt, testCase.algo, MasterKeyIndicator(mki2))
+			decryptContext, err := CreateContext(
+				testCase.masterKey,
+				testCase.masterSalt,
+				testCase.algo,
+				MasterKeyIndicator(mki2),
+			)
 			if err != nil {
 				t.Errorf("CreateContext failed: %v", err)
 			}
@@ -654,7 +683,7 @@ func TestRTCPInvalidMKI(t *testing.T) {
 	}
 }
 
-func TestRTCPHandleMultipleMKI(t *testing.T) {
+func TestRTCPHandleMultipleMKI(t *testing.T) { //nolint:cyclop
 	mki1 := []byte{0x01, 0x02, 0x03, 0x04}
 	mki2 := []byte{0x02, 0x03, 0x04, 0x05}
 
@@ -665,7 +694,12 @@ func TestRTCPHandleMultipleMKI(t *testing.T) {
 			copy(masterKey2, testCase.masterKey)
 			masterKey2[0] = ^masterKey2[0]
 
-			encryptContext1, err := CreateContext(testCase.masterKey, testCase.masterSalt, testCase.algo, MasterKeyIndicator(mki1))
+			encryptContext1, err := CreateContext(
+				testCase.masterKey,
+				testCase.masterSalt,
+				testCase.algo,
+				MasterKeyIndicator(mki1),
+			)
 			if err != nil {
 				t.Errorf("CreateContext failed: %v", err)
 			}
@@ -674,7 +708,12 @@ func TestRTCPHandleMultipleMKI(t *testing.T) {
 				t.Errorf("CreateContext failed: %v", err)
 			}
 
-			decryptContext, err := CreateContext(testCase.masterKey, testCase.masterSalt, testCase.algo, MasterKeyIndicator(mki1))
+			decryptContext, err := CreateContext(
+				testCase.masterKey,
+				testCase.masterSalt,
+				testCase.algo,
+				MasterKeyIndicator(mki1),
+			)
 			if err != nil {
 				t.Errorf("CreateContext failed: %v", err)
 			}
@@ -710,7 +749,7 @@ func TestRTCPHandleMultipleMKI(t *testing.T) {
 	}
 }
 
-func TestRTCPSwitchMKI(t *testing.T) {
+func TestRTCPSwitchMKI(t *testing.T) { //nolint:cyclop
 	mki1 := []byte{0x01, 0x02, 0x03, 0x04}
 	mki2 := []byte{0x02, 0x03, 0x04, 0x05}
 
@@ -721,7 +760,12 @@ func TestRTCPSwitchMKI(t *testing.T) {
 			copy(masterKey2, testCase.masterKey)
 			masterKey2[0] = ^masterKey2[0]
 
-			encryptContext, err := CreateContext(testCase.masterKey, testCase.masterSalt, testCase.algo, MasterKeyIndicator(mki1))
+			encryptContext, err := CreateContext(
+				testCase.masterKey,
+				testCase.masterSalt,
+				testCase.algo,
+				MasterKeyIndicator(mki1),
+			)
 			if err != nil {
 				t.Errorf("CreateContext failed: %v", err)
 			}
@@ -730,7 +774,12 @@ func TestRTCPSwitchMKI(t *testing.T) {
 				t.Errorf("AddCipherForMKI failed: %v", err)
 			}
 
-			decryptContext1, err := CreateContext(testCase.masterKey, testCase.masterSalt, testCase.algo, MasterKeyIndicator(mki1))
+			decryptContext1, err := CreateContext(
+				testCase.masterKey,
+				testCase.masterSalt,
+				testCase.algo,
+				MasterKeyIndicator(mki1),
+			)
 			if err != nil {
 				t.Errorf("CreateContext failed: %v", err)
 			}

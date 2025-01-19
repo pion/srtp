@@ -20,6 +20,7 @@ func fromHex(s string) []byte {
 	if err != nil {
 		panic(err)
 	}
+
 	return b
 }
 
@@ -36,7 +37,7 @@ type testRfcAeadCipher struct {
 	authenticatedRTCPPacket []byte
 }
 
-// createRfcAeadTestCiphers returns a list of test ciphers for the RFC test vectors
+// createRfcAeadTestCiphers returns a list of test ciphers for the RFC test vectors.
 func createRfcAeadTestCiphers() []testRfcAeadCipher {
 	tests := []testRfcAeadCipher{}
 
@@ -125,102 +126,102 @@ func createRfcAeadTestCiphers() []testRfcAeadCipher {
 }
 
 func TestAeadCiphersWithRfcTestVectors(t *testing.T) {
-	for _, c := range createRfcAeadTestCiphers() {
-		t.Run(c.profile.String(), func(t *testing.T) {
+	for _, testCase := range createRfcAeadTestCiphers() {
+		t.Run(testCase.profile.String(), func(t *testing.T) {
 			t.Run("Encrypt RTP", func(t *testing.T) {
-				cipher, err := newSrtpCipherAeadAesGcmWithDerivedKeys(c.profile, c.keys, true, true)
+				cipher, err := newSrtpCipherAeadAesGcmWithDerivedKeys(testCase.profile, testCase.keys, true, true)
 				assert.NoError(t, err)
-				ctx, err := createContextWithCipher(c.profile, cipher)
+				ctx, err := createContextWithCipher(testCase.profile, cipher)
 				assert.NoError(t, err)
 				ctx.SetIndex(0x4d617273, 0x000005d3)
 
-				actualEncrypted, err := ctx.EncryptRTP(nil, c.decryptedRTPPacket, nil)
+				actualEncrypted, err := ctx.EncryptRTP(nil, testCase.decryptedRTPPacket, nil)
 				assert.NoError(t, err)
-				assert.Equal(t, c.encryptedRTPPacket, actualEncrypted)
+				assert.Equal(t, testCase.encryptedRTPPacket, actualEncrypted)
 			})
 
 			t.Run("Decrypt RTP", func(t *testing.T) {
-				cipher, err := newSrtpCipherAeadAesGcmWithDerivedKeys(c.profile, c.keys, true, true)
+				cipher, err := newSrtpCipherAeadAesGcmWithDerivedKeys(testCase.profile, testCase.keys, true, true)
 				assert.NoError(t, err)
-				ctx, err := createContextWithCipher(c.profile, cipher)
+				ctx, err := createContextWithCipher(testCase.profile, cipher)
 				assert.NoError(t, err)
 				ctx.SetIndex(0x4d617273, 0x000005d3)
 
-				actualDecrypted, err := ctx.DecryptRTP(nil, c.encryptedRTPPacket, nil)
+				actualDecrypted, err := ctx.DecryptRTP(nil, testCase.encryptedRTPPacket, nil)
 				assert.NoError(t, err)
-				assert.Equal(t, c.decryptedRTPPacket, actualDecrypted)
+				assert.Equal(t, testCase.decryptedRTPPacket, actualDecrypted)
 			})
 
 			t.Run("Encrypt RTCP", func(t *testing.T) {
-				cipher, err := newSrtpCipherAeadAesGcmWithDerivedKeys(c.profile, c.keys, true, true)
+				cipher, err := newSrtpCipherAeadAesGcmWithDerivedKeys(testCase.profile, testCase.keys, true, true)
 				assert.NoError(t, err)
-				ctx, err := createContextWithCipher(c.profile, cipher)
+				ctx, err := createContextWithCipher(testCase.profile, cipher)
 				assert.NoError(t, err)
 				ctx.SetIndex(0x4d617273, 0x000005d3)
 
-				actualEncrypted, err := ctx.EncryptRTCP(nil, c.decryptedRTCPPacket, nil)
+				actualEncrypted, err := ctx.EncryptRTCP(nil, testCase.decryptedRTCPPacket, nil)
 				assert.NoError(t, err)
-				assert.Equal(t, c.encryptedRTCPPacket, actualEncrypted)
+				assert.Equal(t, testCase.encryptedRTCPPacket, actualEncrypted)
 			})
 
 			t.Run("Decrypt RTCP", func(t *testing.T) {
-				cipher, err := newSrtpCipherAeadAesGcmWithDerivedKeys(c.profile, c.keys, true, true)
+				cipher, err := newSrtpCipherAeadAesGcmWithDerivedKeys(testCase.profile, testCase.keys, true, true)
 				assert.NoError(t, err)
-				ctx, err := createContextWithCipher(c.profile, cipher)
+				ctx, err := createContextWithCipher(testCase.profile, cipher)
 				assert.NoError(t, err)
 				ctx.SetIndex(0x4d617273, 0x000005d3)
 
-				actualDecrypted, err := ctx.DecryptRTCP(nil, c.encryptedRTCPPacket, nil)
+				actualDecrypted, err := ctx.DecryptRTCP(nil, testCase.encryptedRTCPPacket, nil)
 				assert.NoError(t, err)
-				assert.Equal(t, c.decryptedRTCPPacket, actualDecrypted)
+				assert.Equal(t, testCase.decryptedRTCPPacket, actualDecrypted)
 			})
 
 			t.Run("Encrypt RTP with NULL cipher", func(t *testing.T) {
-				cipher, err := newSrtpCipherAeadAesGcmWithDerivedKeys(c.profile, c.keys, false, false)
+				cipher, err := newSrtpCipherAeadAesGcmWithDerivedKeys(testCase.profile, testCase.keys, false, false)
 				assert.NoError(t, err)
-				ctx, err := createContextWithCipher(c.profile, cipher)
+				ctx, err := createContextWithCipher(testCase.profile, cipher)
 				assert.NoError(t, err)
 				ctx.SetIndex(0x4d617273, 0x000005d3)
 
-				actualEncrypted, err := ctx.EncryptRTP(nil, c.decryptedRTPPacket, nil)
+				actualEncrypted, err := ctx.EncryptRTP(nil, testCase.decryptedRTPPacket, nil)
 				assert.NoError(t, err)
-				assert.Equal(t, c.authenticatedRTPPacket, actualEncrypted)
+				assert.Equal(t, testCase.authenticatedRTPPacket, actualEncrypted)
 			})
 
 			t.Run("Decrypt RTP with NULL cipher", func(t *testing.T) {
-				cipher, err := newSrtpCipherAeadAesGcmWithDerivedKeys(c.profile, c.keys, false, false)
+				cipher, err := newSrtpCipherAeadAesGcmWithDerivedKeys(testCase.profile, testCase.keys, false, false)
 				assert.NoError(t, err)
-				ctx, err := createContextWithCipher(c.profile, cipher)
+				ctx, err := createContextWithCipher(testCase.profile, cipher)
 				assert.NoError(t, err)
 				ctx.SetIndex(0x4d617273, 0x000005d3)
 
-				actualDecrypted, err := ctx.DecryptRTP(nil, c.authenticatedRTPPacket, nil)
+				actualDecrypted, err := ctx.DecryptRTP(nil, testCase.authenticatedRTPPacket, nil)
 				assert.NoError(t, err)
-				assert.Equal(t, c.decryptedRTPPacket, actualDecrypted)
+				assert.Equal(t, testCase.decryptedRTPPacket, actualDecrypted)
 			})
 
 			t.Run("Encrypt RTCP with NULL cipher", func(t *testing.T) {
-				cipher, err := newSrtpCipherAeadAesGcmWithDerivedKeys(c.profile, c.keys, false, false)
+				cipher, err := newSrtpCipherAeadAesGcmWithDerivedKeys(testCase.profile, testCase.keys, false, false)
 				assert.NoError(t, err)
-				ctx, err := createContextWithCipher(c.profile, cipher)
+				ctx, err := createContextWithCipher(testCase.profile, cipher)
 				assert.NoError(t, err)
 				ctx.SetIndex(0x4d617273, 0x000005d3)
 
-				actualEncrypted, err := ctx.EncryptRTCP(nil, c.decryptedRTCPPacket, nil)
+				actualEncrypted, err := ctx.EncryptRTCP(nil, testCase.decryptedRTCPPacket, nil)
 				assert.NoError(t, err)
-				assert.Equal(t, c.authenticatedRTCPPacket, actualEncrypted)
+				assert.Equal(t, testCase.authenticatedRTCPPacket, actualEncrypted)
 			})
 
 			t.Run("Decrypt RTCP with NULL cipher", func(t *testing.T) {
-				cipher, err := newSrtpCipherAeadAesGcmWithDerivedKeys(c.profile, c.keys, false, false)
+				cipher, err := newSrtpCipherAeadAesGcmWithDerivedKeys(testCase.profile, testCase.keys, false, false)
 				assert.NoError(t, err)
-				ctx, err := createContextWithCipher(c.profile, cipher)
+				ctx, err := createContextWithCipher(testCase.profile, cipher)
 				assert.NoError(t, err)
 				ctx.SetIndex(0x4d617273, 0x000005d3)
 
-				actualDecrypted, err := ctx.DecryptRTCP(nil, c.authenticatedRTCPPacket, nil)
+				actualDecrypted, err := ctx.DecryptRTCP(nil, testCase.authenticatedRTCPPacket, nil)
 				assert.NoError(t, err)
-				assert.Equal(t, c.decryptedRTCPPacket, actualDecrypted)
+				assert.Equal(t, testCase.decryptedRTCPPacket, actualDecrypted)
 			})
 		})
 	}

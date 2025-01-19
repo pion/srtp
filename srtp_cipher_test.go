@@ -28,8 +28,8 @@ type testCipher struct {
 	authenticatedRTCPPacketWithMKI []byte
 }
 
-// create array of testCiphers for each supported profile
-func createTestCiphers() []testCipher {
+// create array of testCiphers for each supported profile.
+func createTestCiphers() []testCipher { //nolint:maintidx
 	tests := []testCipher{
 		{ //nolint:dupl
 			profile: ProtectionProfileAes128CmHmacSha1_32,
@@ -556,7 +556,7 @@ func createTestCiphers() []testCipher {
 		0xab, 0xab, 0xab, 0xab, 0xab, 0xab, 0xab, 0xab,
 	}
 
-	for k, v := range tests {
+	for key, v := range tests {
 		keyLen, err := v.profile.KeyLen()
 		if err != nil {
 			panic(err)
@@ -565,199 +565,243 @@ func createTestCiphers() []testCipher {
 		if err != nil {
 			panic(err)
 		}
-		tests[k].masterKey = masterKey[:keyLen]
-		tests[k].masterSalt = masterSalt[:saltLen]
-		tests[k].mki = mki
-		tests[k].decryptedRTPPacket = decryptedRTPPacket
-		tests[k].decryptedRTCPPacket = decryptedRTCPPacket
+		tests[key].masterKey = masterKey[:keyLen]
+		tests[key].masterSalt = masterSalt[:saltLen]
+		tests[key].mki = mki
+		tests[key].decryptedRTPPacket = decryptedRTPPacket
+		tests[key].decryptedRTCPPacket = decryptedRTCPPacket
 	}
 
 	return tests
 }
 
 func TestSrtpCipher(t *testing.T) {
-	for _, c := range createTestCiphers() {
-		t.Run(c.profile.String(), func(t *testing.T) {
-			assert.Equal(t, c.decryptedRTPPacket, c.authenticatedRTPPacket[:len(c.decryptedRTPPacket)])
-			assert.Equal(t, c.decryptedRTCPPacket, c.authenticatedRTCPPacket[:len(c.decryptedRTCPPacket)])
+	for _, testCase := range createTestCiphers() {
+		t.Run(testCase.profile.String(), func(t *testing.T) {
+			assert.Equal(t, testCase.decryptedRTPPacket, testCase.authenticatedRTPPacket[:len(testCase.decryptedRTPPacket)])
+			assert.Equal(t, testCase.decryptedRTCPPacket, testCase.authenticatedRTCPPacket[:len(testCase.decryptedRTCPPacket)])
 
 			t.Run("Encrypt RTP", func(t *testing.T) {
-				ctx, err := CreateContext(c.masterKey, c.masterSalt, c.profile)
+				ctx, err := CreateContext(testCase.masterKey, testCase.masterSalt, testCase.profile)
 				assert.NoError(t, err)
 
 				t.Run("New Allocation", func(t *testing.T) {
-					actualEncrypted, err := ctx.EncryptRTP(nil, c.decryptedRTPPacket, nil)
+					actualEncrypted, err := ctx.EncryptRTP(nil, testCase.decryptedRTPPacket, nil)
 					assert.NoError(t, err)
-					assert.Equal(t, c.encryptedRTPPacket, actualEncrypted)
+					assert.Equal(t, testCase.encryptedRTPPacket, actualEncrypted)
 				})
 			})
 
 			t.Run("Decrypt RTP", func(t *testing.T) {
-				ctx, err := CreateContext(c.masterKey, c.masterSalt, c.profile)
+				ctx, err := CreateContext(testCase.masterKey, testCase.masterSalt, testCase.profile)
 				assert.NoError(t, err)
 
 				t.Run("New Allocation", func(t *testing.T) {
-					actualDecrypted, err := ctx.DecryptRTP(nil, c.encryptedRTPPacket, nil)
+					actualDecrypted, err := ctx.DecryptRTP(nil, testCase.encryptedRTPPacket, nil)
 					assert.NoError(t, err)
-					assert.Equal(t, c.decryptedRTPPacket, actualDecrypted)
+					assert.Equal(t, testCase.decryptedRTPPacket, actualDecrypted)
 				})
 			})
 
 			t.Run("Encrypt RTCP", func(t *testing.T) {
-				ctx, err := CreateContext(c.masterKey, c.masterSalt, c.profile)
+				ctx, err := CreateContext(testCase.masterKey, testCase.masterSalt, testCase.profile)
 				assert.NoError(t, err)
 
 				t.Run("New Allocation", func(t *testing.T) {
-					actualEncrypted, err := ctx.EncryptRTCP(nil, c.decryptedRTCPPacket, nil)
+					actualEncrypted, err := ctx.EncryptRTCP(nil, testCase.decryptedRTCPPacket, nil)
 					assert.NoError(t, err)
-					assert.Equal(t, c.encryptedRTCPPacket, actualEncrypted)
+					assert.Equal(t, testCase.encryptedRTCPPacket, actualEncrypted)
 				})
 			})
 
 			t.Run("Decrypt RTCP", func(t *testing.T) {
-				ctx, err := CreateContext(c.masterKey, c.masterSalt, c.profile)
+				ctx, err := CreateContext(testCase.masterKey, testCase.masterSalt, testCase.profile)
 				assert.NoError(t, err)
 
 				t.Run("New Allocation", func(t *testing.T) {
-					actualDecrypted, err := ctx.DecryptRTCP(nil, c.encryptedRTCPPacket, nil)
+					actualDecrypted, err := ctx.DecryptRTCP(nil, testCase.encryptedRTCPPacket, nil)
 					assert.NoError(t, err)
-					assert.Equal(t, c.decryptedRTCPPacket, actualDecrypted)
+					assert.Equal(t, testCase.decryptedRTCPPacket, actualDecrypted)
 				})
 			})
 
 			t.Run("Encrypt RTP with MKI", func(t *testing.T) {
-				ctx, err := CreateContext(c.masterKey, c.masterSalt, c.profile, MasterKeyIndicator(c.mki))
+				ctx, err := CreateContext(
+					testCase.masterKey, testCase.masterSalt, testCase.profile, MasterKeyIndicator(testCase.mki),
+				)
 				assert.NoError(t, err)
 
 				t.Run("New Allocation", func(t *testing.T) {
-					actualEncrypted, err := ctx.EncryptRTP(nil, c.decryptedRTPPacket, nil)
+					actualEncrypted, err := ctx.EncryptRTP(nil, testCase.decryptedRTPPacket, nil)
 					assert.NoError(t, err)
-					assert.Equal(t, c.encryptedRTPPacketWithMKI, actualEncrypted)
+					assert.Equal(t, testCase.encryptedRTPPacketWithMKI, actualEncrypted)
 				})
 			})
 
 			t.Run("Decrypt RTP with MKI", func(t *testing.T) {
-				ctx, err := CreateContext(c.masterKey, c.masterSalt, c.profile, MasterKeyIndicator(c.mki))
+				ctx, err := CreateContext(
+					testCase.masterKey, testCase.masterSalt, testCase.profile, MasterKeyIndicator(testCase.mki),
+				)
 				assert.NoError(t, err)
 
 				t.Run("New Allocation", func(t *testing.T) {
-					actualDecrypted, err := ctx.DecryptRTP(nil, c.encryptedRTPPacketWithMKI, nil)
+					actualDecrypted, err := ctx.DecryptRTP(nil, testCase.encryptedRTPPacketWithMKI, nil)
 					assert.NoError(t, err)
-					assert.Equal(t, c.decryptedRTPPacket, actualDecrypted)
+					assert.Equal(t, testCase.decryptedRTPPacket, actualDecrypted)
 				})
 			})
 
 			t.Run("Encrypt RTCP with MKI", func(t *testing.T) {
-				ctx, err := CreateContext(c.masterKey, c.masterSalt, c.profile, MasterKeyIndicator(c.mki))
+				ctx, err := CreateContext(
+					testCase.masterKey, testCase.masterSalt, testCase.profile, MasterKeyIndicator(testCase.mki),
+				)
 				assert.NoError(t, err)
 
 				t.Run("New Allocation", func(t *testing.T) {
-					actualEncrypted, err := ctx.EncryptRTCP(nil, c.decryptedRTCPPacket, nil)
+					actualEncrypted, err := ctx.EncryptRTCP(nil, testCase.decryptedRTCPPacket, nil)
 					assert.NoError(t, err)
-					assert.Equal(t, c.encryptedRTCPPacketWithMKI, actualEncrypted)
+					assert.Equal(t, testCase.encryptedRTCPPacketWithMKI, actualEncrypted)
 				})
 			})
 
 			t.Run("Decrypt RTCP with MKI", func(t *testing.T) {
-				ctx, err := CreateContext(c.masterKey, c.masterSalt, c.profile, MasterKeyIndicator(c.mki))
+				ctx, err := CreateContext(
+					testCase.masterKey, testCase.masterSalt, testCase.profile, MasterKeyIndicator(testCase.mki),
+				)
 				assert.NoError(t, err)
 
 				t.Run("New Allocation", func(t *testing.T) {
-					actualDecrypted, err := ctx.DecryptRTCP(nil, c.encryptedRTCPPacketWithMKI, nil)
+					actualDecrypted, err := ctx.DecryptRTCP(nil, testCase.encryptedRTCPPacketWithMKI, nil)
 					assert.NoError(t, err)
-					assert.Equal(t, c.decryptedRTCPPacket, actualDecrypted)
+					assert.Equal(t, testCase.decryptedRTCPPacket, actualDecrypted)
 				})
 			})
 
 			t.Run("Encrypt RTP with NULL cipher", func(t *testing.T) {
-				ctx, err := CreateContext(c.masterKey, c.masterSalt, c.profile, SRTPNoEncryption(), SRTCPNoEncryption())
+				ctx, err := CreateContext(
+					testCase.masterKey, testCase.masterSalt, testCase.profile, SRTPNoEncryption(), SRTCPNoEncryption(),
+				)
 				assert.NoError(t, err)
 
 				t.Run("New Allocation", func(t *testing.T) {
-					actualEncrypted, err := ctx.EncryptRTP(nil, c.decryptedRTPPacket, nil)
+					actualEncrypted, err := ctx.EncryptRTP(nil, testCase.decryptedRTPPacket, nil)
 					assert.NoError(t, err)
-					assert.Equal(t, c.decryptedRTPPacket, actualEncrypted[:len(c.decryptedRTPPacket)])
-					assert.Equal(t, c.authenticatedRTPPacket, actualEncrypted)
+					assert.Equal(t, testCase.decryptedRTPPacket, actualEncrypted[:len(testCase.decryptedRTPPacket)])
+					assert.Equal(t, testCase.authenticatedRTPPacket, actualEncrypted)
 				})
 			})
 
 			t.Run("Decrypt RTP with NULL cipher", func(t *testing.T) {
-				ctx, err := CreateContext(c.masterKey, c.masterSalt, c.profile, SRTPNoEncryption(), SRTCPNoEncryption())
+				ctx, err := CreateContext(
+					testCase.masterKey, testCase.masterSalt, testCase.profile, SRTPNoEncryption(), SRTCPNoEncryption(),
+				)
 				assert.NoError(t, err)
 
 				t.Run("New Allocation", func(t *testing.T) {
-					actualDecrypted, err := ctx.DecryptRTP(nil, c.authenticatedRTPPacket, nil)
+					actualDecrypted, err := ctx.DecryptRTP(nil, testCase.authenticatedRTPPacket, nil)
 					assert.NoError(t, err)
-					assert.Equal(t, c.decryptedRTPPacket, actualDecrypted)
+					assert.Equal(t, testCase.decryptedRTPPacket, actualDecrypted)
 				})
 			})
 
 			t.Run("Encrypt RTCP with NULL cipher", func(t *testing.T) {
-				ctx, err := CreateContext(c.masterKey, c.masterSalt, c.profile, SRTPNoEncryption(), SRTCPNoEncryption())
+				ctx, err := CreateContext(
+					testCase.masterKey, testCase.masterSalt, testCase.profile, SRTPNoEncryption(), SRTCPNoEncryption(),
+				)
 				assert.NoError(t, err)
 
 				t.Run("New Allocation", func(t *testing.T) {
-					actualEncrypted, err := ctx.EncryptRTCP(nil, c.decryptedRTCPPacket, nil)
+					actualEncrypted, err := ctx.EncryptRTCP(nil, testCase.decryptedRTCPPacket, nil)
 					assert.NoError(t, err)
-					assert.Equal(t, c.decryptedRTCPPacket, actualEncrypted[:len(c.decryptedRTCPPacket)])
-					assert.Equal(t, c.authenticatedRTCPPacket, actualEncrypted)
+					assert.Equal(t, testCase.decryptedRTCPPacket, actualEncrypted[:len(testCase.decryptedRTCPPacket)])
+					assert.Equal(t, testCase.authenticatedRTCPPacket, actualEncrypted)
 				})
 			})
 
 			t.Run("Decrypt RTCP with NULL cipher", func(t *testing.T) {
-				ctx, err := CreateContext(c.masterKey, c.masterSalt, c.profile, SRTPNoEncryption(), SRTCPNoEncryption())
+				ctx, err := CreateContext(
+					testCase.masterKey, testCase.masterSalt, testCase.profile, SRTPNoEncryption(), SRTCPNoEncryption(),
+				)
 				assert.NoError(t, err)
 
 				t.Run("New Allocation", func(t *testing.T) {
-					actualDecrypted, err := ctx.DecryptRTCP(nil, c.authenticatedRTCPPacket, nil)
+					actualDecrypted, err := ctx.DecryptRTCP(nil, testCase.authenticatedRTCPPacket, nil)
 					assert.NoError(t, err)
-					assert.Equal(t, c.decryptedRTCPPacket, actualDecrypted)
+					assert.Equal(t, testCase.decryptedRTCPPacket, actualDecrypted)
 				})
 			})
 
 			t.Run("Encrypt RTP with NULL cipher and MKI", func(t *testing.T) {
-				ctx, err := CreateContext(c.masterKey, c.masterSalt, c.profile, SRTPNoEncryption(), SRTCPNoEncryption(), MasterKeyIndicator(c.mki))
+				ctx, err := CreateContext(
+					testCase.masterKey,
+					testCase.masterSalt,
+					testCase.profile,
+					SRTPNoEncryption(),
+					SRTCPNoEncryption(),
+					MasterKeyIndicator(testCase.mki),
+				)
 				assert.NoError(t, err)
 
 				t.Run("New Allocation", func(t *testing.T) {
-					actualEncrypted, err := ctx.EncryptRTP(nil, c.decryptedRTPPacket, nil)
+					actualEncrypted, err := ctx.EncryptRTP(nil, testCase.decryptedRTPPacket, nil)
 					assert.NoError(t, err)
-					assert.Equal(t, c.decryptedRTPPacket, actualEncrypted[:len(c.decryptedRTPPacket)])
-					assert.Equal(t, c.authenticatedRTPPacketWithMKI, actualEncrypted)
+					assert.Equal(t, testCase.decryptedRTPPacket, actualEncrypted[:len(testCase.decryptedRTPPacket)])
+					assert.Equal(t, testCase.authenticatedRTPPacketWithMKI, actualEncrypted)
 				})
 			})
 
 			t.Run("Decrypt RTP with NULL cipher and MKI", func(t *testing.T) {
-				ctx, err := CreateContext(c.masterKey, c.masterSalt, c.profile, SRTPNoEncryption(), SRTCPNoEncryption(), MasterKeyIndicator(c.mki))
+				ctx, err := CreateContext(
+					testCase.masterKey,
+					testCase.masterSalt,
+					testCase.profile,
+					SRTPNoEncryption(),
+					SRTCPNoEncryption(),
+					MasterKeyIndicator(testCase.mki),
+				)
 				assert.NoError(t, err)
 
 				t.Run("New Allocation", func(t *testing.T) {
-					actualDecrypted, err := ctx.DecryptRTP(nil, c.authenticatedRTPPacketWithMKI, nil)
+					actualDecrypted, err := ctx.DecryptRTP(nil, testCase.authenticatedRTPPacketWithMKI, nil)
 					assert.NoError(t, err)
-					assert.Equal(t, c.decryptedRTPPacket, actualDecrypted)
+					assert.Equal(t, testCase.decryptedRTPPacket, actualDecrypted)
 				})
 			})
 
 			t.Run("Encrypt RTCP with NULL cipher and MKI", func(t *testing.T) {
-				ctx, err := CreateContext(c.masterKey, c.masterSalt, c.profile, SRTPNoEncryption(), SRTCPNoEncryption(), MasterKeyIndicator(c.mki))
+				ctx, err := CreateContext(
+					testCase.masterKey,
+					testCase.masterSalt,
+					testCase.profile,
+					SRTPNoEncryption(),
+					SRTCPNoEncryption(),
+					MasterKeyIndicator(testCase.mki),
+				)
 				assert.NoError(t, err)
 
 				t.Run("New Allocation", func(t *testing.T) {
-					actualEncrypted, err := ctx.EncryptRTCP(nil, c.decryptedRTCPPacket, nil)
+					actualEncrypted, err := ctx.EncryptRTCP(nil, testCase.decryptedRTCPPacket, nil)
 					assert.NoError(t, err)
-					assert.Equal(t, c.decryptedRTCPPacket, actualEncrypted[:len(c.decryptedRTCPPacket)])
-					assert.Equal(t, c.authenticatedRTCPPacketWithMKI, actualEncrypted)
+					assert.Equal(t, testCase.decryptedRTCPPacket, actualEncrypted[:len(testCase.decryptedRTCPPacket)])
+					assert.Equal(t, testCase.authenticatedRTCPPacketWithMKI, actualEncrypted)
 				})
 			})
 
 			t.Run("Decrypt RTCP with NULL cipher and MKI", func(t *testing.T) {
-				ctx, err := CreateContext(c.masterKey, c.masterSalt, c.profile, SRTPNoEncryption(), SRTCPNoEncryption(), MasterKeyIndicator(c.mki))
+				ctx, err := CreateContext(
+					testCase.masterKey,
+					testCase.masterSalt,
+					testCase.profile,
+					SRTPNoEncryption(),
+					SRTCPNoEncryption(),
+					MasterKeyIndicator(testCase.mki),
+				)
 				assert.NoError(t, err)
 
 				t.Run("New Allocation", func(t *testing.T) {
-					actualDecrypted, err := ctx.DecryptRTCP(nil, c.authenticatedRTCPPacketWithMKI, nil)
+					actualDecrypted, err := ctx.DecryptRTCP(nil, testCase.authenticatedRTCPPacketWithMKI, nil)
 					assert.NoError(t, err)
-					assert.Equal(t, c.decryptedRTCPPacket, actualDecrypted)
+					assert.Equal(t, testCase.decryptedRTCPPacket, actualDecrypted)
 				})
 			})
 		})

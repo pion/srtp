@@ -57,10 +57,11 @@ func (c *Context) decryptRTCP(dst, encrypted []byte) ([]byte, error) {
 	}
 
 	markAsValid()
+
 	return out, nil
 }
 
-// DecryptRTCP decrypts a buffer that contains a RTCP packet
+// DecryptRTCP decrypts a buffer that contains a RTCP packet.
 func (c *Context) DecryptRTCP(dst, encrypted []byte, header *rtcp.Header) ([]byte, error) {
 	if header == nil {
 		header = &rtcp.Header{}
@@ -79,9 +80,9 @@ func (c *Context) encryptRTCP(dst, decrypted []byte) ([]byte, error) {
 	}
 
 	ssrc := binary.BigEndian.Uint32(decrypted[4:])
-	s := c.getSRTCPSSRCState(ssrc)
+	ssrcState := c.getSRTCPSSRCState(ssrc)
 
-	if s.srtcpIndex >= maxSRTCPIndex {
+	if ssrcState.srtcpIndex >= maxSRTCPIndex {
 		// ... when 2^48 SRTP packets or 2^31 SRTCP packets have been secured with the same key
 		// (whichever occurs before), the key management MUST be called to provide new master key(s)
 		// (previously stored and used keys MUST NOT be used again), or the session MUST be terminated.
@@ -90,12 +91,12 @@ func (c *Context) encryptRTCP(dst, decrypted []byte) ([]byte, error) {
 	}
 
 	// We roll over early because MSB is used for marking as encrypted
-	s.srtcpIndex++
+	ssrcState.srtcpIndex++
 
-	return c.cipher.encryptRTCP(dst, decrypted, s.srtcpIndex, ssrc)
+	return c.cipher.encryptRTCP(dst, decrypted, ssrcState.srtcpIndex, ssrc)
 }
 
-// EncryptRTCP Encrypts a RTCP packet
+// EncryptRTCP Encrypts a RTCP packet.
 func (c *Context) EncryptRTCP(dst, decrypted []byte, header *rtcp.Header) ([]byte, error) {
 	if header == nil {
 		header = &rtcp.Header{}

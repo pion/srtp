@@ -48,33 +48,33 @@ func TestContextIndex(t *testing.T) {
 }
 
 func TestContextWithoutMKI(t *testing.T) {
-	c, err := CreateContext(make([]byte, 16), make([]byte, 14), profileCTR)
+	ctx, err := CreateContext(make([]byte, 16), make([]byte, 14), profileCTR)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	err = c.AddCipherForMKI(nil, make([]byte, 16), make([]byte, 14))
+	err = ctx.AddCipherForMKI(nil, make([]byte, 16), make([]byte, 14))
 	assert.Error(t, err)
 
-	err = c.AddCipherForMKI(make([]byte, 0), make([]byte, 16), make([]byte, 14))
+	err = ctx.AddCipherForMKI(make([]byte, 0), make([]byte, 16), make([]byte, 14))
 	assert.Error(t, err)
 
-	err = c.AddCipherForMKI(make([]byte, 4), make([]byte, 16), make([]byte, 14))
+	err = ctx.AddCipherForMKI(make([]byte, 4), make([]byte, 16), make([]byte, 14))
 	assert.Error(t, err)
 
-	err = c.SetSendMKI(nil)
+	err = ctx.SetSendMKI(nil)
 	assert.Error(t, err)
 
-	err = c.SetSendMKI(make([]byte, 0))
+	err = ctx.SetSendMKI(make([]byte, 0))
 	assert.Error(t, err)
 
-	err = c.RemoveMKI(nil)
+	err = ctx.RemoveMKI(nil)
 	assert.Error(t, err)
 
-	err = c.RemoveMKI(make([]byte, 0))
+	err = ctx.RemoveMKI(make([]byte, 0))
 	assert.Error(t, err)
 
-	err = c.RemoveMKI(make([]byte, 2))
+	err = ctx.RemoveMKI(make([]byte, 2))
 	assert.Error(t, err)
 }
 
@@ -82,28 +82,28 @@ func TestAddMKIToContextWithMKI(t *testing.T) {
 	mki1 := []byte{1, 2, 3, 4}
 	mki2 := []byte{2, 3, 4, 5}
 
-	c, err := CreateContext(make([]byte, 16), make([]byte, 14), profileCTR, MasterKeyIndicator(mki1))
+	ctx, err := CreateContext(make([]byte, 16), make([]byte, 14), profileCTR, MasterKeyIndicator(mki1))
 	if err != nil {
 		t.Fatal(err)
 	}
-	err = c.AddCipherForMKI(mki2, make([]byte, 16), make([]byte, 14))
+	err = ctx.AddCipherForMKI(mki2, make([]byte, 16), make([]byte, 14))
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	err = c.AddCipherForMKI(nil, make([]byte, 16), make([]byte, 14))
+	err = ctx.AddCipherForMKI(nil, make([]byte, 16), make([]byte, 14))
 	assert.Error(t, err)
 
-	err = c.AddCipherForMKI(make([]byte, 0), make([]byte, 16), make([]byte, 14))
+	err = ctx.AddCipherForMKI(make([]byte, 0), make([]byte, 16), make([]byte, 14))
 	assert.Error(t, err)
 
-	err = c.AddCipherForMKI(make([]byte, 3), make([]byte, 16), make([]byte, 14))
+	err = ctx.AddCipherForMKI(make([]byte, 3), make([]byte, 16), make([]byte, 14))
 	assert.Error(t, err)
 
-	err = c.AddCipherForMKI(mki1, make([]byte, 16), make([]byte, 14))
+	err = ctx.AddCipherForMKI(mki1, make([]byte, 16), make([]byte, 14))
 	assert.Error(t, err)
 
-	err = c.AddCipherForMKI(mki2, make([]byte, 16), make([]byte, 14))
+	err = ctx.AddCipherForMKI(mki2, make([]byte, 16), make([]byte, 14))
 	assert.Error(t, err)
 }
 
@@ -111,22 +111,22 @@ func TestContextSetSendMKI(t *testing.T) {
 	mki1 := []byte{1, 2, 3, 4}
 	mki2 := []byte{2, 3, 4, 5}
 
-	c, err := CreateContext(make([]byte, 16), make([]byte, 14), profileCTR, MasterKeyIndicator(mki1))
+	ctx, err := CreateContext(make([]byte, 16), make([]byte, 14), profileCTR, MasterKeyIndicator(mki1))
 	if err != nil {
 		t.Fatal(err)
 	}
-	err = c.AddCipherForMKI(mki2, make([]byte, 16), make([]byte, 14))
+	err = ctx.AddCipherForMKI(mki2, make([]byte, 16), make([]byte, 14))
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	err = c.SetSendMKI(mki1)
+	err = ctx.SetSendMKI(mki1)
 	assert.NoError(t, err)
 
-	err = c.SetSendMKI(mki2)
+	err = ctx.SetSendMKI(mki2)
 	assert.NoError(t, err)
 
-	err = c.SetSendMKI(make([]byte, 4))
+	err = ctx.SetSendMKI(make([]byte, 4))
 	assert.Error(t, err)
 }
 
@@ -135,34 +135,34 @@ func TestContextRemoveMKI(t *testing.T) {
 	mki2 := []byte{2, 3, 4, 5}
 	mki3 := []byte{3, 4, 5, 6}
 
-	c, err := CreateContext(make([]byte, 16), make([]byte, 14), profileCTR, MasterKeyIndicator(mki1))
+	ctx, err := CreateContext(make([]byte, 16), make([]byte, 14), profileCTR, MasterKeyIndicator(mki1))
 	if err != nil {
 		t.Fatal(err)
 	}
-	err = c.AddCipherForMKI(mki2, make([]byte, 16), make([]byte, 14))
+	err = ctx.AddCipherForMKI(mki2, make([]byte, 16), make([]byte, 14))
 	if err != nil {
 		t.Fatal(err)
 	}
-	err = c.AddCipherForMKI(mki3, make([]byte, 16), make([]byte, 14))
+	err = ctx.AddCipherForMKI(mki3, make([]byte, 16), make([]byte, 14))
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	err = c.RemoveMKI(make([]byte, 4))
+	err = ctx.RemoveMKI(make([]byte, 4))
 	assert.Error(t, err)
 
-	err = c.RemoveMKI(mki1)
+	err = ctx.RemoveMKI(mki1)
 	assert.Error(t, err)
 
-	err = c.SetSendMKI(mki3)
+	err = ctx.SetSendMKI(mki3)
 	assert.NoError(t, err)
 
-	err = c.RemoveMKI(mki1)
+	err = ctx.RemoveMKI(mki1)
 	assert.NoError(t, err)
 
-	err = c.RemoveMKI(mki2)
+	err = ctx.RemoveMKI(mki2)
 	assert.NoError(t, err)
 
-	err = c.RemoveMKI(mki3)
+	err = ctx.RemoveMKI(mki3)
 	assert.Error(t, err)
 }

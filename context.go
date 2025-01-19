@@ -28,7 +28,7 @@ const (
 	srtcpIndexSize = 4
 )
 
-// Encrypt/Decrypt state for a single SRTP SSRC
+// Encrypt/Decrypt state for a single SRTP SSRC.
 type srtpSSRCState struct {
 	ssrc                 uint32
 	rolloverHasProcessed bool
@@ -36,7 +36,7 @@ type srtpSSRCState struct {
 	replayDetector       replaydetector.ReplayDetector
 }
 
-// Encrypt/Decrypt state for a single SRTCP SSRC
+// Encrypt/Decrypt state for a single SRTCP SSRC.
 type srtcpSSRCState struct {
 	srtcpIndex     uint32
 	ssrc           uint32
@@ -60,8 +60,10 @@ type Context struct {
 
 	profile ProtectionProfile
 
-	sendMKI []byte                // Master Key Identifier used for encrypting RTP/RTCP packets. Set to nil if MKI is not enabled.
-	mkis    map[string]srtpCipher // Master Key Identifier to cipher mapping. Used for decrypting packets. Empty if MKI is not enabled.
+	// Master Key Identifier used for encrypting RTP/RTCP packets. Set to nil if MKI is not enabled.
+	sendMKI []byte
+	// Master Key Identifier to cipher mapping. Used for decrypting packets. Empty if MKI is not enabled.
+	mkis map[string]srtpCipher
 
 	encryptSRTP  bool
 	encryptSRTCP bool
@@ -74,7 +76,11 @@ type Context struct {
 // Following example create SRTP Context with replay protection with window size of 256.
 //
 //	decCtx, err := srtp.CreateContext(key, salt, profile, srtp.SRTPReplayProtection(256))
-func CreateContext(masterKey, masterSalt []byte, profile ProtectionProfile, opts ...ContextOption) (c *Context, err error) {
+func CreateContext(
+	masterKey, masterSalt []byte,
+	profile ProtectionProfile,
+	opts ...ContextOption,
+) (c *Context, err error) {
 	c = &Context{
 		srtpSSRCStates:  map[uint32]*srtpSSRCState{},
 		srtcpSSRCStates: map[uint32]*srtcpSSRCState{},
@@ -107,7 +113,8 @@ func CreateContext(masterKey, masterSalt []byte, profile ProtectionProfile, opts
 	return c, nil
 }
 
-// AddCipherForMKI adds new MKI with associated masker key and salt. Context must be created with MasterKeyIndicator option
+// AddCipherForMKI adds new MKI with associated masker key and salt.
+// Context must be created with MasterKeyIndicator option
 // to enable MKI support. MKI must be unique and have the same length as the one used for creating Context.
 // Operation is not thread-safe, you need to provide synchronization with decrypting packets.
 func (c *Context) AddCipherForMKI(mki, masterKey, masterSalt []byte) error {
@@ -126,6 +133,7 @@ func (c *Context) AddCipherForMKI(mki, masterKey, masterSalt []byte) error {
 		return err
 	}
 	c.mkis[string(mki)] = cipher
+
 	return nil
 }
 
@@ -149,7 +157,10 @@ func (c *Context) createCipher(mki, masterKey, masterSalt []byte, encryptSRTP, e
 	switch c.profile {
 	case ProtectionProfileAeadAes128Gcm, ProtectionProfileAeadAes256Gcm:
 		return newSrtpCipherAeadAesGcm(c.profile, masterKey, masterSalt, mki, encryptSRTP, encryptSRTCP)
-	case ProtectionProfileAes128CmHmacSha1_32, ProtectionProfileAes128CmHmacSha1_80, ProtectionProfileAes256CmHmacSha1_32, ProtectionProfileAes256CmHmacSha1_80:
+	case ProtectionProfileAes128CmHmacSha1_32,
+		ProtectionProfileAes128CmHmacSha1_80,
+		ProtectionProfileAes256CmHmacSha1_32,
+		ProtectionProfileAes256CmHmacSha1_80:
 		return newSrtpCipherAesCmHmacSha1(c.profile, masterKey, masterSalt, mki, encryptSRTP, encryptSRTCP)
 	case ProtectionProfileNullHmacSha1_32, ProtectionProfileNullHmacSha1_80:
 		return newSrtpCipherAesCmHmacSha1(c.profile, masterKey, masterSalt, mki, false, false)
@@ -168,6 +179,7 @@ func (c *Context) RemoveMKI(mki []byte) error {
 		return errMKIAlreadyInUse
 	}
 	delete(c.mkis, string(mki))
+
 	return nil
 }
 
@@ -180,19 +192,20 @@ func (c *Context) SetSendMKI(mki []byte) error {
 	}
 	c.sendMKI = mki
 	c.cipher = cipher
+
 	return nil
 }
 
 // https://tools.ietf.org/html/rfc3550#appendix-A.1
 func (s *srtpSSRCState) nextRolloverCount(sequenceNumber uint16) (roc uint32, diff int32, overflow bool) {
 	seq := int32(sequenceNumber)
-	localRoc := uint32(s.index >> 16)
-	localSeq := int32(s.index & (seqNumMax - 1))
+	localRoc := uint32(s.index >> 16)            //nolint:gosec // G115
+	localSeq := int32(s.index & (seqNumMax - 1)) //nolint:gosec // G115
 
 	guessRoc := localRoc
 	var difference int32
 
-	if s.rolloverHasProcessed {
+	if s.rolloverHasProcessed { //nolint:nestif
 		// When localROC is equal to 0, and entering seq-localSeq > seqNumMedian
 		// judgment, it will cause guessRoc calculation error
 		if s.index > seqNumMedian {
@@ -226,6 +239,7 @@ func (s *srtpSSRCState) updateRolloverCount(sequenceNumber uint16, difference in
 	if !s.rolloverHasProcessed {
 		s.index |= uint64(sequenceNumber)
 		s.rolloverHasProcessed = true
+
 		return
 	}
 	if difference > 0 {
@@ -244,6 +258,7 @@ func (c *Context) getSRTPSSRCState(ssrc uint32) *srtpSSRCState {
 		replayDetector: c.newSRTPReplayDetector(),
 	}
 	c.srtpSSRCStates[ssrc] = s
+
 	return s
 }
 
@@ -258,6 +273,7 @@ func (c *Context) getSRTCPSSRCState(ssrc uint32) *srtcpSSRCState {
 		replayDetector: c.newSRTCPReplayDetector(),
 	}
 	c.srtcpSSRCStates[ssrc] = s
+
 	return s
 }
 
@@ -267,7 +283,8 @@ func (c *Context) ROC(ssrc uint32) (uint32, bool) {
 	if !ok {
 		return 0, false
 	}
-	return uint32(s.index >> 16), true
+
+	return uint32(s.index >> 16), true //nolint:gosec // G115
 }
 
 // SetROC sets SRTP rollover counter value of specified SSRC.
@@ -283,6 +300,7 @@ func (c *Context) Index(ssrc uint32) (uint32, bool) {
 	if !ok {
 		return 0, false
 	}
+
 	return s.srtcpIndex, true
 }
 

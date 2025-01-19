@@ -34,11 +34,11 @@ func TestExtractSessionKeysFromDTLS(t *testing.T) {
 		{&Config{Profile: ProtectionProfileAes128CmHmacSha1_80}},
 	}
 
-	m := &mockKeyingMaterialExporter{}
+	mockExporter := &mockKeyingMaterialExporter{}
 
 	for i, tc := range tt {
 		// Test client
-		err := tc.config.ExtractSessionKeysFromDTLS(m, true)
+		err := tc.config.ExtractSessionKeysFromDTLS(mockExporter, true)
 		if err != nil {
 			t.Errorf("failed to extract keys for %d-client: %v", i, err)
 		}
@@ -49,12 +49,15 @@ func TestExtractSessionKeysFromDTLS(t *testing.T) {
 		clientMaterial = append(clientMaterial, keys.LocalMasterSalt...)
 		clientMaterial = append(clientMaterial, keys.RemoteMasterSalt...)
 
-		if !bytes.Equal(clientMaterial, m.exported) {
-			t.Errorf("material reconstruction failed for %d-client:\n%#v\nexpected\n%#v", i, clientMaterial, m.exported)
+		if !bytes.Equal(clientMaterial, mockExporter.exported) {
+			t.Errorf(
+				"material reconstruction failed for %d-client:\n%#v\nexpected\n%#v",
+				i, clientMaterial, mockExporter.exported,
+			)
 		}
 
 		// Test server
-		err = tc.config.ExtractSessionKeysFromDTLS(m, false)
+		err = tc.config.ExtractSessionKeysFromDTLS(mockExporter, false)
 		if err != nil {
 			t.Errorf("failed to extract keys for %d-server: %v", i, err)
 		}
@@ -65,8 +68,11 @@ func TestExtractSessionKeysFromDTLS(t *testing.T) {
 		serverMaterial = append(serverMaterial, keys.RemoteMasterSalt...)
 		serverMaterial = append(serverMaterial, keys.LocalMasterSalt...)
 
-		if !bytes.Equal(serverMaterial, m.exported) {
-			t.Errorf("material reconstruction failed for %d-server:\n%#v\nexpected\n%#v", i, serverMaterial, m.exported)
+		if !bytes.Equal(serverMaterial, mockExporter.exported) {
+			t.Errorf(
+				"material reconstruction failed for %d-server:\n%#v\nexpected\n%#v",
+				i, serverMaterial, mockExporter.exported,
+			)
 		}
 	}
 }

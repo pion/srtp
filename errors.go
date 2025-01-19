@@ -9,9 +9,9 @@ import (
 )
 
 var (
-	// ErrFailedToVerifyAuthTag is returned when decryption fails due to invalid authentication tag
+	// ErrFailedToVerifyAuthTag is returned when decryption fails due to invalid authentication tag.
 	ErrFailedToVerifyAuthTag = errors.New("failed to verify auth tag")
-	// ErrMKINotFound is returned when decryption fails due to unknown MKI value in packet
+	// ErrMKINotFound is returned when decryption fails due to unknown MKI value in packet.
 	ErrMKINotFound = errors.New("MKI not found")
 
 	errDuplicated                    = errors.New("duplicated packet")

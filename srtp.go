@@ -26,10 +26,10 @@ func (c *Context) decryptRTP(dst, ciphertext []byte, header *rtp.Header, headerL
 		return nil, fmt.Errorf("%w: %d", errTooShortRTP, len(ciphertext))
 	}
 
-	s := c.getSRTPSSRCState(header.SSRC)
+	ssrcState := c.getSRTPSSRCState(header.SSRC)
 
-	roc, diff, _ := s.nextRolloverCount(header.SequenceNumber)
-	markAsValid, ok := s.replayDetector.Check(
+	roc, diff, _ := ssrcState.nextRolloverCount(header.SequenceNumber)
+	markAsValid, ok := ssrcState.replayDetector.Check(
 		(uint64(roc) << 16) | uint64(header.SequenceNumber),
 	)
 	if !ok {
@@ -56,11 +56,12 @@ func (c *Context) decryptRTP(dst, ciphertext []byte, header *rtp.Header, headerL
 	}
 
 	markAsValid()
-	s.updateRolloverCount(header.SequenceNumber, diff)
+	ssrcState.updateRolloverCount(header.SequenceNumber, diff)
+
 	return dst, nil
 }
 
-// DecryptRTP decrypts a RTP packet with an encrypted payload
+// DecryptRTP decrypts a RTP packet with an encrypted payload.
 func (c *Context) DecryptRTP(dst, encrypted []byte, header *rtp.Header) ([]byte, error) {
 	if header == nil {
 		header = &rtp.Header{}
@@ -75,7 +76,8 @@ func (c *Context) DecryptRTP(dst, encrypted []byte, header *rtp.Header) ([]byte,
 }
 
 // EncryptRTP marshals and encrypts an RTP packet, writing to the dst buffer provided.
-// If the dst buffer does not have the capacity to hold `len(plaintext) + 10` bytes, a new one will be allocated and returned.
+// If the dst buffer does not have the capacity to hold `len(plaintext) + 10` bytes,
+// a new one will be allocated and returned.
 // If a rtp.Header is provided, it will be Unmarshaled using the plaintext.
 func (c *Context) EncryptRTP(dst []byte, plaintext []byte, header *rtp.Header) ([]byte, error) {
 	if header == nil {

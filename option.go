@@ -16,6 +16,7 @@ func SRTPReplayProtection(windowSize uint) ContextOption { // nolint:revive
 		c.newSRTPReplayDetector = func() replaydetector.ReplayDetector {
 			return replaydetector.New(windowSize, maxROC<<16|maxSequenceNumber)
 		}
+
 		return nil
 	}
 }
@@ -26,6 +27,7 @@ func SRTCPReplayProtection(windowSize uint) ContextOption {
 		c.newSRTCPReplayDetector = func() replaydetector.ReplayDetector {
 			return replaydetector.New(windowSize, maxSRTCPIndex)
 		}
+
 		return nil
 	}
 }
@@ -36,6 +38,7 @@ func SRTPNoReplayProtection() ContextOption { // nolint:revive
 		c.newSRTPReplayDetector = func() replaydetector.ReplayDetector {
 			return &nopReplayDetector{}
 		}
+
 		return nil
 	}
 }
@@ -46,6 +49,7 @@ func SRTCPNoReplayProtection() ContextOption {
 		c.newSRTCPReplayDetector = func() replaydetector.ReplayDetector {
 			return &nopReplayDetector{}
 		}
+
 		return nil
 	}
 }
@@ -54,6 +58,7 @@ func SRTCPNoReplayProtection() ContextOption {
 func SRTPReplayDetectorFactory(fn func() replaydetector.ReplayDetector) ContextOption { // nolint:revive
 	return func(c *Context) error {
 		c.newSRTPReplayDetector = fn
+
 		return nil
 	}
 }
@@ -62,6 +67,7 @@ func SRTPReplayDetectorFactory(fn func() replaydetector.ReplayDetector) ContextO
 func SRTCPReplayDetectorFactory(fn func() replaydetector.ReplayDetector) ContextOption {
 	return func(c *Context) error {
 		c.newSRTCPReplayDetector = fn
+
 		return nil
 	}
 }
@@ -81,6 +87,7 @@ func MasterKeyIndicator(mki []byte) ContextOption {
 			c.sendMKI = make([]byte, len(mki))
 			copy(c.sendMKI, mki)
 		}
+
 		return nil
 	}
 }
@@ -89,15 +96,18 @@ func MasterKeyIndicator(mki []byte) ContextOption {
 func SRTPEncryption() ContextOption { // nolint:revive
 	return func(c *Context) error {
 		c.encryptSRTP = true
+
 		return nil
 	}
 }
 
-// SRTPNoEncryption disables SRTP encryption. This option is useful when you want to use NullCipher for SRTP and keep authentication only.
+// SRTPNoEncryption disables SRTP encryption.
+// This option is useful when you want to use NullCipher for SRTP and keep authentication only.
 // It simplifies debugging and testing, but it is not recommended for production use.
 func SRTPNoEncryption() ContextOption { // nolint:revive
 	return func(c *Context) error {
 		c.encryptSRTP = false
+
 		return nil
 	}
 }
@@ -106,15 +116,18 @@ func SRTPNoEncryption() ContextOption { // nolint:revive
 func SRTCPEncryption() ContextOption {
 	return func(c *Context) error {
 		c.encryptSRTCP = true
+
 		return nil
 	}
 }
 
-// SRTCPNoEncryption disables SRTCP encryption. This option is useful when you want to use NullCipher for SRTCP and keep authentication only.
+// SRTCPNoEncryption disables SRTCP encryption.
+// This option is useful when you want to use NullCipher for SRTCP and keep authentication only.
 // It simplifies debugging and testing, but it is not recommended for production use.
 func SRTCPNoEncryption() ContextOption {
 	return func(c *Context) error {
 		c.encryptSRTCP = false
+
 		return nil
 	}
 }

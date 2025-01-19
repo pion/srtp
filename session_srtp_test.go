@@ -25,7 +25,9 @@ func TestSessionSRTPBadInit(t *testing.T) {
 	}
 }
 
-func buildSessionSRTP(t *testing.T) (*SessionSRTP, net.Conn, *Config) {
+func buildSessionSRTP(t *testing.T) (*SessionSRTP, net.Conn, *Config) { //nolint:dupl
+	t.Helper()
+
 	aPipe, bPipe := net.Pipe()
 	config := &Config{
 		Profile: ProtectionProfileAes128CmHmacSha1_80,
@@ -48,6 +50,8 @@ func buildSessionSRTP(t *testing.T) (*SessionSRTP, net.Conn, *Config) {
 }
 
 func buildSessionSRTPPair(t *testing.T) (*SessionSRTP, *SessionSRTP) { //nolint:dupl
+	t.Helper()
+
 	aSession, bPipe, config := buildSessionSRTP(t)
 	bSession, err := NewSessionSRTP(bPipe, config)
 	if err != nil {
@@ -106,7 +110,7 @@ func TestSessionSRTP(t *testing.T) {
 	}
 }
 
-func TestSessionSRTPWithIODeadline(t *testing.T) {
+func TestSessionSRTPWithIODeadline(t *testing.T) { //nolint:cyclop
 	lim := test.TimeOut(time.Second * 10)
 	defer lim.Stop()
 
@@ -272,7 +276,7 @@ func TestSessionSRTPMultiSSRC(t *testing.T) {
 	}
 }
 
-func TestSessionSRTPReplayProtection(t *testing.T) {
+func TestSessionSRTPReplayProtection(t *testing.T) { //nolint:cyclop
 	lim := test.TimeOut(time.Second * 5)
 	defer lim.Stop()
 
@@ -394,7 +398,14 @@ func TestSessionSRTPAcceptStreamTimeout(t *testing.T) {
 	}
 }
 
-func assertPayloadSRTP(t *testing.T, stream *ReadStreamSRTP, headerSize int, expectedPayload []byte) (seq uint16, err error) {
+func assertPayloadSRTP(
+	t *testing.T,
+	stream *ReadStreamSRTP,
+	headerSize int,
+	expectedPayload []byte,
+) (seq uint16, err error) {
+	t.Helper()
+
 	readBuffer := make([]byte, headerSize+len(expectedPayload))
 	n, hdr, err := stream.ReadRTP(readBuffer)
 	if errors.Is(err, io.EOF) {
@@ -402,12 +413,15 @@ func assertPayloadSRTP(t *testing.T, stream *ReadStreamSRTP, headerSize int, exp
 	}
 	if err != nil {
 		t.Error(err)
+
 		return 0, err
 	}
 	if !bytes.Equal(expectedPayload, readBuffer[headerSize:n]) {
 		t.Errorf("Sent buffer does not match the one received exp(%v) actual(%v)", expectedPayload, readBuffer[headerSize:n])
+
 		return 0, errPayloadDiffers
 	}
+
 	return hdr.SequenceNumber, nil
 }
 
@@ -422,5 +436,6 @@ func encryptSRTP(context *Context, pkt *rtp.Packet) ([]byte, error) {
 	if eerr != nil {
 		return nil, eerr
 	}
+
 	return encrypted, nil
 }

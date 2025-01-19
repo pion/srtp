@@ -37,6 +37,8 @@ func (tc rtpTestCase) encrypted(profile ProtectionProfile) []byte {
 }
 
 func testKeyLen(t *testing.T, profile ProtectionProfile) {
+	t.Helper()
+
 	keyLen, err := profile.KeyLen()
 	assert.NoError(t, err)
 
@@ -69,97 +71,99 @@ func TestValidPacketCounter(t *testing.T) {
 	assert.NoError(t, err)
 
 	s := &srtpSSRCState{ssrc: 4160032510}
-	expectedCounter := []byte{0xcf, 0x90, 0x1e, 0xa5, 0xda, 0xd3, 0x2c, 0x15, 0x00, 0xa2, 0x24, 0xae, 0xae, 0xaf, 0x00, 0x00}
-	counter := generateCounter(32846, uint32(s.index>>16), s.ssrc, srtpSessionSalt)
+	expectedCounter := []byte{
+		0xcf, 0x90, 0x1e, 0xa5, 0xda, 0xd3, 0x2c, 0x15, 0x00, 0xa2, 0x24, 0xae, 0xae, 0xaf, 0x00, 0x00,
+	}
+	counter := generateCounter(32846, uint32(s.index>>16), s.ssrc, srtpSessionSalt) //nolint:gosec // G115
 	if !bytes.Equal(counter[:], expectedCounter) {
 		t.Errorf("Session Key % 02x does not match expected % 02x", counter, expectedCounter)
 	}
 }
 
-func TestRolloverCount(t *testing.T) {
-	s := &srtpSSRCState{ssrc: defaultSsrc}
+func TestRolloverCount(t *testing.T) { //nolint:cyclop
+	ssrcState := &srtpSSRCState{ssrc: defaultSsrc}
 
 	// Set initial seqnum
-	roc, diff, ovf := s.nextRolloverCount(65530)
+	roc, diff, ovf := ssrcState.nextRolloverCount(65530)
 	if roc != 0 {
 		t.Errorf("Initial rolloverCounter must be 0")
 	}
 	if ovf {
 		t.Error("Should not overflow")
 	}
-	s.updateRolloverCount(65530, diff)
+	ssrcState.updateRolloverCount(65530, diff)
 
 	// Invalid packets never update ROC
-	s.nextRolloverCount(0)
-	s.nextRolloverCount(0x4000)
-	s.nextRolloverCount(0x8000)
-	s.nextRolloverCount(0xFFFF)
-	s.nextRolloverCount(0)
+	ssrcState.nextRolloverCount(0)
+	ssrcState.nextRolloverCount(0x4000)
+	ssrcState.nextRolloverCount(0x8000)
+	ssrcState.nextRolloverCount(0xFFFF)
+	ssrcState.nextRolloverCount(0)
 
 	// We rolled over to 0
-	roc, diff, ovf = s.nextRolloverCount(0)
+	roc, diff, ovf = ssrcState.nextRolloverCount(0)
 	if roc != 1 {
 		t.Errorf("rolloverCounter was not updated after it crossed 0")
 	}
 	if ovf {
 		t.Error("Should not overflow")
 	}
-	s.updateRolloverCount(0, diff)
+	ssrcState.updateRolloverCount(0, diff)
 
-	roc, diff, ovf = s.nextRolloverCount(65530)
+	roc, diff, ovf = ssrcState.nextRolloverCount(65530)
 	if roc != 0 {
 		t.Errorf("rolloverCounter was not updated when it rolled back, failed to handle out of order")
 	}
 	if ovf {
 		t.Error("Should not overflow")
 	}
-	s.updateRolloverCount(65530, diff)
+	ssrcState.updateRolloverCount(65530, diff)
 
-	roc, diff, ovf = s.nextRolloverCount(5)
+	roc, diff, ovf = ssrcState.nextRolloverCount(5)
 	if roc != 1 {
 		t.Errorf("rolloverCounter was not updated when it rolled over initial, to handle out of order")
 	}
 	if ovf {
 		t.Error("Should not overflow")
 	}
-	s.updateRolloverCount(5, diff)
+	ssrcState.updateRolloverCount(5, diff)
 
-	_, diff, _ = s.nextRolloverCount(6)
-	s.updateRolloverCount(6, diff)
-	_, diff, _ = s.nextRolloverCount(7)
-	s.updateRolloverCount(7, diff)
-	roc, diff, _ = s.nextRolloverCount(8)
+	_, diff, _ = ssrcState.nextRolloverCount(6)
+	ssrcState.updateRolloverCount(6, diff)
+	_, diff, _ = ssrcState.nextRolloverCount(7)
+	ssrcState.updateRolloverCount(7, diff)
+	roc, diff, _ = ssrcState.nextRolloverCount(8)
 	if roc != 1 {
 		t.Errorf("rolloverCounter was improperly updated for non-significant packets")
 	}
-	s.updateRolloverCount(8, diff)
+	ssrcState.updateRolloverCount(8, diff)
 
 	// valid packets never update ROC
-	roc, diff, ovf = s.nextRolloverCount(0x4000)
+	roc, diff, ovf = ssrcState.nextRolloverCount(0x4000)
 	if roc != 1 {
 		t.Errorf("rolloverCounter was improperly updated for non-significant packets")
 	}
 	if ovf {
 		t.Error("Should not overflow")
 	}
-	s.updateRolloverCount(0x4000, diff)
-	roc, diff, ovf = s.nextRolloverCount(0x8000)
+	ssrcState.updateRolloverCount(0x4000, diff)
+	roc, diff, ovf = ssrcState.nextRolloverCount(0x8000)
 	if roc != 1 {
 		t.Errorf("rolloverCounter was improperly updated for non-significant packets")
 	}
 	if ovf {
 		t.Error("Should not overflow")
 	}
-	s.updateRolloverCount(0x8000, diff)
-	roc, diff, ovf = s.nextRolloverCount(0xFFFF)
+	ssrcState.updateRolloverCount(0x8000, diff)
+	roc, diff, ovf = ssrcState.nextRolloverCount(0xFFFF)
 	if roc != 1 {
 		t.Errorf("rolloverCounter was improperly updated for non-significant packets")
 	}
 	if ovf {
 		t.Error("Should not overflow")
 	}
-	s.updateRolloverCount(0xFFFF, diff)
-	roc, _, ovf = s.nextRolloverCount(0)
+	ssrcState.updateRolloverCount(0xFFFF, diff)
+	roc, _, ovf = ssrcState.nextRolloverCount(0)
 	if roc != 2 {
 		t.Errorf("rolloverCounter must be incremented after wrapping, got %d", roc)
 	}
@@ -237,37 +241,71 @@ func rtpTestCases() []rtpTestCase {
 		{
 			sequenceNumber: 5000,
 			encryptedCTR:   []byte{0x6d, 0xd3, 0x7e, 0xd5, 0x99, 0xb7, 0x2d, 0x28, 0xb1, 0xf3, 0xa1, 0xf0, 0xc, 0xfb, 0xfd, 0x8},
-			encryptedGCM:   []byte{0x05, 0x39, 0x62, 0xbb, 0x50, 0x2a, 0x08, 0x19, 0xc7, 0xcc, 0xc9, 0x24, 0xb8, 0xd9, 0x7a, 0xe5, 0xad, 0x99, 0x06, 0xc7, 0x3b, 0},
+			encryptedGCM: []byte{
+				0x05, 0x39, 0x62, 0xbb, 0x50, 0x2a, 0x08, 0x19, 0xc7, 0xcc, 0xc9,
+				0x24, 0xb8, 0xd9, 0x7a, 0xe5, 0xad, 0x99, 0x06, 0xc7, 0x3b, 0x00,
+			},
 		},
 		{
 			sequenceNumber: 5001,
-			encryptedCTR:   []byte{0xda, 0x47, 0xb, 0x2a, 0x74, 0x53, 0x65, 0xbd, 0x2f, 0xeb, 0xdc, 0x4b, 0x6d, 0x23, 0xf3, 0xde},
-			encryptedGCM:   []byte{0xb0, 0xbc, 0xfc, 0xb0, 0x15, 0x2c, 0xa0, 0x15, 0xb5, 0xa8, 0xcd, 0x0d, 0x65, 0xfa, 0x98, 0xb3, 0x09, 0xb1, 0xf8, 0x4b, 0x1c, 0xfa},
+			encryptedCTR: []byte{
+				0xda, 0x47, 0x0b, 0x2a, 0x74, 0x53, 0x65, 0xbd, 0x2f, 0xeb, 0xdc,
+				0x4b, 0x6d, 0x23, 0xf3, 0xde,
+			},
+			encryptedGCM: []byte{
+				0xb0, 0xbc, 0xfc, 0xb0, 0x15, 0x2c, 0xa0, 0x15, 0xb5, 0xa8, 0xcd,
+				0x0d, 0x65, 0xfa, 0x98, 0xb3, 0x09, 0xb1, 0xf8, 0x4b, 0x1c, 0xfa,
+			},
 		},
 		{
 			sequenceNumber: 5002,
-			encryptedCTR:   []byte{0x6e, 0xa7, 0x69, 0x8d, 0x24, 0x6d, 0xdc, 0xbf, 0xec, 0x2, 0x1c, 0xd1, 0x60, 0x76, 0xc1, 0xe},
-			encryptedGCM:   []byte{0x5e, 0x20, 0x6a, 0xbf, 0x58, 0x7e, 0x24, 0xc0, 0x15, 0x94, 0x7a, 0xe2, 0x49, 0x25, 0xd4, 0xd4, 0x08, 0xe2, 0xf1, 0x47, 0x7a, 0x33},
+			encryptedCTR: []byte{
+				0x6e, 0xa7, 0x69, 0x8d, 0x24, 0x6d, 0xdc, 0xbf, 0xec, 0x02, 0x1c,
+				0xd1, 0x60, 0x76, 0xc1, 0xe,
+			},
+			encryptedGCM: []byte{
+				0x5e, 0x20, 0x6a, 0xbf, 0x58, 0x7e, 0x24, 0xc0, 0x15, 0x94, 0x7a,
+				0xe2, 0x49, 0x25, 0xd4, 0xd4, 0x08, 0xe2, 0xf1, 0x47, 0x7a, 0x33,
+			},
 		},
 		{
 			sequenceNumber: 5003,
-			encryptedCTR:   []byte{0x24, 0x7e, 0x96, 0xc8, 0x7d, 0x33, 0xa2, 0x92, 0x8d, 0x13, 0x8d, 0xe0, 0x76, 0x9f, 0x8, 0xdc},
-			encryptedGCM:   []byte{0xb0, 0x63, 0x14, 0xe7, 0xd2, 0x29, 0xca, 0x92, 0x8c, 0x97, 0x25, 0xd2, 0x50, 0x69, 0x6e, 0x1b, 0x04, 0xb9, 0x37, 0xa5, 0xa1, 0xc5},
+			encryptedCTR: []byte{
+				0x24, 0x7e, 0x96, 0xc8, 0x7d, 0x33, 0xa2, 0x92, 0x8d, 0x13, 0x8d,
+				0xe0, 0x76, 0x9f, 0x8, 0xdc,
+			},
+			encryptedGCM: []byte{
+				0xb0, 0x63, 0x14, 0xe7, 0xd2, 0x29, 0xca, 0x92, 0x8c, 0x97, 0x25,
+				0xd2, 0x50, 0x69, 0x6e, 0x1b, 0x04, 0xb9, 0x37, 0xa5, 0xa1, 0xc5,
+			},
 		},
 		{
 			sequenceNumber: 5004,
-			encryptedCTR:   []byte{0x75, 0x43, 0x28, 0xe4, 0x3a, 0x77, 0x59, 0x9b, 0x2e, 0xdf, 0x7b, 0x12, 0x68, 0xb, 0x57, 0x49},
-			encryptedGCM:   []byte{0xb2, 0x4f, 0x19, 0x53, 0x79, 0x8a, 0x9b, 0x9e, 0xe5, 0x22, 0x93, 0x14, 0x50, 0x8a, 0x8c, 0xd5, 0xfc, 0x61, 0xbf, 0x95, 0xd1, 0xfb},
+			encryptedCTR: []byte{
+				0x75, 0x43, 0x28, 0xe4, 0x3a, 0x77, 0x59, 0x9b, 0x2e, 0xdf, 0x7b,
+				0x12, 0x68, 0xb, 0x57, 0x49,
+			},
+			encryptedGCM: []byte{
+				0xb2, 0x4f, 0x19, 0x53, 0x79, 0x8a, 0x9b, 0x9e, 0xe5, 0x22, 0x93,
+				0x14, 0x50, 0x8a, 0x8c, 0xd5, 0xfc, 0x61, 0xbf, 0x95, 0xd1, 0xfb,
+			},
 		},
 		{
 			sequenceNumber: 65535, // upper boundary
-			encryptedCTR:   []byte{0xaf, 0xf7, 0xc2, 0x70, 0x37, 0x20, 0x83, 0x9c, 0x2c, 0x63, 0x85, 0x15, 0xe, 0x44, 0xca, 0x36},
-			encryptedGCM:   []byte{0x40, 0x44, 0x6c, 0xd1, 0x33, 0x5f, 0xca, 0x9b, 0x2e, 0xa3, 0xe5, 0x03, 0xd7, 0x82, 0x36, 0xd8, 0xb7, 0xe8, 0x97, 0x3c, 0xe6, 0xb6},
+			encryptedCTR: []byte{
+				0xaf, 0xf7, 0xc2, 0x70, 0x37, 0x20, 0x83, 0x9c, 0x2c, 0x63, 0x85,
+				0x15, 0xe, 0x44, 0xca, 0x36,
+			},
+			encryptedGCM: []byte{
+				0x40, 0x44, 0x6c, 0xd1, 0x33, 0x5f, 0xca, 0x9b, 0x2e, 0xa3, 0xe5,
+				0x03, 0xd7, 0x82, 0x36, 0xd8, 0xb7, 0xe8, 0x97, 0x3c, 0xe6, 0xb6,
+			},
 		},
 	}
 }
 
 func testRTPLifecyleNewAlloc(t *testing.T, profile ProtectionProfile) {
+	t.Helper()
 	assert := assert.New(t)
 
 	authTagLen, err := profile.AuthTagRTPLen()
@@ -284,13 +322,19 @@ func testRTPLifecyleNewAlloc(t *testing.T, profile ProtectionProfile) {
 			t.Fatal(err)
 		}
 
-		decryptedPkt := &rtp.Packet{Payload: rtpTestCaseDecrypted(), Header: rtp.Header{SequenceNumber: testCase.sequenceNumber}}
+		decryptedPkt := &rtp.Packet{
+			Payload: rtpTestCaseDecrypted(),
+			Header:  rtp.Header{SequenceNumber: testCase.sequenceNumber},
+		}
 		decryptedRaw, err := decryptedPkt.Marshal()
 		if err != nil {
 			t.Fatal(err)
 		}
 
-		encryptedPkt := &rtp.Packet{Payload: testCase.encrypted(profile), Header: rtp.Header{SequenceNumber: testCase.sequenceNumber}}
+		encryptedPkt := &rtp.Packet{
+			Payload: testCase.encrypted(profile),
+			Header:  rtp.Header{SequenceNumber: testCase.sequenceNumber},
+		}
 		encryptedRaw, err := encryptedPkt.Marshal()
 		if err != nil {
 			t.Fatal(err)
@@ -318,7 +362,8 @@ func TestRTPLifecycleNewAlloc(t *testing.T) {
 	t.Run("GCM", func(t *testing.T) { testRTPLifecyleNewAlloc(t, profileGCM) })
 }
 
-func testRTPLifecyleInPlace(t *testing.T, profile ProtectionProfile) {
+func testRTPLifecyleInPlace(t *testing.T, profile ProtectionProfile) { //nolint:cyclop
+	t.Helper()
 	assert := assert.New(t)
 
 	for _, testCase := range rtpTestCases() {
@@ -333,14 +378,20 @@ func testRTPLifecyleInPlace(t *testing.T, profile ProtectionProfile) {
 		}
 
 		decryptHeader := &rtp.Header{}
-		decryptedPkt := &rtp.Packet{Payload: rtpTestCaseDecrypted(), Header: rtp.Header{SequenceNumber: testCase.sequenceNumber}}
+		decryptedPkt := &rtp.Packet{
+			Payload: rtpTestCaseDecrypted(),
+			Header:  rtp.Header{SequenceNumber: testCase.sequenceNumber},
+		}
 		decryptedRaw, err := decryptedPkt.Marshal()
 		if err != nil {
 			t.Fatal(err)
 		}
 
 		encryptHeader := &rtp.Header{}
-		encryptedPkt := &rtp.Packet{Payload: testCase.encrypted(profile), Header: rtp.Header{SequenceNumber: testCase.sequenceNumber}}
+		encryptedPkt := &rtp.Packet{
+			Payload: testCase.encrypted(profile),
+			Header:  rtp.Header{SequenceNumber: testCase.sequenceNumber},
+		}
 		encryptedRaw, err := encryptedPkt.Marshal()
 		if err != nil {
 			t.Fatal(err)
@@ -387,7 +438,8 @@ func TestRTPLifecycleInPlace(t *testing.T) {
 	t.Run("GCM", func(t *testing.T) { testRTPLifecyleInPlace(t, profileGCM) })
 }
 
-func testRTPReplayProtection(t *testing.T, profile ProtectionProfile) {
+func testRTPReplayProtection(t *testing.T, profile ProtectionProfile) { //nolint:cyclop
+	t.Helper()
 	assert := assert.New(t)
 
 	for _, testCase := range rtpTestCases() {
@@ -404,14 +456,20 @@ func testRTPReplayProtection(t *testing.T, profile ProtectionProfile) {
 		}
 
 		decryptHeader := &rtp.Header{}
-		decryptedPkt := &rtp.Packet{Payload: rtpTestCaseDecrypted(), Header: rtp.Header{SequenceNumber: testCase.sequenceNumber}}
+		decryptedPkt := &rtp.Packet{
+			Payload: rtpTestCaseDecrypted(),
+			Header:  rtp.Header{SequenceNumber: testCase.sequenceNumber},
+		}
 		decryptedRaw, err := decryptedPkt.Marshal()
 		if err != nil {
 			t.Fatal(err)
 		}
 
 		encryptHeader := &rtp.Header{}
-		encryptedPkt := &rtp.Packet{Payload: testCase.encrypted(profile), Header: rtp.Header{SequenceNumber: testCase.sequenceNumber}}
+		encryptedPkt := &rtp.Packet{
+			Payload: testCase.encrypted(profile),
+			Header:  rtp.Header{SequenceNumber: testCase.sequenceNumber},
+		}
 		encryptedRaw, err := encryptedPkt.Marshal()
 		if err != nil {
 			t.Fatal(err)
@@ -472,6 +530,7 @@ func TestRTPReplayDetectorFactory(t *testing.T) {
 	decryptContext, err := buildTestContext(
 		profile, SRTPReplayDetectorFactory(func() replaydetector.ReplayDetector {
 			cntFactory++
+
 			return &nopReplayDetector{}
 		}),
 	)
@@ -495,6 +554,8 @@ func TestRTPReplayDetectorFactory(t *testing.T) {
 }
 
 func benchmarkEncryptRTP(b *testing.B, profile ProtectionProfile, size int) {
+	b.Helper()
+
 	encryptContext, err := buildTestContext(profile)
 	if err != nil {
 		b.Fatal(err)
@@ -533,6 +594,8 @@ func BenchmarkEncryptRTP(b *testing.B) {
 }
 
 func benchmarkEncryptRTPInPlace(b *testing.B, profile ProtectionProfile, size int) {
+	b.Helper()
+
 	encryptContext, err := buildTestContext(profile)
 	if err != nil {
 		b.Fatal(err)
@@ -573,6 +636,8 @@ func BenchmarkEncryptRTPInPlace(b *testing.B) {
 }
 
 func benchmarkDecryptRTP(b *testing.B, profile ProtectionProfile) {
+	b.Helper()
+
 	sequenceNumber := uint16(5000)
 	encrypted := rtpTestCases()[0].encrypted(profile)
 
@@ -609,91 +674,91 @@ func BenchmarkDecryptRTP(b *testing.B) {
 	b.Run("GCM", func(b *testing.B) { benchmarkDecryptRTP(b, profileGCM) })
 }
 
-func TestRolloverCount2(t *testing.T) {
-	s := &srtpSSRCState{ssrc: defaultSsrc}
+func TestRolloverCount2(t *testing.T) { //nolint:cyclop
+	srtpState := &srtpSSRCState{ssrc: defaultSsrc}
 
-	roc, diff, ovf := s.nextRolloverCount(30123)
+	roc, diff, ovf := srtpState.nextRolloverCount(30123)
 	if roc != 0 {
 		t.Errorf("Initial rolloverCounter must be 0")
 	}
 	if ovf {
 		t.Error("Should not overflow")
 	}
-	s.updateRolloverCount(30123, diff)
+	srtpState.updateRolloverCount(30123, diff)
 
-	roc, diff, ovf = s.nextRolloverCount(62892) // 30123 + (1 << 15) + 1
+	roc, diff, ovf = srtpState.nextRolloverCount(62892) // 30123 + (1 << 15) + 1
 	if roc != 0 {
 		t.Errorf("Initial rolloverCounter must be 0")
 	}
 	if ovf {
 		t.Error("Should not overflow")
 	}
-	s.updateRolloverCount(62892, diff)
-	roc, diff, ovf = s.nextRolloverCount(204)
+	srtpState.updateRolloverCount(62892, diff)
+	roc, diff, ovf = srtpState.nextRolloverCount(204)
 	if roc != 1 {
 		t.Errorf("rolloverCounter was not updated after it crossed 0")
 	}
 	if ovf {
 		t.Error("Should not overflow")
 	}
-	s.updateRolloverCount(62892, diff)
-	roc, diff, ovf = s.nextRolloverCount(64535)
+	srtpState.updateRolloverCount(62892, diff)
+	roc, diff, ovf = srtpState.nextRolloverCount(64535)
 	if roc != 0 {
 		t.Errorf("rolloverCounter was not updated when it rolled back, failed to handle out of order")
 	}
 	if ovf {
 		t.Error("Should not overflow")
 	}
-	s.updateRolloverCount(64535, diff)
-	roc, diff, ovf = s.nextRolloverCount(205)
+	srtpState.updateRolloverCount(64535, diff)
+	roc, diff, ovf = srtpState.nextRolloverCount(205)
 	if roc != 1 {
 		t.Errorf("rolloverCounter was improperly updated for non-significant packets")
 	}
 	if ovf {
 		t.Error("Should not overflow")
 	}
-	s.updateRolloverCount(205, diff)
-	roc, diff, ovf = s.nextRolloverCount(1)
+	srtpState.updateRolloverCount(205, diff)
+	roc, diff, ovf = srtpState.nextRolloverCount(1)
 	if roc != 1 {
 		t.Errorf("rolloverCounter was improperly updated for non-significant packets")
 	}
 	if ovf {
 		t.Error("Should not overflow")
 	}
-	s.updateRolloverCount(1, diff)
+	srtpState.updateRolloverCount(1, diff)
 
-	roc, diff, ovf = s.nextRolloverCount(64532)
+	roc, diff, ovf = srtpState.nextRolloverCount(64532)
 	if roc != 0 {
 		t.Errorf("rolloverCounter was improperly updated for non-significant packets")
 	}
 	if ovf {
 		t.Error("Should not overflow")
 	}
-	s.updateRolloverCount(64532, diff)
-	roc, diff, ovf = s.nextRolloverCount(65534)
+	srtpState.updateRolloverCount(64532, diff)
+	roc, diff, ovf = srtpState.nextRolloverCount(65534)
 	if roc != 0 {
 		t.Errorf("index was improperly updated for non-significant packets")
 	}
 	if ovf {
 		t.Error("Should not overflow")
 	}
-	s.updateRolloverCount(65534, diff)
-	roc, diff, ovf = s.nextRolloverCount(64532)
+	srtpState.updateRolloverCount(65534, diff)
+	roc, diff, ovf = srtpState.nextRolloverCount(64532)
 	if roc != 0 {
 		t.Errorf("index was improperly updated for non-significant packets")
 	}
 	if ovf {
 		t.Error("Should not overflow")
 	}
-	s.updateRolloverCount(65532, diff)
-	roc, diff, ovf = s.nextRolloverCount(205)
+	srtpState.updateRolloverCount(65532, diff)
+	roc, diff, ovf = srtpState.nextRolloverCount(205)
 	if roc != 1 {
 		t.Errorf("index was not updated after it crossed 0")
 	}
 	if ovf {
 		t.Error("Should not overflow")
 	}
-	s.updateRolloverCount(65532, diff)
+	srtpState.updateRolloverCount(65532, diff)
 }
 
 func TestProtectionProfileAes128CmHmacSha1_32(t *testing.T) {
@@ -745,7 +810,10 @@ func TestRTPDecryptShotenedPacket(t *testing.T) {
 					t.Fatal(err)
 				}
 
-				encryptedPkt := &rtp.Packet{Payload: testCase.encrypted(profile), Header: rtp.Header{SequenceNumber: testCase.sequenceNumber}}
+				encryptedPkt := &rtp.Packet{
+					Payload: testCase.encrypted(profile),
+					Header:  rtp.Header{SequenceNumber: testCase.sequenceNumber},
+				}
 				encryptedRaw, err := encryptedPkt.Marshal()
 				if err != nil {
 					t.Fatal(err)
@@ -810,7 +878,7 @@ func TestRTPMaxPackets(t *testing.T) {
 	}
 }
 
-func TestRTPBurstLossWithSetROC(t *testing.T) {
+func TestRTPBurstLossWithSetROC(t *testing.T) { //nolint:cyclop
 	profiles := map[string]ProtectionProfile{
 		"CTR": profileCTR,
 		"GCM": profileGCM,
@@ -836,7 +904,7 @@ func TestRTPBurstLossWithSetROC(t *testing.T) {
 			var pkts []*packetWithROC
 			encryptContext.SetROC(1, 3)
 			for i := 0x8C00; i < 0x20400; i += 0x100 {
-				p := &packetWithROC{
+				packet := &packetWithROC{
 					pkt: rtp.Packet{
 						Payload: []byte{
 							byte(i >> 16),
@@ -846,25 +914,25 @@ func TestRTPBurstLossWithSetROC(t *testing.T) {
 						Header: rtp.Header{
 							Marker:         true,
 							SSRC:           1,
-							SequenceNumber: uint16(i),
+							SequenceNumber: uint16(i), //nolint:gosec // G115
 						},
 					},
 				}
-				b, errMarshal := p.pkt.Marshal()
+				b, errMarshal := packet.pkt.Marshal()
 				if errMarshal != nil {
 					t.Fatal(errMarshal)
 				}
-				p.raw = b
+				packet.raw = b
 				enc, errEnc := encryptContext.EncryptRTP(nil, b, nil)
 				if errEnc != nil {
 					t.Fatal(errEnc)
 				}
-				p.roc, _ = encryptContext.ROC(1)
+				packet.roc, _ = encryptContext.ROC(1)
 				if 0x9000 < i && i < 0x20100 {
 					continue
 				}
-				p.enc = enc
-				pkts = append(pkts, p)
+				packet.enc = enc
+				pkts = append(pkts, packet)
 			}
 
 			decryptContext, err := buildTestContext(profile)
@@ -877,6 +945,7 @@ func TestRTPBurstLossWithSetROC(t *testing.T) {
 				pkt, err := decryptContext.DecryptRTP(nil, p.enc, nil)
 				if err != nil {
 					t.Errorf("roc=%d, seq=%d: %v", p.roc, p.pkt.SequenceNumber, err)
+
 					continue
 				}
 				assert.Equal(p.raw, pkt)
@@ -892,7 +961,10 @@ func TestDecryptInvalidSRTP(t *testing.T) {
 	decryptContext, err := CreateContext(key, salt, ProtectionProfileAes128CmHmacSha1_80)
 	assert.NoError(err)
 
-	packet := []byte{0x41, 0x02, 0x07, 0xf9, 0xf9, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xb5, 0x73, 0x19, 0xf6, 0x91, 0xbb, 0x3e, 0xa5, 0x21, 0x07}
+	packet := []byte{
+		0x41, 0x02, 0x07, 0xf9, 0xf9, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+		0x00, 0xb5, 0x73, 0x19, 0xf6, 0x91, 0xbb, 0x3e, 0xa5, 0x21, 0x07,
+	}
 	_, err = decryptContext.DecryptRTP(nil, packet, nil)
 	assert.Error(err)
 }
@@ -931,7 +1003,7 @@ func TestRTPInvalidMKI(t *testing.T) {
 	}
 }
 
-func TestRTPHandleMultipleMKI(t *testing.T) {
+func TestRTPHandleMultipleMKI(t *testing.T) { //nolint:cyclop
 	mki1 := []byte{0x01, 0x02, 0x03, 0x04}
 	mki2 := []byte{0x02, 0x03, 0x04, 0x05}
 
@@ -987,7 +1059,7 @@ func TestRTPHandleMultipleMKI(t *testing.T) {
 	}
 }
 
-func TestRTPSwitchMKI(t *testing.T) {
+func TestRTPSwitchMKI(t *testing.T) { //nolint:cyclop
 	mki1 := []byte{0x01, 0x02, 0x03, 0x04}
 	mki2 := []byte{0x02, 0x03, 0x04, 0x05}
 

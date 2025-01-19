@@ -13,10 +13,11 @@ func growBufferSize(buf []byte, size int) []byte {
 
 	buf2 := make([]byte, size)
 	copy(buf2, buf)
+
 	return buf2
 }
 
-// Check if buffers match, if not allocate a new buffer and return it
+// Check if buffers match, if not allocate a new buffer and return it.
 func allocateIfMismatch(dst, src []byte) []byte {
 	if dst == nil {
 		dst = make([]byte, len(src))
@@ -24,7 +25,7 @@ func allocateIfMismatch(dst, src []byte) []byte {
 	} else if !bytes.Equal(dst, src) { // bytes.Equal returns on ref equality, no optimization needed
 		extraNeeded := len(src) - len(dst)
 		if extraNeeded > 0 {
-			dst = append(dst, make([]byte, extraNeeded)...)
+			dst = append(dst, make([]byte, extraNeeded)...) //nolint:makezero // todo: fix
 		} else if extraNeeded < 0 {
 			dst = dst[:len(dst)+extraNeeded]
 		}
