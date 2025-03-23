@@ -4,9 +4,7 @@
 package srtp
 
 import (
-	"bytes"
 	"encoding/binary"
-	"errors"
 	"testing"
 
 	"github.com/pion/rtcp"
@@ -128,30 +126,22 @@ func TestRTCPLifecycle(t *testing.T) {
 			for caseName, testCase := range rtcpTestCases() {
 				testCase := testCase
 				t.Run(caseName, func(t *testing.T) {
-					assert := assert.New(t)
+					assertT := assert.New(t)
 					encryptContext, err := CreateContext(testCase.masterKey, testCase.masterSalt, testCase.algo, option...)
-					if err != nil {
-						t.Errorf("CreateContext failed: %v", err)
-					}
+					assertT.NoError(err)
 
 					decryptContext, err := CreateContext(testCase.masterKey, testCase.masterSalt, testCase.algo, option...)
-					if err != nil {
-						t.Errorf("CreateContext failed: %v", err)
-					}
+					assertT.NoError(err)
 
 					for _, pkt := range testCase.packets {
 						decryptResult, err := decryptContext.DecryptRTCP(nil, pkt.encrypted, nil)
-						if err != nil {
-							t.Error(err)
-						}
-						assert.Equal(pkt.decrypted, decryptResult, "RTCP failed to decrypt")
+						assertT.NoError(err)
+						assertT.Equal(pkt.decrypted, decryptResult, "RTCP failed to decrypt")
 
 						encryptContext.SetIndex(pkt.ssrc, pkt.index)
 						encryptResult, err := encryptContext.EncryptRTCP(nil, pkt.decrypted, nil)
-						if err != nil {
-							t.Error(err)
-						}
-						assert.Equal(pkt.encrypted, encryptResult, "RTCP failed to encrypt")
+						assertT.NoError(err)
+						assertT.Equal(pkt.encrypted, encryptResult, "RTCP failed to encrypt")
 					}
 				})
 			}
@@ -163,49 +153,32 @@ func TestRTCPLifecycleInPlace(t *testing.T) {
 	for caseName, testCase := range rtcpTestCases() {
 		testCase := testCase
 		t.Run(caseName, func(t *testing.T) {
-			assert := assert.New(t)
+			assertT := assert.New(t)
 			authTagLen, err := testCase.algo.AuthTagRTCPLen()
-			assert.NoError(err)
+			assertT.NoError(err)
 
 			aeadAuthTagLen, err := testCase.algo.AEADAuthTagLen()
-			assert.NoError(err)
+			assertT.NoError(err)
 
 			encryptHeader := &rtcp.Header{}
 			encryptContext, err := CreateContext(testCase.masterKey, testCase.masterSalt, testCase.algo)
-			if err != nil {
-				t.Errorf("CreateContext failed: %v", err)
-			}
+			assertT.NoError(err)
 
 			decryptHeader := &rtcp.Header{}
 			decryptContext, err := CreateContext(testCase.masterKey, testCase.masterSalt, testCase.algo)
-			if err != nil {
-				t.Errorf("CreateContext failed: %v", err)
-			}
+			assertT.NoError(err)
 
 			for _, pkt := range testCase.packets {
 				// Copy packet, asserts that everything was done in place
 				decryptInput := append([]byte{}, pkt.encrypted...)
 
 				actualDecrypted, err := decryptContext.DecryptRTCP(decryptInput, decryptInput, decryptHeader)
-				switch {
-				case err != nil:
-					t.Error(err)
-				case decryptHeader.Type != pkt.pktType:
-					t.Fatalf("DecryptRTCP failed to populate input rtcp.Header, expected: %d, got %d", pkt.pktType, decryptHeader.Type)
-				case !bytes.Equal(decryptInput[:len(decryptInput)-(authTagLen+aeadAuthTagLen+srtcpIndexSize)], actualDecrypted):
-					t.Fatalf(
-						"DecryptRTP failed to decrypt in place\nexpected: %v\n     got: %v",
-						decryptInput[:len(decryptInput)-(authTagLen+srtcpIndexSize)],
-						actualDecrypted,
-					)
-				}
-				assert.Equal(
-					decryptInput[:len(decryptInput)-(authTagLen+aeadAuthTagLen+srtcpIndexSize)],
-					actualDecrypted,
-					"DecryptRTP failed to decrypt in place",
-				)
+				assertT.NoError(err)
+				assertT.Equal(pkt.pktType, decryptHeader.Type, "DecryptRTCP failed to populate input rtcp.Header")
+				assertT.Equal(decryptInput[:len(decryptInput)-(authTagLen+aeadAuthTagLen+srtcpIndexSize)], actualDecrypted,
+					"DecryptRTCP failed to decrypt in place")
 
-				assert.Equal(pkt.decrypted, actualDecrypted, "RTCP failed to decrypt")
+				assertT.Equal(pkt.decrypted, actualDecrypted, "RTCP failed to decrypt")
 
 				// Destination buffer should have capacity to store the resutl.
 				// Otherwise, the buffer may be realloc-ed and the actual result will be written to the other address.
@@ -215,19 +188,12 @@ func TestRTCPLifecycleInPlace(t *testing.T) {
 
 				encryptContext.SetIndex(pkt.ssrc, pkt.index)
 				actualEncrypted, err := encryptContext.EncryptRTCP(encryptInput, encryptInput, encryptHeader)
-				switch {
-				case err != nil:
-					t.Error(err)
-				case encryptHeader.Type != pkt.pktType:
-					t.Fatalf("EncryptRTCP failed to populate input rtcp.Header, expected: %d, got %d", pkt.pktType, encryptHeader.Type)
-				}
-				assert.Equal(
-					actualEncrypted[:len(actualEncrypted)-(authTagLen+aeadAuthTagLen+srtcpIndexSize)],
-					encryptInput,
-					"EncryptRTCP failed to encrypt in place",
-				)
+				assertT.NoError(err)
+				assertT.Equal(pkt.pktType, encryptHeader.Type, "EncryptRTCP failed to populate input rtcp.Header")
+				assertT.Equal(actualEncrypted[:len(actualEncrypted)-(authTagLen+aeadAuthTagLen+srtcpIndexSize)],
+					encryptInput, "EncryptRTCP failed to encrypt in place")
 
-				assert.Equal(pkt.encrypted, actualEncrypted, "RTCP failed to encrypt")
+				assertT.Equal(pkt.encrypted, actualEncrypted, "RTCP failed to encrypt")
 			}
 		})
 	}
@@ -238,42 +204,32 @@ func TestRTCPLifecyclePartialAllocation(t *testing.T) {
 	for caseName, testCase := range rtcpTestCases() {
 		testCase := testCase
 		t.Run(caseName, func(t *testing.T) {
-			assert := assert.New(t)
+			assertT := assert.New(t)
 			encryptHeader := &rtcp.Header{}
 			encryptContext, err := CreateContext(testCase.masterKey, testCase.masterSalt, testCase.algo)
-			if err != nil {
-				t.Errorf("CreateContext failed: %v", err)
-			}
+			assertT.NoError(err)
 
 			decryptHeader := &rtcp.Header{}
 			decryptContext, err := CreateContext(testCase.masterKey, testCase.masterSalt, testCase.algo)
-			if err != nil {
-				t.Errorf("CreateContext failed: %v", err)
-			}
+			assertT.NoError(err)
 
 			for _, pkt := range testCase.packets {
 				// Copy packet, asserts that partial buffers can be used
 				decryptDst := make([]byte, len(pkt.decrypted)*2)
 
 				actualDecrypted, err := decryptContext.DecryptRTCP(decryptDst, pkt.encrypted, decryptHeader)
-				if err != nil {
-					t.Error(err)
-				} else if decryptHeader.Type != pkt.pktType {
-					t.Fatalf("DecryptRTCP failed to populate input rtcp.Header, expected: %d, got %d", pkt.pktType, decryptHeader.Type)
-				}
-				assert.Equal(pkt.decrypted, actualDecrypted, "RTCP failed to decrypt")
+				assertT.NoError(err)
+				assertT.Equal(pkt.pktType, decryptHeader.Type, "DecryptRTCP failed to populate input rtcp.Header")
+				assertT.Equal(pkt.decrypted, actualDecrypted, "RTCP failed to decrypt")
 
 				// Copy packet, asserts that partial buffers can be used
 				encryptDst := make([]byte, len(pkt.encrypted)/2)
 
 				encryptContext.SetIndex(pkt.ssrc, pkt.index)
 				actualEncrypted, err := encryptContext.EncryptRTCP(encryptDst, pkt.decrypted, encryptHeader)
-				if err != nil {
-					t.Error(err)
-				} else if encryptHeader.Type != pkt.pktType {
-					t.Fatalf("EncryptRTCP failed to populate input rtcp.Header, expected: %d, got %d", pkt.pktType, encryptHeader.Type)
-				}
-				assert.Equal(pkt.encrypted, actualEncrypted, "RTCP failed to encrypt")
+				assertT.NoError(err)
+				assertT.Equal(pkt.pktType, encryptHeader.Type, "EncryptRTCP failed to populate input rtcp.Header")
+				assertT.Equal(pkt.encrypted, actualEncrypted, "RTCP failed to encrypt")
 			}
 		})
 	}
@@ -283,25 +239,21 @@ func TestRTCPInvalidAuthTag(t *testing.T) {
 	for caseName, testCase := range rtcpTestCases() {
 		testCase := testCase
 		t.Run(caseName, func(t *testing.T) {
-			assert := assert.New(t)
+			assertT := assert.New(t)
 			authTagLen, err := testCase.algo.AuthTagRTCPLen()
-			assert.NoError(err)
+			assertT.NoError(err)
 
 			aeadAuthTagLen, err := testCase.algo.AEADAuthTagLen()
-			assert.NoError(err)
+			assertT.NoError(err)
 
 			decryptContext, err := CreateContext(testCase.masterKey, testCase.masterSalt, testCase.algo)
-			if err != nil {
-				t.Errorf("CreateContext failed: %v", err)
-			}
+			assertT.NoError(err)
 
 			for _, pkt := range testCase.packets {
 				rtcpPacket := append([]byte{}, pkt.encrypted...)
 				decryptResult, err := decryptContext.DecryptRTCP(nil, rtcpPacket, nil)
-				if err != nil {
-					t.Error(err)
-				}
-				assert.Equal(pkt.decrypted, decryptResult, "RTCP failed to decrypt")
+				assertT.NoError(err)
+				assertT.Equal(pkt.decrypted, decryptResult, "RTCP failed to decrypt")
 
 				// Zero out auth tag
 				if authTagLen > 0 {
@@ -311,10 +263,8 @@ func TestRTCPInvalidAuthTag(t *testing.T) {
 					authTagPos := len(rtcpPacket) - authTagLen - srtcpIndexSize - aeadAuthTagLen
 					copy(rtcpPacket[authTagPos:authTagPos+aeadAuthTagLen], make([]byte, aeadAuthTagLen))
 				}
-
-				if _, err = decryptContext.DecryptRTCP(nil, rtcpPacket, nil); err == nil {
-					t.Errorf("Was able to decrypt RTCP packet with invalid Auth Tag")
-				}
+				_, err = decryptContext.DecryptRTCP(nil, rtcpPacket, nil)
+				assertT.Error(err, "Was able to decrypt RTCP packet with invalid Auth Tag")
 			}
 		})
 	}
@@ -324,29 +274,24 @@ func TestRTCPReplayDetectorSeparation(t *testing.T) {
 	for caseName, testCase := range rtcpTestCases() {
 		testCase := testCase
 		t.Run(caseName, func(t *testing.T) {
-			assert := assert.New(t)
+			assertT := assert.New(t)
 			decryptContext, err := CreateContext(
 				testCase.masterKey, testCase.masterSalt, testCase.algo,
 				SRTCPReplayProtection(10),
 			)
-			if err != nil {
-				t.Errorf("CreateContext failed: %v", err)
-			}
+			assertT.NoError(err)
 
 			for _, pkt := range testCase.packets {
 				rtcpPacket := append([]byte{}, pkt.encrypted...)
 				decryptResult, errDec := decryptContext.DecryptRTCP(nil, rtcpPacket, nil)
-				if errDec != nil {
-					t.Error(errDec)
-				}
-				assert.Equal(pkt.decrypted, decryptResult, "RTCP failed to decrypt")
+				assertT.NoError(errDec)
+				assertT.Equal(pkt.decrypted, decryptResult, "RTCP failed to decrypt")
 			}
 
 			for i, pkt := range testCase.packets {
 				rtcpPacket := append([]byte{}, pkt.encrypted...)
-				if _, err = decryptContext.DecryptRTCP(nil, rtcpPacket, nil); !errors.Is(err, errDuplicated) {
-					t.Error("Was able to decrypt duplicated RTCP packet", i)
-				}
+				_, err = decryptContext.DecryptRTCP(nil, rtcpPacket, nil)
+				assertT.ErrorIs(err, errDuplicated, "RTCP packet %d was not detected as replayed", i)
 			}
 		})
 	}
@@ -363,18 +308,18 @@ func TestEncryptRTCPSeparation(t *testing.T) {
 	for caseName, testCase := range rtcpTestCases() {
 		testCase := testCase
 		t.Run(caseName, func(t *testing.T) {
-			assert := assert.New(t)
+			assertT := assert.New(t)
 			encryptContext, err := CreateContext(testCase.masterKey, testCase.masterSalt, testCase.algo)
-			assert.NoError(err)
+			assertT.NoError(err)
 
 			authTagLen, err := testCase.algo.AuthTagRTCPLen()
-			assert.NoError(err)
+			assertT.NoError(err)
 
 			decryptContext, err := CreateContext(
 				testCase.masterKey, testCase.masterSalt, testCase.algo,
 				SRTCPReplayProtection(10),
 			)
-			assert.NoError(err)
+			assertT.NoError(err)
 
 			encryptHeader := &rtcp.Header{}
 
@@ -395,18 +340,18 @@ func TestEncryptRTCPSeparation(t *testing.T) {
 
 			for i, input := range inputs {
 				encrypted, err := encryptContext.EncryptRTCP(nil, input, encryptHeader)
-				assert.NoError(err)
+				assertT.NoError(err)
 				encryptedRCTPs[i] = encrypted
 			}
 
 			for i, expectedIndex := range expectedIndexes {
-				assert.Equal(expectedIndex, getRTCPIndex(encryptedRCTPs[i], authTagLen), "RTCP index does not match")
+				assertT.Equal(expectedIndex, getRTCPIndex(encryptedRCTPs[i], authTagLen), "RTCP index does not match")
 			}
 
 			for i, output := range encryptedRCTPs {
 				decrypted, err := decryptContext.DecryptRTCP(nil, output, encryptHeader)
-				assert.NoError(err)
-				assert.Equal(decrypted, inputs[i])
+				assertT.NoError(err)
+				assertT.Equal(decrypted, inputs[i])
 			}
 		})
 	}
@@ -420,9 +365,7 @@ func TestRTCPDecryptShortenedPacket(t *testing.T) {
 			for i := 1; i < len(pkt.encrypted)-1; i++ {
 				packet := pkt.encrypted[:i]
 				decryptContext, err := CreateContext(testCase.masterKey, testCase.masterSalt, testCase.algo)
-				if err != nil {
-					t.Errorf("CreateContext failed: %v", err)
-				}
+				assert.NoError(t, err)
 				assert.NotPanics(t, func() {
 					_, _ = decryptContext.DecryptRTCP(nil, packet, nil)
 				}, "Panic on length %d/%d", i, len(pkt.encrypted))
@@ -545,11 +488,9 @@ func TestRTCPMaxPackets(t *testing.T) {
 	for caseName, testCase := range testCases {
 		testCase := testCase
 		t.Run(caseName, func(t *testing.T) {
-			assert := assert.New(t)
+			assertT := assert.New(t)
 			encryptContext, err := CreateContext(testCase.masterKey, testCase.masterSalt, testCase.algo)
-			if err != nil {
-				t.Errorf("CreateContext failed: %v", err)
-			}
+			assertT.NoError(err)
 
 			decryptContext, err := CreateContext(
 				testCase.masterKey,
@@ -557,41 +498,31 @@ func TestRTCPMaxPackets(t *testing.T) {
 				testCase.algo,
 				SRTCPReplayProtection(10),
 			)
-			if err != nil {
-				t.Errorf("CreateContext failed: %v", err)
-			}
+			assertT.NoError(err)
 
 			// Upper boundary of index
 			encryptContext.SetIndex(ssrc, 0x7ffffffe)
 
 			decryptResult, err := decryptContext.DecryptRTCP(nil, testCase.packets[0].encrypted, nil)
-			if err != nil {
-				t.Error(err)
-			}
-			assert.Equal(testCase.packets[0].decrypted, decryptResult, "RTCP failed to decrypt")
+			assertT.NoError(err)
+			assertT.Equal(testCase.packets[0].decrypted, decryptResult, "RTCP failed to decrypt")
 
 			encryptResult, err := encryptContext.EncryptRTCP(nil, testCase.packets[0].decrypted, nil)
-			if err != nil {
-				t.Error(err)
-			}
-			assert.Equal(testCase.packets[0].encrypted, encryptResult, "RTCP failed to encrypt")
+			assertT.NoError(err)
+			assertT.Equal(testCase.packets[0].encrypted, encryptResult, "RTCP failed to encrypt")
 
 			// Next packet will exceeds the maximum packet count
 			_, err = decryptContext.DecryptRTCP(nil, testCase.packets[1].encrypted, nil)
-			if !errors.Is(err, errDuplicated) {
-				t.Errorf("Expected error: '%v', got: '%v'", errDuplicated, err)
-			}
+			assertT.ErrorIs(err, errDuplicated)
 
 			_, err = encryptContext.EncryptRTCP(nil, testCase.packets[1].decrypted, nil)
-			if !errors.Is(err, errExceededMaxPackets) {
-				t.Errorf("Expected error: '%v', got: '%v'", errExceededMaxPackets, err)
-			}
+			assertT.ErrorIs(err, errExceededMaxPackets)
 		})
 	}
 }
 
 func TestRTCPReplayDetectorFactory(t *testing.T) {
-	assert := assert.New(t)
+	assertT := assert.New(t)
 	testCase := rtcpTestCases()["AEAD_AES_128_GCM"]
 	data := testCase.packets[0]
 
@@ -604,38 +535,35 @@ func TestRTCPReplayDetectorFactory(t *testing.T) {
 			return &nopReplayDetector{}
 		}),
 	)
-	if err != nil {
-		t.Fatal(err)
-	}
+	assertT.NoError(err)
 
-	if _, err := decryptContext.DecryptRTCP(nil, data.encrypted, nil); err != nil {
-		t.Fatal(err)
-	}
-	assert.Equal(1, cntFactory)
+	_, err = decryptContext.DecryptRTCP(nil, data.encrypted, nil)
+	assertT.NoError(err)
+	assertT.Equal(1, cntFactory)
 }
 
 func TestDecryptInvalidSRTCP(t *testing.T) {
-	assert := assert.New(t)
+	assertT := assert.New(t)
 	key := []byte{0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01}
 	salt := []byte{0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01}
 	decryptContext, err := CreateContext(key, salt, ProtectionProfileAes128CmHmacSha1_80)
-	assert.NoError(err)
+	assertT.NoError(err)
 
 	packet := []byte{0x8f, 0x48, 0xff, 0xff, 0xec, 0x77, 0xb0, 0x43, 0xf9, 0x04, 0x51, 0xff, 0xfb, 0xdf}
 	_, err = decryptContext.DecryptRTCP(nil, packet, nil)
-	assert.Error(err)
+	assertT.Error(err)
 }
 
 func TestEncryptInvalidRTCP(t *testing.T) {
-	assert := assert.New(t)
+	assertT := assert.New(t)
 	key := []byte{0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01}
 	salt := []byte{0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01}
 	decryptContext, err := CreateContext(key, salt, ProtectionProfileAes128CmHmacSha1_80)
-	assert.NoError(err)
+	assertT.NoError(err)
 
 	packet := []byte{0xbb, 0xbb, 0x0a, 0x2f}
 	_, err = decryptContext.EncryptRTCP(nil, packet, nil)
-	assert.Error(err)
+	assertT.Error(err)
 }
 
 func TestRTCPInvalidMKI(t *testing.T) {
@@ -651,9 +579,7 @@ func TestRTCPInvalidMKI(t *testing.T) {
 				testCase.algo,
 				MasterKeyIndicator(mki1),
 			)
-			if err != nil {
-				t.Errorf("CreateContext failed: %v", err)
-			}
+			assert.NoError(t, err)
 
 			decryptContext, err := CreateContext(
 				testCase.masterKey,
@@ -661,23 +587,15 @@ func TestRTCPInvalidMKI(t *testing.T) {
 				testCase.algo,
 				MasterKeyIndicator(mki2),
 			)
-			if err != nil {
-				t.Errorf("CreateContext failed: %v", err)
-			}
+			assert.NoError(t, err)
 
 			for _, pkt := range testCase.packets {
 				rtcpPacket := append([]byte{}, pkt.decrypted...)
 				encrypted, err := encryptContext.encryptRTCP(nil, rtcpPacket)
-				if err != nil {
-					t.Error(err)
-				}
+				assert.NoError(t, err)
 
 				_, err = decryptContext.DecryptRTCP(nil, encrypted, nil)
-				if err == nil {
-					t.Errorf("Managed to decrypt with incorrect MKI for packet with SSRC: %d", pkt.ssrc)
-				} else {
-					assert.ErrorIs(t, err, ErrMKINotFound)
-				}
+				assert.ErrorIs(t, err, ErrMKINotFound, "Managed to decrypt with incorrect MKI for packet with SSRC: %d", pkt.ssrc)
 			}
 		})
 	}
@@ -700,13 +618,10 @@ func TestRTCPHandleMultipleMKI(t *testing.T) { //nolint:cyclop
 				testCase.algo,
 				MasterKeyIndicator(mki1),
 			)
-			if err != nil {
-				t.Errorf("CreateContext failed: %v", err)
-			}
+			assert.NoError(t, err)
+
 			encryptContext2, err := CreateContext(masterKey2, testCase.masterSalt, testCase.algo, MasterKeyIndicator(mki2))
-			if err != nil {
-				t.Errorf("CreateContext failed: %v", err)
-			}
+			assert.NoError(t, err)
 
 			decryptContext, err := CreateContext(
 				testCase.masterKey,
@@ -714,33 +629,24 @@ func TestRTCPHandleMultipleMKI(t *testing.T) { //nolint:cyclop
 				testCase.algo,
 				MasterKeyIndicator(mki1),
 			)
-			if err != nil {
-				t.Errorf("CreateContext failed: %v", err)
-			}
+			assert.NoError(t, err)
+
 			err = decryptContext.AddCipherForMKI(mki2, masterKey2, testCase.masterSalt)
-			if err != nil {
-				t.Errorf("AddCipherForMKI failed: %v", err)
-			}
+			assert.NoError(t, err)
 
 			for _, pkt := range testCase.packets {
 				rtcpPacket := append([]byte{}, pkt.decrypted...)
 				encrypted1, err := encryptContext1.encryptRTCP(nil, rtcpPacket)
-				if err != nil {
-					t.Error(err)
-				}
+				assert.NoError(t, err)
+
 				encrypted2, err := encryptContext2.encryptRTCP(nil, rtcpPacket)
-				if err != nil {
-					t.Error(err)
-				}
+				assert.NoError(t, err)
 
 				decrypted1, err := decryptContext.DecryptRTCP(nil, encrypted1, nil)
-				if err != nil {
-					t.Fatal(err)
-				}
+				assert.NoError(t, err)
+
 				decrypted2, err := decryptContext.DecryptRTCP(nil, encrypted2, nil)
-				if err != nil {
-					t.Fatal(err)
-				}
+				assert.NoError(t, err)
 
 				assert.Equal(t, rtcpPacket, decrypted1)
 				assert.Equal(t, rtcpPacket, decrypted2)
@@ -766,13 +672,10 @@ func TestRTCPSwitchMKI(t *testing.T) { //nolint:cyclop
 				testCase.algo,
 				MasterKeyIndicator(mki1),
 			)
-			if err != nil {
-				t.Errorf("CreateContext failed: %v", err)
-			}
+			assert.NoError(t, err)
+
 			err = encryptContext.AddCipherForMKI(mki2, masterKey2, testCase.masterSalt)
-			if err != nil {
-				t.Errorf("AddCipherForMKI failed: %v", err)
-			}
+			assert.NoError(t, err)
 
 			decryptContext1, err := CreateContext(
 				testCase.masterKey,
@@ -780,49 +683,34 @@ func TestRTCPSwitchMKI(t *testing.T) { //nolint:cyclop
 				testCase.algo,
 				MasterKeyIndicator(mki1),
 			)
-			if err != nil {
-				t.Errorf("CreateContext failed: %v", err)
-			}
+			assert.NoError(t, err)
+
 			decryptContext2, err := CreateContext(masterKey2, testCase.masterSalt, testCase.algo, MasterKeyIndicator(mki2))
-			if err != nil {
-				t.Errorf("CreateContext failed: %v", err)
-			}
+			assert.NoError(t, err)
 
 			for _, pkt := range testCase.packets {
 				rtcpPacket := append([]byte{}, pkt.decrypted...)
 				encrypted1, err := encryptContext.encryptRTCP(nil, rtcpPacket)
-				if err != nil {
-					t.Error(err)
-				}
+				assert.NoError(t, err)
 
 				err = encryptContext.SetSendMKI(mki2)
-				if err != nil {
-					t.Fatal(err)
-				}
+				assert.NoError(t, err)
 
 				encrypted2, err := encryptContext.encryptRTCP(nil, rtcpPacket)
-				if err != nil {
-					t.Error(err)
-				}
+				assert.NoError(t, err)
 
 				assert.NotEqual(t, encrypted1, encrypted2)
 
 				decrypted1, err := decryptContext1.DecryptRTCP(nil, encrypted1, nil)
-				if err != nil {
-					t.Fatal(err)
-				}
+				assert.NoError(t, err)
 				decrypted2, err := decryptContext2.DecryptRTCP(nil, encrypted2, nil)
-				if err != nil {
-					t.Fatal(err)
-				}
+				assert.NoError(t, err)
 
 				assert.Equal(t, rtcpPacket, decrypted1)
 				assert.Equal(t, rtcpPacket, decrypted2)
 
 				err = encryptContext.SetSendMKI(mki1)
-				if err != nil {
-					t.Fatal(err)
-				}
+				assert.NoError(t, err)
 			}
 		})
 	}

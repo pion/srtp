@@ -4,11 +4,9 @@
 package srtp
 
 import (
-	"bytes"
 	"errors"
 	"io"
 	"net"
-	"reflect"
 	"strings"
 	"sync"
 	"testing"
@@ -16,16 +14,17 @@ import (
 
 	"github.com/pion/rtcp"
 	"github.com/pion/transport/v3/test"
+	"github.com/stretchr/testify/assert"
 )
 
 const rtcpHeaderSize = 4
 
 func TestSessionSRTCPBadInit(t *testing.T) {
-	if _, err := NewSessionSRTCP(nil, nil); err == nil {
-		t.Fatal("NewSessionSRTCP should error if no config was provided")
-	} else if _, err := NewSessionSRTCP(nil, &Config{}); err == nil {
-		t.Fatal("NewSessionSRTCP should error if no net was provided")
-	}
+	_, err := NewSessionSRTCP(nil, nil)
+	assert.Error(t, err, "NewSessionSRTCP should error if no config was provided")
+
+	_, err = NewSessionSRTCP(nil, &Config{})
+	assert.Error(t, err, "NewSessionSRTCP should error if no net was provided")
 }
 
 func buildSessionSRTCP(t *testing.T) (*SessionSRTCP, net.Conn, *Config) { //nolint:dupl
@@ -43,11 +42,8 @@ func buildSessionSRTCP(t *testing.T) (*SessionSRTCP, net.Conn, *Config) { //noli
 	}
 
 	aSession, err := NewSessionSRTCP(aPipe, config)
-	if err != nil {
-		t.Fatal(err)
-	} else if aSession == nil {
-		t.Fatal("NewSessionSRTCP did not error, but returned nil session")
-	}
+	assert.NoError(t, err)
+	assert.NotNil(t, aSession, "NewSessionSRTCP did not error, but returned nil session")
 
 	return aSession, bPipe, config
 }
@@ -57,11 +53,8 @@ func buildSessionSRTCPPair(t *testing.T) (*SessionSRTCP, *SessionSRTCP) { //noli
 
 	aSession, bPipe, config := buildSessionSRTCP(t)
 	bSession, err := NewSessionSRTCP(bPipe, config)
-	if err != nil {
-		t.Fatal(err)
-	} else if bSession == nil {
-		t.Fatal("NewSessionSRTCP did not error, but returned nil session")
-	}
+	assert.NoError(t, err)
+	assert.NotNil(t, bSession, "NewSessionSRTCP did not error, but returned nil session")
 
 	return aSession, bSession
 }
@@ -74,44 +67,31 @@ func TestSessionSRTCP(t *testing.T) {
 	defer report()
 
 	testPayload, err := rtcp.Marshal([]rtcp.Packet{&rtcp.PictureLossIndication{MediaSSRC: 5000}})
-	if err != nil {
-		t.Fatal(err)
-	}
+	assert.NoError(t, err)
+
 	readBuffer := make([]byte, len(testPayload))
 	aSession, bSession := buildSessionSRTCPPair(t)
 
 	aWriteStream, err := aSession.OpenWriteStream()
-	if err != nil {
-		t.Fatal(err)
-	}
+	assert.NoError(t, err)
 
-	if _, err = aWriteStream.Write(testPayload); err != nil {
-		t.Fatal(err)
-	}
+	_, err = aWriteStream.Write(testPayload)
+	assert.NoError(t, err)
 
 	bReadStream, _, err := bSession.AcceptStream()
-	if err != nil {
-		t.Fatal(err)
-	}
+	assert.NoError(t, err)
 
-	if _, err = bReadStream.Read(readBuffer); err != nil {
-		t.Fatal(err)
-	}
+	_, err = bReadStream.Read(readBuffer)
+	assert.NoError(t, err)
 
-	if !bytes.Equal(testPayload, readBuffer) {
-		t.Fatalf("Sent buffer does not match the one received exp(%v) actual(%v)", testPayload, readBuffer)
-	}
+	assert.Equalf(t, readBuffer, testPayload,
+		"Sent buffer does not match the one received exp(%v) actual(%v)", testPayload, readBuffer)
 
-	if err = aSession.Close(); err != nil {
-		t.Fatal(err)
-	}
-
-	if err = bSession.Close(); err != nil {
-		t.Fatal(err)
-	}
+	assert.NoError(t, aSession.Close())
+	assert.NoError(t, bSession.Close())
 }
 
-func TestSessionSRTCPWithIODeadline(t *testing.T) { //nolint:cyclop
+func TestSessionSRTCPWithIODeadline(t *testing.T) {
 	lim := test.TimeOut(time.Second * 10)
 	defer lim.Stop()
 
@@ -119,66 +99,49 @@ func TestSessionSRTCPWithIODeadline(t *testing.T) { //nolint:cyclop
 	defer report()
 
 	testPayload, err := rtcp.Marshal([]rtcp.Packet{&rtcp.PictureLossIndication{MediaSSRC: 5000}})
-	if err != nil {
-		t.Fatal(err)
-	}
+	assert.NoError(t, err)
+
 	readBuffer := make([]byte, len(testPayload))
 	aSession, bPipe, config := buildSessionSRTCP(t)
 
 	aWriteStream, err := aSession.OpenWriteStream()
-	if err != nil {
-		t.Fatal(err)
-	}
+	assert.NoError(t, err)
+
 	// When the other peer is not ready, the Write would be blocked if no deadline.
-	if err = aWriteStream.SetWriteDeadline(time.Now().Add(1 * time.Second)); err != nil {
-		t.Fatal(err)
-	}
-	if _, err = aWriteStream.Write(testPayload); !errIsTimeout(err) {
-		t.Fatalf("Unexcepted write-error(%v)", err)
-	}
-	if err = aWriteStream.SetWriteDeadline(time.Time{}); err != nil {
-		t.Fatal(err)
-	}
+	assert.NoError(t, aWriteStream.SetWriteDeadline(time.Now().Add(1*time.Second)))
+
+	_, err = aWriteStream.Write(testPayload)
+	assert.Truef(t, errIsTimeout(err), "Unexpected read-error(%v)", err)
+
+	assert.NoError(t, aWriteStream.SetWriteDeadline(time.Time{}))
 
 	// Setup another peer.
 	bSession, err := NewSessionSRTCP(bPipe, config)
-	if err != nil {
-		t.Fatal(err)
-	} else if bSession == nil {
-		t.Fatal("NewSessionSRTCP did not error, but returned nil session")
-	}
+	assert.NoError(t, err)
+	assert.NotNil(t, bSession, "NewSessionSRTCP did not error, but returned nil session")
 
 	// The second attempt to write.
-	if _, err = aWriteStream.Write(testPayload); err != nil {
-		// The other peer is ready, this write attempt should work.
-		t.Fatal(err)
-	}
+	_, err = aWriteStream.Write(testPayload)
+	// The other peer is ready, this write attempt should work.
+	assert.NoError(t, err)
 
 	bReadStream, _, err := bSession.AcceptStream()
-	if err != nil {
-		t.Fatal(err)
-	}
-	if _, err = bReadStream.Read(readBuffer); err != nil {
-		t.Fatal(err)
-	}
-	if !bytes.Equal(testPayload, readBuffer) {
-		t.Fatalf("Sent buffer does not match the one received exp(%v) actual(%v)", testPayload, readBuffer)
-	}
+	assert.NoError(t, err)
+
+	_, err = bReadStream.Read(readBuffer)
+	assert.NoError(t, err)
+
+	assert.Equalf(t, readBuffer, testPayload,
+		"Sent buffer does not match the one received exp(%v) actual(%v)", testPayload, readBuffer)
 
 	// The second Read attempt would be blocked if the deadline is not set.
-	if err = bReadStream.SetReadDeadline(time.Now().Add(1 * time.Second)); err != nil {
-		t.Fatal(err)
-	}
-	if _, err = bReadStream.Read(readBuffer); !errIsTimeout(err) {
-		t.Fatalf("Unexpected read-error(%v)", err)
-	}
+	assert.NoError(t, bReadStream.SetReadDeadline(time.Now().Add(1*time.Second)))
 
-	if err = aSession.Close(); err != nil {
-		t.Fatal(err)
-	}
-	if err = bSession.Close(); err != nil {
-		t.Fatal(err)
-	}
+	_, err = bReadStream.Read(readBuffer)
+	assert.Truef(t, errIsTimeout(err), "Unexpected read-error(%v)", err)
+
+	assert.NoError(t, aSession.Close())
+	assert.NoError(t, bSession.Close())
 }
 
 func TestSessionSRTCPOpenReadStream(t *testing.T) {
@@ -189,44 +152,31 @@ func TestSessionSRTCPOpenReadStream(t *testing.T) {
 	defer report()
 
 	testPayload, err := rtcp.Marshal([]rtcp.Packet{&rtcp.PictureLossIndication{MediaSSRC: 5000}})
-	if err != nil {
-		t.Fatal(err)
-	}
+	assert.NoError(t, err)
+
 	readBuffer := make([]byte, len(testPayload))
 	aSession, bSession := buildSessionSRTCPPair(t)
 
 	bReadStream, err := bSession.OpenReadStream(5000)
-	if err != nil {
-		t.Fatal(err)
-	}
+	assert.NoError(t, err)
 
 	aWriteStream, err := aSession.OpenWriteStream()
-	if err != nil {
-		t.Fatal(err)
-	}
+	assert.NoError(t, err)
 
-	if _, err = aWriteStream.Write(testPayload); err != nil {
-		t.Fatal(err)
-	}
+	_, err = aWriteStream.Write(testPayload)
+	assert.NoError(t, err)
 
-	if _, err = bReadStream.Read(readBuffer); err != nil {
-		t.Fatal(err)
-	}
+	_, err = bReadStream.Read(readBuffer)
+	assert.NoError(t, err)
 
-	if !bytes.Equal(testPayload, readBuffer) {
-		t.Fatalf("Sent buffer does not match the one received exp(%v) actual(%v)", testPayload, readBuffer)
-	}
+	assert.Equalf(t, readBuffer, testPayload,
+		"Sent buffer does not match the one received exp(%v) actual(%v)", testPayload, readBuffer)
 
-	if err = aSession.Close(); err != nil {
-		t.Fatal(err)
-	}
-
-	if err = bSession.Close(); err != nil {
-		t.Fatal(err)
-	}
+	assert.NoError(t, aSession.Close())
+	assert.NoError(t, bSession.Close())
 }
 
-func TestSessionSRTCPReplayProtection(t *testing.T) { //nolint:cyclop
+func TestSessionSRTCPReplayProtection(t *testing.T) {
 	lim := test.TimeOut(time.Second * 5)
 	defer lim.Stop()
 
@@ -238,9 +188,7 @@ func TestSessionSRTCPReplayProtection(t *testing.T) { //nolint:cyclop
 	)
 	aSession, bSession := buildSessionSRTCPPair(t)
 	bReadStream, err := bSession.OpenReadStream(testSSRC)
-	if err != nil {
-		t.Fatal(err)
-	}
+	assert.NoError(t, err)
 
 	// Generate test packets
 	var packets [][]byte
@@ -252,9 +200,8 @@ func TestSessionSRTCPReplayProtection(t *testing.T) { //nolint:cyclop
 		}
 		expectedSSRC = append(expectedSSRC, i)
 		encrypted, eerr := encryptSRTCP(aSession.session.localContext, testPacket)
-		if eerr != nil {
-			t.Fatal(eerr)
-		}
+		assert.NoError(t, eerr)
+
 		packets = append(packets, encrypted)
 	}
 
@@ -275,37 +222,27 @@ func TestSessionSRTCPReplayProtection(t *testing.T) { //nolint:cyclop
 
 	// Write with replay attack
 	for _, p := range packets {
-		if _, err = aSession.session.nextConn.Write(p); err != nil {
-			t.Fatal(err)
-		}
+		_, err = aSession.session.nextConn.Write(p)
+		assert.NoError(t, err)
 		// Immediately replay
-		if _, err = aSession.session.nextConn.Write(p); err != nil {
-			t.Fatal(err)
-		}
+		_, err = aSession.session.nextConn.Write(p)
+		assert.NoError(t, err)
 	}
 	for _, p := range packets {
 		// Delayed replay
-		if _, err = aSession.session.nextConn.Write(p); err != nil {
-			t.Fatal(err)
-		}
+		_, err = aSession.session.nextConn.Write(p)
+		assert.NoError(t, err)
 	}
 
-	if err = aSession.Close(); err != nil {
-		t.Fatal(err)
-	}
-	if err = bSession.Close(); err != nil {
-		t.Fatal(err)
-	}
-	if err = bReadStream.Close(); err != nil {
-		t.Fatal(err)
-	}
+	assert.NoError(t, aSession.Close())
+	assert.NoError(t, bSession.Close())
+	assert.NoError(t, bReadStream.Close())
+
 	wg.Wait()
 
-	if !reflect.DeepEqual(expectedSSRC, receivedSSRC) {
-		t.Errorf("Expected and received packet differs,\nexpected:\n%v\nreceived:\n%v",
-			expectedSSRC, receivedSSRC,
-		)
-	}
+	assert.Equalf(t, expectedSSRC, receivedSSRC,
+		"Expected and received SSRCs differ,\nexpected:\n%v\nreceived:\n%v",
+		expectedSSRC, receivedSSRC)
 }
 
 // nolint: dupl
@@ -329,19 +266,15 @@ func TestSessionSRTCPAcceptStreamTimeout(t *testing.T) {
 	}
 
 	newSession, err := NewSessionSRTCP(pipe, config)
-	if err != nil {
-		t.Fatal(err)
-	} else if newSession == nil {
-		t.Fatal("NewSessionSRTCP did not error, but returned nil session")
+	assert.NoError(t, err)
+	assert.NotNil(t, newSession, "NewSessionSRTCP did not error, but returned nil session")
+
+	_, _, err = newSession.AcceptStream()
+	if !errors.Is(err, errStreamAlreadyClosed) {
+		assert.NoError(t, err)
 	}
 
-	if _, _, err = newSession.AcceptStream(); err == nil || !errors.Is(err, errStreamAlreadyClosed) {
-		t.Fatal(err)
-	}
-
-	if err = newSession.Close(); err != nil {
-		t.Fatal(err)
-	}
+	assert.NoError(t, newSession.Close())
 }
 
 func getSenderSSRC(t *testing.T, stream *ReadStreamSRTCP) (ssrc uint32, err error) {
@@ -359,13 +292,13 @@ func getSenderSSRC(t *testing.T, stream *ReadStreamSRTCP) (ssrc uint32, err erro
 		return 0, err
 	}
 	if err != nil {
-		t.Error(err)
+		assert.NoError(t, err)
 
 		return 0, err
 	}
 	pli := &rtcp.PictureLossIndication{}
 	if uerr := pli.Unmarshal(readBuffer[:n]); uerr != nil {
-		t.Error(uerr)
+		assert.NoError(t, uerr)
 
 		return 0, uerr
 	}

@@ -4,25 +4,24 @@
 package srtp
 
 import (
-	"bytes"
 	"errors"
 	"io"
 	"net"
-	"reflect"
 	"sync"
 	"testing"
 	"time"
 
 	"github.com/pion/rtp"
 	"github.com/pion/transport/v3/test"
+	"github.com/stretchr/testify/assert"
 )
 
 func TestSessionSRTPBadInit(t *testing.T) {
-	if _, err := NewSessionSRTP(nil, nil); err == nil {
-		t.Fatal("NewSessionSRTP should error if no config was provided")
-	} else if _, err := NewSessionSRTP(nil, &Config{}); err == nil {
-		t.Fatal("NewSessionSRTP should error if no net was provided")
-	}
+	_, err := NewSessionSRTP(nil, nil)
+	assert.Error(t, err, "NewSessionSRTP should error if no net was provided")
+
+	_, err = NewSessionSRTP(nil, &Config{})
+	assert.Error(t, err, "NewSessionSRTP should error if no net was provided")
 }
 
 func buildSessionSRTP(t *testing.T) (*SessionSRTP, net.Conn, *Config) { //nolint:dupl
@@ -40,11 +39,8 @@ func buildSessionSRTP(t *testing.T) (*SessionSRTP, net.Conn, *Config) { //nolint
 	}
 
 	aSession, err := NewSessionSRTP(aPipe, config)
-	if err != nil {
-		t.Fatal(err)
-	} else if aSession == nil {
-		t.Fatal("NewSessionSRTP did not error, but returned nil session")
-	}
+	assert.NoError(t, err)
+	assert.NotNil(t, aSession, "NewSessionSRTP did not error, but returned nil session")
 
 	return aSession, bPipe, config
 }
@@ -54,11 +50,8 @@ func buildSessionSRTPPair(t *testing.T) (*SessionSRTP, *SessionSRTP) { //nolint:
 
 	aSession, bPipe, config := buildSessionSRTP(t)
 	bSession, err := NewSessionSRTP(bPipe, config)
-	if err != nil {
-		t.Fatal(err)
-	} else if bSession == nil {
-		t.Fatal("NewSessionSRTP did not error, but returned nil session")
-	}
+	assert.NoError(t, err)
+	assert.NotNil(t, bSession, "NewSessionSRTP did not error, but returned nil session")
 
 	return aSession, bSession
 }
@@ -79,38 +72,27 @@ func TestSessionSRTP(t *testing.T) {
 	aSession, bSession := buildSessionSRTPPair(t)
 
 	aWriteStream, err := aSession.OpenWriteStream()
-	if err != nil {
-		t.Fatal(err)
-	}
-	if _, err = aWriteStream.WriteRTP(&rtp.Header{SSRC: testSSRC}, append([]byte{}, testPayload...)); err != nil {
-		t.Fatal(err)
-	}
+	assert.NoError(t, err)
+
+	_, err = aWriteStream.WriteRTP(&rtp.Header{SSRC: testSSRC}, append([]byte{}, testPayload...))
+	assert.NoError(t, err)
 
 	bReadStream, ssrc, err := bSession.AcceptStream()
-	if err != nil {
-		t.Fatal(err)
-	} else if ssrc != testSSRC {
-		t.Fatalf("SSRC mismatch during accept exp(%v) actual%v)", testSSRC, ssrc)
-	}
+	assert.NoError(t, err)
+	assert.Equalf(t, uint32(testSSRC), ssrc, "SSRC mismatch during accept exp(%v) actual(%v)", testSSRC, ssrc)
 
-	if _, err = bReadStream.Read(readBuffer); err != nil {
-		t.Fatal(err)
-	}
+	_, err = bReadStream.Read(readBuffer)
+	assert.NoError(t, err)
 
-	if !bytes.Equal(testPayload, readBuffer[rtpHeaderSize:]) {
-		t.Fatalf("Sent buffer does not match the one received exp(%v) actual(%v)", testPayload, readBuffer[rtpHeaderSize:])
-	}
+	assert.Equalf(t, readBuffer[rtpHeaderSize:], testPayload,
+		"Sent buffer does not match the one received exp(%v) actual(%v)",
+		testPayload, readBuffer[rtpHeaderSize:])
 
-	if err = aSession.Close(); err != nil {
-		t.Fatal(err)
-	}
-
-	if err = bSession.Close(); err != nil {
-		t.Fatal(err)
-	}
+	assert.NoError(t, aSession.Close())
+	assert.NoError(t, bSession.Close())
 }
 
-func TestSessionSRTPWithIODeadline(t *testing.T) { //nolint:cyclop
+func TestSessionSRTPWithIODeadline(t *testing.T) {
 	lim := test.TimeOut(time.Second * 10)
 	defer lim.Stop()
 
@@ -126,60 +108,43 @@ func TestSessionSRTPWithIODeadline(t *testing.T) { //nolint:cyclop
 	aSession, bPipe, config := buildSessionSRTP(t)
 
 	aWriteStream, err := aSession.OpenWriteStream()
-	if err != nil {
-		t.Fatal(err)
-	}
+	assert.NoError(t, err)
+
 	// When the other peer is not ready, the Write would be blocked if no deadline.
-	if err = aWriteStream.SetWriteDeadline(time.Now().Add(1 * time.Second)); err != nil {
-		t.Fatal(err)
-	}
-	if _, err = aWriteStream.WriteRTP(&rtp.Header{SSRC: testSSRC}, append([]byte{}, testPayload...)); !errIsTimeout(err) {
-		t.Fatal(err)
-	}
-	if err = aWriteStream.SetWriteDeadline(time.Time{}); err != nil {
-		t.Fatal(err)
-	}
+	assert.NoError(t, aWriteStream.SetWriteDeadline(time.Now().Add(1*time.Second)))
+
+	_, err = aWriteStream.WriteRTP(&rtp.Header{SSRC: testSSRC}, append([]byte{}, testPayload...))
+	assert.Truef(t, errIsTimeout(err), "Unexpected read-error(%v)", err)
+	assert.NoError(t, aWriteStream.SetWriteDeadline(time.Time{}))
 
 	// Setup another peer.
 	bSession, err := NewSessionSRTP(bPipe, config)
-	if err != nil {
-		t.Fatal(err)
-	} else if bSession == nil {
-		t.Fatal("NewSessionSRTCP did not error, but returned nil session")
-	}
+	assert.NoError(t, err)
+	assert.NotNil(t, bSession, "NewSessionSRTP did not error, but returned nil session")
 
 	// The second attempt to write, even without deadline.
-	if _, err = aWriteStream.WriteRTP(&rtp.Header{SSRC: testSSRC}, append([]byte{}, testPayload...)); err != nil {
-		t.Fatal(err)
-	}
+	_, err = aWriteStream.WriteRTP(&rtp.Header{SSRC: testSSRC}, append([]byte{}, testPayload...))
+	assert.NoError(t, err)
 
 	bReadStream, ssrc, err := bSession.AcceptStream()
-	if err != nil {
-		t.Fatal(err)
-	} else if ssrc != testSSRC {
-		t.Fatalf("SSRC mismatch during accept exp(%v) actual%v)", testSSRC, ssrc)
-	}
-	if _, err = bReadStream.Read(readBuffer); err != nil {
-		t.Fatal(err)
-	}
-	if !bytes.Equal(testPayload, readBuffer[rtpHeaderSize:]) {
-		t.Fatalf("Sent buffer does not match the one received exp(%v) actual(%v)", testPayload, readBuffer[rtpHeaderSize:])
-	}
+	assert.NoError(t, err)
+	assert.Equal(t, uint32(testSSRC), ssrc, "SSRC mismatch during accept exp(%v) actual(%v)", testSSRC, ssrc)
+
+	_, err = bReadStream.Read(readBuffer)
+	assert.NoError(t, err)
+
+	assert.Equal(t, testPayload, readBuffer[rtpHeaderSize:],
+		"Sent buffer does not match the one received exp(%v) actual(%v)",
+		testPayload, readBuffer[rtpHeaderSize:])
 
 	// The second Read attempt would be blocked if the deadline is not set.
-	if err = bReadStream.SetReadDeadline(time.Now().Add(1 * time.Second)); err != nil {
-		t.Fatal(err)
-	}
-	if _, err = bReadStream.Read(readBuffer); !errIsTimeout(err) {
-		t.Fatalf("Unexpected read-error(%v)", err)
-	}
+	assert.NoError(t, bReadStream.SetReadDeadline(time.Now().Add(1*time.Second)))
 
-	if err = aSession.Close(); err != nil {
-		t.Fatal(err)
-	}
-	if err = bSession.Close(); err != nil {
-		t.Fatal(err)
-	}
+	_, err = bReadStream.Read(readBuffer)
+	assert.Truef(t, errIsTimeout(err), "Unexpected read-error(%v)", err)
+
+	assert.NoError(t, aSession.Close())
+	assert.NoError(t, bSession.Close())
 }
 
 func TestSessionSRTPOpenReadStream(t *testing.T) {
@@ -198,33 +163,23 @@ func TestSessionSRTPOpenReadStream(t *testing.T) {
 	aSession, bSession := buildSessionSRTPPair(t)
 
 	bReadStream, err := bSession.OpenReadStream(5000)
-	if err != nil {
-		t.Fatal(err)
-	}
+	assert.NoError(t, err)
 
 	aWriteStream, err := aSession.OpenWriteStream()
-	if err != nil {
-		t.Fatal(err)
-	}
-	if _, err = aWriteStream.WriteRTP(&rtp.Header{SSRC: testSSRC}, append([]byte{}, testPayload...)); err != nil {
-		t.Fatal(err)
-	}
+	assert.NoError(t, err)
 
-	if _, err = bReadStream.Read(readBuffer); err != nil {
-		t.Fatal(err)
-	}
+	_, err = aWriteStream.WriteRTP(&rtp.Header{SSRC: testSSRC}, append([]byte{}, testPayload...))
+	assert.NoError(t, err)
 
-	if !bytes.Equal(testPayload, readBuffer[rtpHeaderSize:]) {
-		t.Fatalf("Sent buffer does not match the one received exp(%v) actual(%v)", testPayload, readBuffer[rtpHeaderSize:])
-	}
+	_, err = bReadStream.Read(readBuffer)
+	assert.NoError(t, err)
 
-	if err = aSession.Close(); err != nil {
-		t.Fatal(err)
-	}
+	assert.Equalf(t, testPayload, readBuffer[rtpHeaderSize:],
+		"Sent buffer does not match the one received exp(%v) actual(%v)",
+		testPayload, readBuffer[rtpHeaderSize:])
 
-	if err = bSession.Close(); err != nil {
-		t.Fatal(err)
-	}
+	assert.NoError(t, aSession.Close())
+	assert.NoError(t, bSession.Close())
 }
 
 func TestSessionSRTPMultiSSRC(t *testing.T) {
@@ -242,41 +197,32 @@ func TestSessionSRTPMultiSSRC(t *testing.T) {
 	bReadStreams := make(map[uint32]*ReadStreamSRTP)
 	for _, ssrc := range ssrcs {
 		bReadStream, err := bSession.OpenReadStream(ssrc)
-		if err != nil {
-			t.Fatal(err)
-		}
+		assert.NoError(t, err)
+
 		bReadStreams[ssrc] = bReadStream
 	}
 
 	aWriteStream, err := aSession.OpenWriteStream()
-	if err != nil {
-		t.Fatal(err)
-	}
+	assert.NoError(t, err)
+
 	for _, ssrc := range ssrcs {
-		if _, err = aWriteStream.WriteRTP(&rtp.Header{SSRC: ssrc}, append([]byte{}, testPayload...)); err != nil {
-			t.Fatal(err)
-		}
+		_, err = aWriteStream.WriteRTP(&rtp.Header{SSRC: ssrc}, append([]byte{}, testPayload...))
+		assert.NoError(t, err)
 
 		readBuffer := make([]byte, rtpHeaderSize+len(testPayload))
-		if _, err = bReadStreams[ssrc].Read(readBuffer); err != nil {
-			t.Fatal(err)
-		}
+		_, err = bReadStreams[ssrc].Read(readBuffer)
+		assert.NoError(t, err)
 
-		if !bytes.Equal(testPayload, readBuffer[rtpHeaderSize:]) {
-			t.Fatalf("Sent buffer does not match the one received exp(%v) actual(%v)", testPayload, readBuffer[rtpHeaderSize:])
-		}
+		assert.Equal(t, testPayload, readBuffer[rtpHeaderSize:],
+			"Sent buffer does not match the one received exp(%v) actual(%v)",
+			testPayload, readBuffer[rtpHeaderSize:])
 	}
 
-	if err = aSession.Close(); err != nil {
-		t.Fatal(err)
-	}
-
-	if err = bSession.Close(); err != nil {
-		t.Fatal(err)
-	}
+	assert.NoError(t, aSession.Close())
+	assert.NoError(t, bSession.Close())
 }
 
-func TestSessionSRTPReplayProtection(t *testing.T) { //nolint:cyclop
+func TestSessionSRTPReplayProtection(t *testing.T) {
 	lim := test.TimeOut(time.Second * 5)
 	defer lim.Stop()
 
@@ -290,9 +236,7 @@ func TestSessionSRTPReplayProtection(t *testing.T) { //nolint:cyclop
 	testPayload := []byte{0x00, 0x01, 0x03, 0x04}
 	aSession, bSession := buildSessionSRTPPair(t)
 	bReadStream, err := bSession.OpenReadStream(testSSRC)
-	if err != nil {
-		t.Fatal(err)
-	}
+	assert.NoError(t, err)
 
 	// Generate test packets
 	var packets [][]byte
@@ -306,9 +250,7 @@ func TestSessionSRTPReplayProtection(t *testing.T) { //nolint:cyclop
 			},
 			Payload: testPayload,
 		})
-		if eerr != nil {
-			t.Fatal(eerr)
-		}
+		assert.NoError(t, eerr)
 		packets = append(packets, encrypted)
 	}
 
@@ -329,37 +271,27 @@ func TestSessionSRTPReplayProtection(t *testing.T) { //nolint:cyclop
 
 	// Write with replay attack
 	for _, p := range packets {
-		if _, err = aSession.session.nextConn.Write(p); err != nil {
-			t.Fatal(err)
-		}
+		_, err = aSession.session.nextConn.Write(p)
+		assert.NoError(t, err)
 		// Immediately replay
-		if _, err = aSession.session.nextConn.Write(p); err != nil {
-			t.Fatal(err)
-		}
+		_, err = aSession.session.nextConn.Write(p)
+		assert.NoError(t, err)
 	}
 	for _, p := range packets {
 		// Delayed replay
-		if _, err = aSession.session.nextConn.Write(p); err != nil {
-			t.Fatal(err)
-		}
+		_, err = aSession.session.nextConn.Write(p)
+		assert.NoError(t, err)
 	}
 
-	if err = aSession.Close(); err != nil {
-		t.Fatal(err)
-	}
-	if err = bSession.Close(); err != nil {
-		t.Fatal(err)
-	}
-	if err = bReadStream.Close(); err != nil {
-		t.Fatal(err)
-	}
+	assert.NoError(t, aSession.Close())
+	assert.NoError(t, bSession.Close())
+	assert.NoError(t, bReadStream.Close())
+
 	wg.Wait()
 
-	if !reflect.DeepEqual(expectedSequenceNumber, receivedSequenceNumber) {
-		t.Errorf("Expected and received sequence number differs,\nexpected:\n%v\nreceived:\n%v",
-			expectedSequenceNumber, receivedSequenceNumber,
-		)
-	}
+	assert.Equalf(t, expectedSequenceNumber, receivedSequenceNumber,
+		"Expected and received sequence number differs,\nexpected:\n%v\nreceived:\n%v",
+		expectedSequenceNumber, receivedSequenceNumber)
 }
 
 // nolint: dupl
@@ -383,19 +315,13 @@ func TestSessionSRTPAcceptStreamTimeout(t *testing.T) {
 	}
 
 	newSession, err := NewSessionSRTP(pipe, config)
-	if err != nil {
-		t.Fatal(err)
-	} else if newSession == nil {
-		t.Fatal("NewSessionSRTP did not error, but returned nil session")
-	}
+	assert.NoError(t, err)
+	assert.NotNil(t, newSession, "NewSessionSRTP did not error, but returned nil session")
 
-	if _, _, err = newSession.AcceptStream(); err == nil || !errors.Is(err, errStreamAlreadyClosed) {
-		t.Fatal(err)
-	}
+	_, _, err = newSession.AcceptStream()
+	assert.ErrorIs(t, err, errStreamAlreadyClosed)
 
-	if err = newSession.Close(); err != nil {
-		t.Fatal(err)
-	}
+	assert.NoError(t, newSession.Close())
 }
 
 func assertPayloadSRTP(
@@ -411,14 +337,12 @@ func assertPayloadSRTP(
 	if errors.Is(err, io.EOF) {
 		return 0, err
 	}
-	if err != nil {
-		t.Error(err)
-
+	if !assert.NoError(t, err) {
 		return 0, err
 	}
-	if !bytes.Equal(expectedPayload, readBuffer[headerSize:n]) {
-		t.Errorf("Sent buffer does not match the one received exp(%v) actual(%v)", expectedPayload, readBuffer[headerSize:n])
-
+	if !assert.Equalf(t, expectedPayload, readBuffer[headerSize:n],
+		"Sent buffer does not match the one received exp(%v) actual(%v)",
+		expectedPayload, readBuffer[headerSize:n]) {
 		return 0, errPayloadDiffers
 	}
 

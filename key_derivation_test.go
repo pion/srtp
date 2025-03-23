@@ -4,7 +4,6 @@
 package srtp
 
 import (
-	"bytes"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -24,28 +23,22 @@ func TestValidSessionKeys_AesCm128(t *testing.T) {
 	}
 
 	sessionKey, err := aesCmKeyDerivation(labelSRTPEncryption, masterKey, masterSalt, 0, len(masterKey))
-	if err != nil {
-		t.Errorf("generateSessionKey failed: %v", err)
-	} else if !bytes.Equal(sessionKey, expectedSessionKey) {
-		t.Errorf("Session Key % 02x does not match expected % 02x", sessionKey, expectedSessionKey)
-	}
+	assert.NoError(t, err, "generateSessionKey failed")
+	assert.Equalf(t, expectedSessionKey, sessionKey,
+		"Session Key % 02x does not match expected % 02x", sessionKey, expectedSessionKey)
 
 	sessionSalt, err := aesCmKeyDerivation(labelSRTPSalt, masterKey, masterSalt, 0, len(masterSalt))
-	if err != nil {
-		t.Errorf("generateSessionSalt failed: %v", err)
-	} else if !bytes.Equal(sessionSalt, expectedSessionSalt) {
-		t.Errorf("Session Salt % 02x does not match expected % 02x", sessionSalt, expectedSessionSalt)
-	}
+	assert.NoError(t, err, "generateSessionSalt failed")
+	assert.Equalf(t, expectedSessionSalt, sessionSalt,
+		"Session Salt % 02x does not match expected % 02x", sessionSalt, expectedSessionSalt)
 
 	authKeyLen, err := ProtectionProfileAes128CmHmacSha1_80.AuthKeyLen()
 	assert.NoError(t, err)
 
 	sessionAuthTag, err := aesCmKeyDerivation(labelSRTPAuthenticationTag, masterKey, masterSalt, 0, authKeyLen)
-	if err != nil {
-		t.Errorf("generateSessionAuthTag failed: %v", err)
-	} else if !bytes.Equal(sessionAuthTag, expectedSessionAuthTag) {
-		t.Errorf("Session Auth Tag % 02x does not match expected % 02x", sessionAuthTag, expectedSessionAuthTag)
-	}
+	assert.NoError(t, err)
+	assert.Equalf(t, expectedSessionAuthTag, sessionAuthTag,
+		"Session Auth Tag % 02x does not match expected % 02x", sessionAuthTag, expectedSessionAuthTag)
 }
 
 func TestValidSessionKeys_AesCm256(t *testing.T) {
@@ -66,28 +59,22 @@ func TestValidSessionKeys_AesCm256(t *testing.T) {
 	}
 
 	sessionKey, err := aesCmKeyDerivation(labelSRTPEncryption, masterKey, masterSalt, 0, len(masterKey))
-	if err != nil {
-		t.Errorf("generateSessionKey failed: %v", err)
-	} else if !bytes.Equal(sessionKey, expectedSessionKey) {
-		t.Errorf("Session Key % 02x does not match expected % 02x", sessionKey, expectedSessionKey)
-	}
+	assert.NoError(t, err)
+	assert.Equalf(t, expectedSessionKey, sessionKey,
+		"Session Key % 02x does not match expected % 02x", sessionKey, expectedSessionKey)
 
 	sessionSalt, err := aesCmKeyDerivation(labelSRTPSalt, masterKey, masterSalt, 0, len(masterSalt))
-	if err != nil {
-		t.Errorf("generateSessionSalt failed: %v", err)
-	} else if !bytes.Equal(sessionSalt, expectedSessionSalt) {
-		t.Errorf("Session Salt % 02x does not match expected % 02x", sessionSalt, expectedSessionSalt)
-	}
+	assert.NoError(t, err)
+	assert.Equalf(t, expectedSessionSalt, sessionSalt,
+		"Session Salt % 02x does not match expected % 02x", sessionSalt, expectedSessionSalt)
 
 	authKeyLen, err := ProtectionProfileAes256CmHmacSha1_80.AuthKeyLen()
 	assert.NoError(t, err)
 
 	sessionAuthTag, err := aesCmKeyDerivation(labelSRTPAuthenticationTag, masterKey, masterSalt, 0, authKeyLen)
-	if err != nil {
-		t.Errorf("generateSessionAuthTag failed: %v", err)
-	} else if !bytes.Equal(sessionAuthTag, expectedSessionAuthTag) {
-		t.Errorf("Session Auth Tag % 02x does not match expected % 02x", sessionAuthTag, expectedSessionAuthTag)
-	}
+	assert.NoError(t, err)
+	assert.Equalf(t, expectedSessionAuthTag, sessionAuthTag,
+		"Session Auth Tag % 02x does not match expected % 02x", sessionAuthTag, expectedSessionAuthTag)
 }
 
 // This test asserts that calling aesCmKeyDerivation with a non-zero indexOverKdr fails

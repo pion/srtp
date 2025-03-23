@@ -29,7 +29,9 @@ type testCipher struct {
 }
 
 // create array of testCiphers for each supported profile.
-func createTestCiphers() []testCipher { //nolint:maintidx
+func createTestCiphers(t *testing.T) []testCipher { //nolint:maintidx
+	t.Helper()
+
 	tests := []testCipher{
 		{ //nolint:dupl
 			profile: ProtectionProfileAes128CmHmacSha1_32,
@@ -558,13 +560,11 @@ func createTestCiphers() []testCipher { //nolint:maintidx
 
 	for key, v := range tests {
 		keyLen, err := v.profile.KeyLen()
-		if err != nil {
-			panic(err)
-		}
+		assert.NoError(t, err)
+
 		saltLen, err := v.profile.SaltLen()
-		if err != nil {
-			panic(err)
-		}
+		assert.NoError(t, err)
+
 		tests[key].masterKey = masterKey[:keyLen]
 		tests[key].masterSalt = masterSalt[:saltLen]
 		tests[key].mki = mki
@@ -576,7 +576,7 @@ func createTestCiphers() []testCipher { //nolint:maintidx
 }
 
 func TestSrtpCipher(t *testing.T) {
-	for _, testCase := range createTestCiphers() {
+	for _, testCase := range createTestCiphers(t) {
 		t.Run(testCase.profile.String(), func(t *testing.T) {
 			assert.Equal(t, testCase.decryptedRTPPacket, testCase.authenticatedRTPPacket[:len(testCase.decryptedRTPPacket)])
 			assert.Equal(t, testCase.decryptedRTCPPacket, testCase.authenticatedRTCPPacket[:len(testCase.decryptedRTCPPacket)])

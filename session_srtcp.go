@@ -124,7 +124,7 @@ func (s *SessionSRTCP) write(buf []byte) (int, error) {
 	defer bufferpool.Put(ibuf)
 
 	s.session.localContextMutex.Lock()
-	encrypted, err := s.localContext.EncryptRTCP(ibuf.([]byte), buf, nil)
+	encrypted, err := s.localContext.EncryptRTCP(ibuf.([]byte), buf, nil) //nolint:forcetypeassert
 	s.session.localContextMutex.Unlock()
 
 	if err != nil {

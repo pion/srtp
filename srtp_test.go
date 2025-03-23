@@ -4,8 +4,6 @@
 package srtp
 
 import (
-	"bytes"
-	"errors"
 	"testing"
 
 	"github.com/pion/rtp"
@@ -25,14 +23,18 @@ type rtpTestCase struct {
 	encryptedGCM   []byte
 }
 
-func (tc rtpTestCase) encrypted(profile ProtectionProfile) []byte {
+func (tc rtpTestCase) encrypted(tb testing.TB, profile ProtectionProfile) []byte {
+	tb.Helper()
+
 	switch profile {
 	case profileCTR:
 		return tc.encryptedCTR
 	case profileGCM:
 		return tc.encryptedGCM
 	default:
-		panic("unknown profile")
+		assert.Fail(tb, "Invalid profile")
+
+		return nil
 	}
 }
 
@@ -45,17 +47,14 @@ func testKeyLen(t *testing.T, profile ProtectionProfile) {
 	saltLen, err := profile.SaltLen()
 	assert.NoError(t, err)
 
-	if _, err := CreateContext([]byte{}, make([]byte, saltLen), profile); err == nil {
-		t.Errorf("CreateContext accepted a 0 length key")
-	}
+	_, err = CreateContext([]byte{}, make([]byte, saltLen), profile)
+	assert.Error(t, err, "CreateContext failed with a 0 length key")
 
-	if _, err := CreateContext(make([]byte, keyLen), []byte{}, profile); err == nil {
-		t.Errorf("CreateContext accepted a 0 length salt")
-	}
+	_, err = CreateContext(make([]byte, keyLen), []byte{}, profile)
+	assert.Error(t, err, "CreateContext accepted a 0 length salt")
 
-	if _, err := CreateContext(make([]byte, keyLen), make([]byte, saltLen), profile); err != nil {
-		t.Errorf("CreateContext failed with a valid length key and salt: %v", err)
-	}
+	_, err = CreateContext(make([]byte, keyLen), make([]byte, saltLen), profile)
+	assert.NoError(t, err, "CreateContext failed with valid key and salt")
 }
 
 func TestKeyLen(t *testing.T) {
@@ -75,9 +74,7 @@ func TestValidPacketCounter(t *testing.T) {
 		0xcf, 0x90, 0x1e, 0xa5, 0xda, 0xd3, 0x2c, 0x15, 0x00, 0xa2, 0x24, 0xae, 0xae, 0xaf, 0x00, 0x00,
 	}
 	counter := generateCounter(32846, uint32(s.index>>16), s.ssrc, srtpSessionSalt) //nolint:gosec // G115
-	if !bytes.Equal(counter[:], expectedCounter) {
-		t.Errorf("Session Key % 02x does not match expected % 02x", counter, expectedCounter)
-	}
+	assert.Equal(t, counter[:], expectedCounter)
 }
 
 func TestRolloverCount(t *testing.T) { //nolint:cyclop
@@ -85,12 +82,9 @@ func TestRolloverCount(t *testing.T) { //nolint:cyclop
 
 	// Set initial seqnum
 	roc, diff, ovf := ssrcState.nextRolloverCount(65530)
-	if roc != 0 {
-		t.Errorf("Initial rolloverCounter must be 0")
-	}
-	if ovf {
-		t.Error("Should not overflow")
-	}
+	assert.Empty(t, roc, "Initial rollover counter must be 0")
+	assert.False(t, ovf, "Should not overflow")
+
 	ssrcState.updateRolloverCount(65530, diff)
 
 	// Invalid packets never update ROC
@@ -102,30 +96,21 @@ func TestRolloverCount(t *testing.T) { //nolint:cyclop
 
 	// We rolled over to 0
 	roc, diff, ovf = ssrcState.nextRolloverCount(0)
-	if roc != 1 {
-		t.Errorf("rolloverCounter was not updated after it crossed 0")
-	}
-	if ovf {
-		t.Error("Should not overflow")
-	}
+	assert.Equal(t, uint32(1), roc, "rolloverCounter must be incremented after wrapping")
+	assert.False(t, ovf, "Should not overflow")
+
 	ssrcState.updateRolloverCount(0, diff)
 
 	roc, diff, ovf = ssrcState.nextRolloverCount(65530)
-	if roc != 0 {
-		t.Errorf("rolloverCounter was not updated when it rolled back, failed to handle out of order")
-	}
-	if ovf {
-		t.Error("Should not overflow")
-	}
+	assert.Empty(t, roc, "rolloverCounter was not updated when it rolled back, failed to handle out of order")
+	assert.False(t, ovf, "Should not overflow")
+
 	ssrcState.updateRolloverCount(65530, diff)
 
 	roc, diff, ovf = ssrcState.nextRolloverCount(5)
-	if roc != 1 {
-		t.Errorf("rolloverCounter was not updated when it rolled over initial, to handle out of order")
-	}
-	if ovf {
-		t.Error("Should not overflow")
-	}
+	assert.Equal(t, uint32(1), roc, "rolloverCounter was not updated when it rolled over initial, to handle out of order")
+	assert.False(t, ovf, "Should not overflow")
+
 	ssrcState.updateRolloverCount(5, diff)
 
 	_, diff, _ = ssrcState.nextRolloverCount(6)
@@ -133,43 +118,29 @@ func TestRolloverCount(t *testing.T) { //nolint:cyclop
 	_, diff, _ = ssrcState.nextRolloverCount(7)
 	ssrcState.updateRolloverCount(7, diff)
 	roc, diff, _ = ssrcState.nextRolloverCount(8)
-	if roc != 1 {
-		t.Errorf("rolloverCounter was improperly updated for non-significant packets")
-	}
+	assert.Equal(t, uint32(1), roc, "rolloverCounter was improperly updated for non-significant packets")
+
 	ssrcState.updateRolloverCount(8, diff)
 
 	// valid packets never update ROC
 	roc, diff, ovf = ssrcState.nextRolloverCount(0x4000)
-	if roc != 1 {
-		t.Errorf("rolloverCounter was improperly updated for non-significant packets")
-	}
-	if ovf {
-		t.Error("Should not overflow")
-	}
+	assert.Equal(t, uint32(1), roc, "rolloverCounter was improperly updated for non-significant packets")
+	assert.False(t, ovf, "Should not overflow")
+
 	ssrcState.updateRolloverCount(0x4000, diff)
 	roc, diff, ovf = ssrcState.nextRolloverCount(0x8000)
-	if roc != 1 {
-		t.Errorf("rolloverCounter was improperly updated for non-significant packets")
-	}
-	if ovf {
-		t.Error("Should not overflow")
-	}
+	assert.Equal(t, uint32(1), roc, "rolloverCounter was improperly updated for non-significant packets")
+	assert.False(t, ovf, "Should not overflow")
+
 	ssrcState.updateRolloverCount(0x8000, diff)
 	roc, diff, ovf = ssrcState.nextRolloverCount(0xFFFF)
-	if roc != 1 {
-		t.Errorf("rolloverCounter was improperly updated for non-significant packets")
-	}
-	if ovf {
-		t.Error("Should not overflow")
-	}
+	assert.Equal(t, uint32(1), roc, "rolloverCounter was improperly updated for non-significant packets")
+	assert.False(t, ovf, "Should not overflow")
+
 	ssrcState.updateRolloverCount(0xFFFF, diff)
 	roc, _, ovf = ssrcState.nextRolloverCount(0)
-	if roc != 2 {
-		t.Errorf("rolloverCounter must be incremented after wrapping, got %d", roc)
-	}
-	if ovf {
-		t.Error("Should not overflow")
-	}
+	assert.Equal(t, uint32(2), roc, "rolloverCounter must be incremented after wrapping")
+	assert.False(t, ovf, "Should not overflow")
 }
 
 func TestRolloverCountOverflow(t *testing.T) {
@@ -179,9 +150,7 @@ func TestRolloverCountOverflow(t *testing.T) {
 	}
 	s.updateRolloverCount(0xFFFF, 0)
 	_, _, ovf := s.nextRolloverCount(0)
-	if !ovf {
-		t.Error("Should overflow")
-	}
+	assert.True(t, ovf, "Should overflow")
 }
 
 func buildTestContext(profile ProtectionProfile, opts ...ContextOption) (*Context, error) {
@@ -207,30 +176,21 @@ func TestRTPInvalidAuth(t *testing.T) {
 	invalidSalt := []byte{0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00}
 
 	encryptContext, err := buildTestContext(profileCTR)
-	if err != nil {
-		t.Fatal(err)
-	}
+	assert.NoError(t, err)
 
 	invalidContext, err := CreateContext(masterKey, invalidSalt, profileCTR)
-	if err != nil {
-		t.Errorf("CreateContext failed: %v", err)
-	}
+	assert.NoError(t, err)
 
 	for _, testCase := range rtpTestCases() {
 		pkt := &rtp.Packet{Payload: rtpTestCaseDecrypted(), Header: rtp.Header{SequenceNumber: testCase.sequenceNumber}}
 		pktRaw, err := pkt.Marshal()
-		if err != nil {
-			t.Fatal(err)
-		}
+		assert.NoError(t, err)
 
 		out, err := encryptContext.EncryptRTP(nil, pktRaw, nil)
-		if err != nil {
-			t.Fatal(err)
-		}
+		assert.NoError(t, err)
 
-		if _, err := invalidContext.DecryptRTP(nil, out, nil); err == nil {
-			t.Errorf("Managed to decrypt with incorrect salt for packet with SeqNum: %d", testCase.sequenceNumber)
-		}
+		_, err = invalidContext.DecryptRTP(nil, out, nil)
+		assert.Errorf(t, err, "Managed to decrypt with incorrect salt for packet with SeqNum: %d", testCase.sequenceNumber)
 	}
 }
 
@@ -306,54 +266,43 @@ func rtpTestCases() []rtpTestCase {
 
 func testRTPLifecyleNewAlloc(t *testing.T, profile ProtectionProfile) {
 	t.Helper()
-	assert := assert.New(t)
+	assertT := assert.New(t)
 
 	authTagLen, err := profile.AuthTagRTPLen()
-	assert.NoError(err)
+	assertT.NoError(err)
 
 	for _, testCase := range rtpTestCases() {
 		encryptContext, err := buildTestContext(profile)
-		if err != nil {
-			t.Fatal(err)
-		}
+		assertT.NoError(err)
 
 		decryptContext, err := buildTestContext(profile)
-		if err != nil {
-			t.Fatal(err)
-		}
+		assertT.NoError(err)
 
 		decryptedPkt := &rtp.Packet{
 			Payload: rtpTestCaseDecrypted(),
 			Header:  rtp.Header{SequenceNumber: testCase.sequenceNumber},
 		}
 		decryptedRaw, err := decryptedPkt.Marshal()
-		if err != nil {
-			t.Fatal(err)
-		}
+		assertT.NoError(err)
 
 		encryptedPkt := &rtp.Packet{
-			Payload: testCase.encrypted(profile),
+			Payload: testCase.encrypted(t, profile),
 			Header:  rtp.Header{SequenceNumber: testCase.sequenceNumber},
 		}
 		encryptedRaw, err := encryptedPkt.Marshal()
-		if err != nil {
-			t.Fatal(err)
-		}
+		assertT.NoError(err)
 
 		actualEncrypted, err := encryptContext.EncryptRTP(nil, decryptedRaw, nil)
-		if err != nil {
-			t.Fatal(err)
-		}
-		assert.Equalf(actualEncrypted, encryptedRaw, "RTP packet with SeqNum invalid encryption: %d", testCase.sequenceNumber)
+		assertT.NoError(err)
+		assertT.Equalf(actualEncrypted, encryptedRaw,
+			"RTP packet with SeqNum invalid encryption: %d", testCase.sequenceNumber)
 
 		actualDecrypted, err := decryptContext.DecryptRTP(nil, encryptedRaw, nil)
-		if err != nil {
-			t.Fatal(err)
-		} else if bytes.Equal(encryptedRaw[:len(encryptedRaw)-authTagLen], actualDecrypted) {
-			t.Fatal("DecryptRTP improperly encrypted in place")
-		}
-
-		assert.Equalf(actualDecrypted, decryptedRaw, "RTP packet with SeqNum invalid decryption: %d", testCase.sequenceNumber)
+		assertT.NoError(err)
+		assertT.NotEqual(encryptedRaw[:len(encryptedRaw)-authTagLen], actualDecrypted,
+			"DecryptRTP improperly encrypted in place")
+		assertT.Equalf(actualDecrypted, decryptedRaw,
+			"RTP packet with SeqNum invalid decryption: %d", testCase.sequenceNumber)
 	}
 }
 
@@ -364,18 +313,14 @@ func TestRTPLifecycleNewAlloc(t *testing.T) {
 
 func testRTPLifecyleInPlace(t *testing.T, profile ProtectionProfile) { //nolint:cyclop
 	t.Helper()
-	assert := assert.New(t)
+	assertT := assert.New(t)
 
 	for _, testCase := range rtpTestCases() {
 		encryptContext, err := buildTestContext(profile)
-		if err != nil {
-			t.Fatal(err)
-		}
+		assertT.NoError(err)
 
 		decryptContext, err := buildTestContext(profile)
-		if err != nil {
-			t.Fatal(err)
-		}
+		assertT.NoError(err)
 
 		decryptHeader := &rtp.Header{}
 		decryptedPkt := &rtp.Packet{
@@ -383,19 +328,15 @@ func testRTPLifecyleInPlace(t *testing.T, profile ProtectionProfile) { //nolint:
 			Header:  rtp.Header{SequenceNumber: testCase.sequenceNumber},
 		}
 		decryptedRaw, err := decryptedPkt.Marshal()
-		if err != nil {
-			t.Fatal(err)
-		}
+		assertT.NoError(err)
 
 		encryptHeader := &rtp.Header{}
 		encryptedPkt := &rtp.Packet{
-			Payload: testCase.encrypted(profile),
+			Payload: testCase.encrypted(t, profile),
 			Header:  rtp.Header{SequenceNumber: testCase.sequenceNumber},
 		}
 		encryptedRaw, err := encryptedPkt.Marshal()
-		if err != nil {
-			t.Fatal(err)
-		}
+		assertT.NoError(err)
 
 		// Copy packet, asserts that everything was done in place
 		slack := 10
@@ -406,30 +347,22 @@ func testRTPLifecyleInPlace(t *testing.T, profile ProtectionProfile) { //nolint:
 		copy(encryptInput, decryptedRaw)
 
 		actualEncrypted, err := encryptContext.EncryptRTP(encryptInput, encryptInput, encryptHeader)
-		switch {
-		case err != nil:
-			t.Fatal(err)
-		case &encryptInput[0] != &actualEncrypted[0]:
-			t.Errorf("EncryptRTP failed to encrypt in place")
-		case encryptHeader.SequenceNumber != testCase.sequenceNumber:
-			t.Errorf("EncryptRTP failed to populate input rtp.Header")
-		}
-		assert.Equalf(actualEncrypted, encryptedRaw, "RTP packet with SeqNum invalid encryption: %d", testCase.sequenceNumber)
+		assertT.NoError(err)
+		assertT.Same(&encryptInput[0], &actualEncrypted[0], "DecryptRTP failed to decrypt in place")
+		assertT.Equal(testCase.sequenceNumber, encryptHeader.SequenceNumber, "EncryptRTP failed to populate input rtp.Header")
+		assertT.Equalf(actualEncrypted, encryptedRaw,
+			"RTP packet with SeqNum invalid encryption: %d", testCase.sequenceNumber)
 
 		// Copy packet, asserts that everything was done in place
 		decryptInput := make([]byte, len(encryptedRaw))
 		copy(decryptInput, encryptedRaw)
 
 		actualDecrypted, err := decryptContext.DecryptRTP(decryptInput, decryptInput, decryptHeader)
-		switch {
-		case err != nil:
-			t.Fatal(err)
-		case &decryptInput[0] != &actualDecrypted[0]:
-			t.Errorf("DecryptRTP failed to decrypt in place")
-		case decryptHeader.SequenceNumber != testCase.sequenceNumber:
-			t.Errorf("DecryptRTP failed to populate input rtp.Header")
-		}
-		assert.Equalf(actualDecrypted, decryptedRaw, "RTP packet with SeqNum invalid decryption: %d", testCase.sequenceNumber)
+		assertT.NoError(err)
+		assertT.Same(&decryptInput[0], &actualDecrypted[0], "DecryptRTP failed to decrypt in place")
+		assertT.Equal(testCase.sequenceNumber, decryptHeader.SequenceNumber, "DecryptRTP failed to populate input rtp.Header")
+		assertT.Equalf(actualDecrypted, decryptedRaw,
+			"RTP packet with SeqNum invalid decryption: %d", testCase.sequenceNumber)
 	}
 }
 
@@ -440,20 +373,16 @@ func TestRTPLifecycleInPlace(t *testing.T) {
 
 func testRTPReplayProtection(t *testing.T, profile ProtectionProfile) { //nolint:cyclop
 	t.Helper()
-	assert := assert.New(t)
+	assertT := assert.New(t)
 
 	for _, testCase := range rtpTestCases() {
 		encryptContext, err := buildTestContext(profile)
-		if err != nil {
-			t.Fatal(err)
-		}
+		assertT.NoError(err)
 
 		decryptContext, err := buildTestContext(
 			profile, SRTPReplayProtection(64),
 		)
-		if err != nil {
-			t.Fatal(err)
-		}
+		assertT.NoError(err)
 
 		decryptHeader := &rtp.Header{}
 		decryptedPkt := &rtp.Packet{
@@ -461,19 +390,15 @@ func testRTPReplayProtection(t *testing.T, profile ProtectionProfile) { //nolint
 			Header:  rtp.Header{SequenceNumber: testCase.sequenceNumber},
 		}
 		decryptedRaw, err := decryptedPkt.Marshal()
-		if err != nil {
-			t.Fatal(err)
-		}
+		assertT.NoError(err)
 
 		encryptHeader := &rtp.Header{}
 		encryptedPkt := &rtp.Packet{
-			Payload: testCase.encrypted(profile),
+			Payload: testCase.encrypted(t, profile),
 			Header:  rtp.Header{SequenceNumber: testCase.sequenceNumber},
 		}
 		encryptedRaw, err := encryptedPkt.Marshal()
-		if err != nil {
-			t.Fatal(err)
-		}
+		assertT.NoError(err)
 
 		// Copy packet, asserts that everything was done in place
 		slack := 10
@@ -484,35 +409,25 @@ func testRTPReplayProtection(t *testing.T, profile ProtectionProfile) { //nolint
 		copy(encryptInput, decryptedRaw)
 
 		actualEncrypted, err := encryptContext.EncryptRTP(encryptInput, encryptInput, encryptHeader)
-		switch {
-		case err != nil:
-			t.Fatal(err)
-		case &encryptInput[0] != &actualEncrypted[0]:
-			t.Errorf("EncryptRTP failed to encrypt in place")
-		case encryptHeader.SequenceNumber != testCase.sequenceNumber:
-			t.Fatal("EncryptRTP failed to populate input rtp.Header")
-		}
-		assert.Equalf(actualEncrypted, encryptedRaw, "RTP packet with SeqNum invalid encryption: %d", testCase.sequenceNumber)
+		assertT.NoError(err)
+		assertT.Same(&encryptInput[0], &actualEncrypted[0], "EncryptRTP failed to encrypt in place")
+		assertT.Equal(testCase.sequenceNumber, encryptHeader.SequenceNumber, "EncryptRTP failed to populate input rtp.Header")
+		assertT.Equalf(actualEncrypted, encryptedRaw,
+			"RTP packet with SeqNum invalid encryption: %d", testCase.sequenceNumber)
 
 		// Copy packet, asserts that everything was done in place
 		decryptInput := make([]byte, len(encryptedRaw))
 		copy(decryptInput, encryptedRaw)
 
 		actualDecrypted, err := decryptContext.DecryptRTP(decryptInput, decryptInput, decryptHeader)
-		switch {
-		case err != nil:
-			t.Fatal(err)
-		case &decryptInput[0] != &actualDecrypted[0]:
-			t.Errorf("DecryptRTP failed to decrypt in place")
-		case decryptHeader.SequenceNumber != testCase.sequenceNumber:
-			t.Errorf("DecryptRTP failed to populate input rtp.Header")
-		}
-		assert.Equalf(actualDecrypted, decryptedRaw, "RTP packet with SeqNum invalid decryption: %d", testCase.sequenceNumber)
+		assertT.NoError(err)
+		assertT.Same(&decryptInput[0], &actualDecrypted[0], "DecryptRTP failed to decrypt in place")
+		assertT.Equal(testCase.sequenceNumber, decryptHeader.SequenceNumber, "DecryptRTP failed to populate input rtp.Header")
+		assertT.Equalf(actualDecrypted, decryptedRaw,
+			"RTP packet with SeqNum invalid decryption: %d", testCase.sequenceNumber)
 
 		_, errReplay := decryptContext.DecryptRTP(decryptInput, decryptInput, decryptHeader)
-		if !errors.Is(errReplay, errDuplicated) {
-			t.Errorf("Replayed packet must be errored with %v, got %v", errDuplicated, errReplay)
-		}
+		assertT.ErrorIs(errReplay, errDuplicated)
 	}
 }
 
@@ -522,7 +437,7 @@ func TestRTPReplayProtection(t *testing.T) {
 }
 
 func TestRTPReplayDetectorFactory(t *testing.T) {
-	assert := assert.New(t)
+	assertT := assert.New(t)
 	profile := profileCTR
 	data := rtpTestCases()[0]
 
@@ -534,47 +449,36 @@ func TestRTPReplayDetectorFactory(t *testing.T) {
 			return &nopReplayDetector{}
 		}),
 	)
-	if err != nil {
-		t.Fatal(err)
-	}
+	assertT.NoError(err)
 
 	pkt := &rtp.Packet{
-		Payload: data.encrypted(profile),
+		Payload: data.encrypted(t, profile),
 		Header:  rtp.Header{SequenceNumber: data.sequenceNumber},
 	}
 	in, err := pkt.Marshal()
-	if err != nil {
-		t.Fatal(err)
-	}
+	assertT.NoError(err)
 
-	if _, err := decryptContext.DecryptRTP(nil, in, nil); err != nil {
-		t.Fatal(err)
-	}
-	assert.Equal(1, cntFactory)
+	_, err = decryptContext.DecryptRTP(nil, in, nil)
+	assertT.NoError(err)
+	assertT.Equal(1, cntFactory)
 }
 
 func benchmarkEncryptRTP(b *testing.B, profile ProtectionProfile, size int) {
 	b.Helper()
 
 	encryptContext, err := buildTestContext(profile)
-	if err != nil {
-		b.Fatal(err)
-	}
+	assert.NoError(b, err)
 
 	pkt := &rtp.Packet{Payload: make([]byte, size)}
 	pktRaw, err := pkt.Marshal()
-	if err != nil {
-		b.Fatal(err)
-	}
+	assert.NoError(b, err)
 
 	b.SetBytes(int64(len(pktRaw)))
 	b.ResetTimer()
 
 	for i := 0; i < b.N; i++ {
 		_, err = encryptContext.EncryptRTP(nil, pktRaw, nil)
-		if err != nil {
-			b.Fatal(err)
-		}
+		assert.NoError(b, err)
 	}
 }
 
@@ -597,15 +501,11 @@ func benchmarkEncryptRTPInPlace(b *testing.B, profile ProtectionProfile, size in
 	b.Helper()
 
 	encryptContext, err := buildTestContext(profile)
-	if err != nil {
-		b.Fatal(err)
-	}
+	assert.NoError(b, err)
 
 	pkt := &rtp.Packet{Payload: make([]byte, size)}
 	pktRaw, err := pkt.Marshal()
-	if err != nil {
-		b.Fatal(err)
-	}
+	assert.NoError(b, err)
 
 	buf := make([]byte, 0, len(pktRaw)+10)
 
@@ -614,9 +514,7 @@ func benchmarkEncryptRTPInPlace(b *testing.B, profile ProtectionProfile, size in
 
 	for i := 0; i < b.N; i++ {
 		buf, err = encryptContext.EncryptRTP(buf[:0], pktRaw, nil)
-		if err != nil {
-			b.Fatal(err)
-		}
+		assert.NoError(b, err)
 	}
 }
 
@@ -639,7 +537,7 @@ func benchmarkDecryptRTP(b *testing.B, profile ProtectionProfile) {
 	b.Helper()
 
 	sequenceNumber := uint16(5000)
-	encrypted := rtpTestCases()[0].encrypted(profile)
+	encrypted := rtpTestCases()[0].encrypted(b, profile)
 
 	encryptedPkt := &rtp.Packet{
 		Payload: encrypted,
@@ -649,23 +547,17 @@ func benchmarkDecryptRTP(b *testing.B, profile ProtectionProfile) {
 	}
 
 	encryptedRaw, err := encryptedPkt.Marshal()
-	if err != nil {
-		b.Fatal(err)
-	}
+	assert.NoError(b, err)
 
 	context, err := buildTestContext(profile)
-	if err != nil {
-		b.Fatal(err)
-	}
+	assert.NoError(b, err)
 
 	b.SetBytes(int64(len(encryptedRaw)))
 	b.ResetTimer()
 
 	for i := 0; i < b.N; i++ {
 		_, err := context.DecryptRTP(nil, encryptedRaw, nil)
-		if err != nil {
-			b.Fatal(err)
-		}
+		assert.NoError(b, err)
 	}
 }
 
@@ -678,86 +570,56 @@ func TestRolloverCount2(t *testing.T) { //nolint:cyclop
 	srtpState := &srtpSSRCState{ssrc: defaultSsrc}
 
 	roc, diff, ovf := srtpState.nextRolloverCount(30123)
-	if roc != 0 {
-		t.Errorf("Initial rolloverCounter must be 0")
-	}
-	if ovf {
-		t.Error("Should not overflow")
-	}
+	assert.Equal(t, uint32(0), roc, "Initial rolloverCounter must be 0")
+	assert.False(t, ovf, "Should not overflow")
+
 	srtpState.updateRolloverCount(30123, diff)
 
 	roc, diff, ovf = srtpState.nextRolloverCount(62892) // 30123 + (1 << 15) + 1
-	if roc != 0 {
-		t.Errorf("Initial rolloverCounter must be 0")
-	}
-	if ovf {
-		t.Error("Should not overflow")
-	}
+	assert.Equal(t, uint32(0), roc, "Initial rolloverCounter must be 0")
+	assert.False(t, ovf, "Should not overflow")
+
 	srtpState.updateRolloverCount(62892, diff)
 	roc, diff, ovf = srtpState.nextRolloverCount(204)
-	if roc != 1 {
-		t.Errorf("rolloverCounter was not updated after it crossed 0")
-	}
-	if ovf {
-		t.Error("Should not overflow")
-	}
+	assert.Equal(t, uint32(1), roc, "rolloverCounter was not updated after it crossed 0")
+	assert.False(t, ovf, "Should not overflow")
+
 	srtpState.updateRolloverCount(62892, diff)
 	roc, diff, ovf = srtpState.nextRolloverCount(64535)
-	if roc != 0 {
-		t.Errorf("rolloverCounter was not updated when it rolled back, failed to handle out of order")
-	}
-	if ovf {
-		t.Error("Should not overflow")
-	}
+	assert.Equal(t, uint32(0), roc, "rolloverCounter was not updated when it rolled back, failed to handle out of order")
+	assert.False(t, ovf, "Should not overflow")
+
 	srtpState.updateRolloverCount(64535, diff)
 	roc, diff, ovf = srtpState.nextRolloverCount(205)
-	if roc != 1 {
-		t.Errorf("rolloverCounter was improperly updated for non-significant packets")
-	}
-	if ovf {
-		t.Error("Should not overflow")
-	}
+	assert.Equal(t, uint32(1), roc, "rolloverCounter was improperly updated for non-significant packets")
+	assert.False(t, ovf, "Should not overflow")
+
 	srtpState.updateRolloverCount(205, diff)
 	roc, diff, ovf = srtpState.nextRolloverCount(1)
-	if roc != 1 {
-		t.Errorf("rolloverCounter was improperly updated for non-significant packets")
-	}
-	if ovf {
-		t.Error("Should not overflow")
-	}
+	assert.Equal(t, uint32(1), roc, "rolloverCounter was improperly updated for non-significant packets")
+	assert.False(t, ovf, "Should not overflow")
+
 	srtpState.updateRolloverCount(1, diff)
 
 	roc, diff, ovf = srtpState.nextRolloverCount(64532)
-	if roc != 0 {
-		t.Errorf("rolloverCounter was improperly updated for non-significant packets")
-	}
-	if ovf {
-		t.Error("Should not overflow")
-	}
+	assert.Equal(t, uint32(0), roc, "rolloverCounter was improperly updated for non-significant packets")
+	assert.False(t, ovf, "Should not overflow")
+
 	srtpState.updateRolloverCount(64532, diff)
 	roc, diff, ovf = srtpState.nextRolloverCount(65534)
-	if roc != 0 {
-		t.Errorf("index was improperly updated for non-significant packets")
-	}
-	if ovf {
-		t.Error("Should not overflow")
-	}
+	assert.Equal(t, uint32(0), roc, "rolloverCounter was improperly updated for non-significant packets")
+	assert.False(t, ovf, "Should not overflow")
+
 	srtpState.updateRolloverCount(65534, diff)
 	roc, diff, ovf = srtpState.nextRolloverCount(64532)
-	if roc != 0 {
-		t.Errorf("index was improperly updated for non-significant packets")
-	}
-	if ovf {
-		t.Error("Should not overflow")
-	}
+	assert.Equal(t, uint32(0), roc, "rolloverCounter was improperly updated for non-significant packets")
+	assert.False(t, ovf, "Should not overflow")
+
 	srtpState.updateRolloverCount(65532, diff)
 	roc, diff, ovf = srtpState.nextRolloverCount(205)
-	if roc != 1 {
-		t.Errorf("index was not updated after it crossed 0")
-	}
-	if ovf {
-		t.Error("Should not overflow")
-	}
+	assert.Equal(t, uint32(1), roc, "index was not updated after it crossed 0")
+	assert.False(t, ovf, "Should not overflow")
+
 	srtpState.updateRolloverCount(65532, diff)
 }
 
@@ -766,34 +628,22 @@ func TestProtectionProfileAes128CmHmacSha1_32(t *testing.T) {
 	masterSalt := []byte{0x62, 0x77, 0x60, 0x38, 0xc0, 0x6d, 0xc9, 0x41, 0x9f, 0x6d, 0xd9, 0x43, 0x3e, 0x7c}
 
 	encryptContext, err := CreateContext(masterKey, masterSalt, ProtectionProfileAes128CmHmacSha1_32)
-	if err != nil {
-		t.Fatal(err)
-	}
+	assert.NoError(t, err)
 
 	decryptContext, err := CreateContext(masterKey, masterSalt, ProtectionProfileAes128CmHmacSha1_32)
-	if err != nil {
-		t.Fatal(err)
-	}
+	assert.NoError(t, err)
 
 	pkt := &rtp.Packet{Payload: rtpTestCaseDecrypted(), Header: rtp.Header{SequenceNumber: 5000}}
 	pktRaw, err := pkt.Marshal()
-	if err != nil {
-		t.Fatal(err)
-	}
+	assert.NoError(t, err)
 
 	out, err := encryptContext.EncryptRTP(nil, pktRaw, nil)
-	if err != nil {
-		t.Fatal(err)
-	}
+	assert.NoError(t, err)
 
 	decrypted, err := decryptContext.DecryptRTP(nil, out, nil)
-	if err != nil {
-		t.Fatal(err)
-	}
+	assert.NoError(t, err)
 
-	if !bytes.Equal(decrypted, pktRaw) {
-		t.Errorf("Decrypted % 02x does not match original % 02x", decrypted, pktRaw)
-	}
+	assert.Equal(t, pktRaw, decrypted, "Decrypted RTP packet does not match original")
 }
 
 func TestRTPDecryptShotenedPacket(t *testing.T) {
@@ -806,18 +656,14 @@ func TestRTPDecryptShotenedPacket(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			for _, testCase := range rtpTestCases() {
 				decryptContext, err := buildTestContext(profile)
-				if err != nil {
-					t.Fatal(err)
-				}
+				assert.NoError(t, err)
 
 				encryptedPkt := &rtp.Packet{
-					Payload: testCase.encrypted(profile),
+					Payload: testCase.encrypted(t, profile),
 					Header:  rtp.Header{SequenceNumber: testCase.sequenceNumber},
 				}
 				encryptedRaw, err := encryptedPkt.Marshal()
-				if err != nil {
-					t.Fatal(err)
-				}
+				assert.NoError(t, err)
 
 				for i := 1; i < len(encryptedRaw)-1; i++ {
 					packet := encryptedRaw[:i]
@@ -839,9 +685,7 @@ func TestRTPMaxPackets(t *testing.T) {
 		profile := profile
 		t.Run(name, func(t *testing.T) {
 			context, err := buildTestContext(profile)
-			if err != nil {
-				t.Fatal(err)
-			}
+			assert.NoError(t, err)
 
 			context.SetROC(1, (1<<32)-1)
 
@@ -853,12 +697,10 @@ func TestRTPMaxPackets(t *testing.T) {
 				Payload: []byte{0, 1},
 			}
 			raw0, err0 := pkt0.Marshal()
-			if err0 != nil {
-				t.Fatal(err0)
-			}
-			if _, errEnc := context.EncryptRTP(nil, raw0, nil); errEnc != nil {
-				t.Fatal(errEnc)
-			}
+			assert.NoError(t, err0)
+
+			_, errEnc := context.EncryptRTP(nil, raw0, nil)
+			assert.NoError(t, errEnc)
 
 			pkt1 := &rtp.Packet{
 				Header: rtp.Header{
@@ -868,12 +710,10 @@ func TestRTPMaxPackets(t *testing.T) {
 				Payload: []byte{0, 1},
 			}
 			raw1, err1 := pkt1.Marshal()
-			if err1 != nil {
-				t.Fatal(err1)
-			}
-			if _, errEnc := context.EncryptRTP(nil, raw1, nil); !errors.Is(errEnc, errExceededMaxPackets) {
-				t.Fatalf("Expected error '%v', got '%v'", errExceededMaxPackets, errEnc)
-			}
+			assert.NoError(t, err1)
+
+			_, errEnc = context.EncryptRTP(nil, raw1, nil)
+			assert.ErrorIs(t, errEnc, errExceededMaxPackets)
 		})
 	}
 }
@@ -886,12 +726,10 @@ func TestRTPBurstLossWithSetROC(t *testing.T) { //nolint:cyclop
 	for name, profile := range profiles {
 		profile := profile
 		t.Run(name, func(t *testing.T) {
-			assert := assert.New(t)
+			assertT := assert.New(t)
 
 			encryptContext, err := buildTestContext(profile)
-			if err != nil {
-				t.Fatal(err)
-			}
+			assertT.NoError(err)
 
 			type packetWithROC struct {
 				pkt rtp.Packet
@@ -919,14 +757,12 @@ func TestRTPBurstLossWithSetROC(t *testing.T) { //nolint:cyclop
 					},
 				}
 				b, errMarshal := packet.pkt.Marshal()
-				if errMarshal != nil {
-					t.Fatal(errMarshal)
-				}
+				assertT.NoError(errMarshal)
+
 				packet.raw = b
 				enc, errEnc := encryptContext.EncryptRTP(nil, b, nil)
-				if errEnc != nil {
-					t.Fatal(errEnc)
-				}
+				assertT.NoError(errEnc)
+
 				packet.roc, _ = encryptContext.ROC(1)
 				if 0x9000 < i && i < 0x20100 {
 					continue
@@ -936,37 +772,31 @@ func TestRTPBurstLossWithSetROC(t *testing.T) { //nolint:cyclop
 			}
 
 			decryptContext, err := buildTestContext(profile)
-			if err != nil {
-				t.Fatal(err)
-			}
+			assertT.NoError(err)
 
 			for _, p := range pkts {
 				decryptContext.SetROC(1, p.roc)
 				pkt, err := decryptContext.DecryptRTP(nil, p.enc, nil)
-				if err != nil {
-					t.Errorf("roc=%d, seq=%d: %v", p.roc, p.pkt.SequenceNumber, err)
-
-					continue
-				}
-				assert.Equal(p.raw, pkt)
+				assertT.NoErrorf(err, "roc=%d, seq=%d", p.roc, p.pkt.SequenceNumber)
+				assertT.Equal(p.raw, pkt)
 			}
 		})
 	}
 }
 
 func TestDecryptInvalidSRTP(t *testing.T) {
-	assert := assert.New(t)
+	assertT := assert.New(t)
 	key := []byte{0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01}
 	salt := []byte{0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01}
 	decryptContext, err := CreateContext(key, salt, ProtectionProfileAes128CmHmacSha1_80)
-	assert.NoError(err)
+	assertT.NoError(err)
 
 	packet := []byte{
 		0x41, 0x02, 0x07, 0xf9, 0xf9, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
 		0x00, 0xb5, 0x73, 0x19, 0xf6, 0x91, 0xbb, 0x3e, 0xa5, 0x21, 0x07,
 	}
 	_, err = decryptContext.DecryptRTP(nil, packet, nil)
-	assert.Error(err)
+	assertT.Error(err)
 }
 
 func TestRTPInvalidMKI(t *testing.T) {
@@ -974,32 +804,22 @@ func TestRTPInvalidMKI(t *testing.T) {
 	mki2 := []byte{0x02, 0x03, 0x04, 0x05}
 
 	encryptContext, err := buildTestContext(profileCTR, MasterKeyIndicator(mki1))
-	if err != nil {
-		t.Fatal(err)
-	}
+	assert.NoError(t, err)
 
 	decryptContext, err := buildTestContext(profileCTR, MasterKeyIndicator(mki2))
-	if err != nil {
-		t.Fatal(err)
-	}
+	assert.NoError(t, err)
 
 	for _, testCase := range rtpTestCases() {
 		pkt := &rtp.Packet{Payload: rtpTestCaseDecrypted(), Header: rtp.Header{SequenceNumber: testCase.sequenceNumber}}
 		pktRaw, err := pkt.Marshal()
-		if err != nil {
-			t.Fatal(err)
-		}
+		assert.NoError(t, err)
 
 		out, err := encryptContext.EncryptRTP(nil, pktRaw, nil)
-		if err != nil {
-			t.Fatal(err)
-		}
+		assert.NoError(t, err)
 
-		if _, err := decryptContext.DecryptRTP(nil, out, nil); err == nil {
-			t.Errorf("Managed to decrypt with incorrect MKI for packet with SeqNum: %d", testCase.sequenceNumber)
-		} else {
-			assert.ErrorIs(t, err, ErrMKINotFound)
-		}
+		_, err = decryptContext.DecryptRTP(nil, out, nil)
+		assert.Errorf(t, err, "Managed to decrypt with incorrect MKI for packet with SeqNum: %d", testCase.sequenceNumber)
+		assert.ErrorIs(t, err, ErrMKINotFound)
 	}
 }
 
@@ -1011,48 +831,33 @@ func TestRTPHandleMultipleMKI(t *testing.T) { //nolint:cyclop
 	masterSalt2 := []byte{0xff, 0x77, 0x60, 0x38, 0xc0, 0x6d, 0xc9, 0x41, 0x9f, 0x6d, 0xd9, 0x43, 0x3e, 0x7c}
 
 	encryptContext1, err := buildTestContext(profileCTR, MasterKeyIndicator(mki1))
-	if err != nil {
-		t.Fatal(err)
-	}
+	assert.NoError(t, err)
 
 	encryptContext2, err := CreateContext(masterKey2, masterSalt2, profileCTR, MasterKeyIndicator(mki2))
-	if err != nil {
-		t.Fatal(err)
-	}
+	assert.NoError(t, err)
 
 	decryptContext, err := buildTestContext(profileCTR, MasterKeyIndicator(mki1))
-	if err != nil {
-		t.Fatal(err)
-	}
+	assert.NoError(t, err)
+
 	err = decryptContext.AddCipherForMKI(mki2, masterKey2, masterSalt2)
-	if err != nil {
-		t.Fatal(err)
-	}
+	assert.NoError(t, err)
 
 	for _, testCase := range rtpTestCases() {
 		pkt := &rtp.Packet{Payload: rtpTestCaseDecrypted(), Header: rtp.Header{SequenceNumber: testCase.sequenceNumber}}
 		pktRaw, err := pkt.Marshal()
-		if err != nil {
-			t.Fatal(err)
-		}
+		assert.NoError(t, err)
 
 		encrypted1, err := encryptContext1.EncryptRTP(nil, pktRaw, nil)
-		if err != nil {
-			t.Fatal(err)
-		}
+		assert.NoError(t, err)
+
 		encrypted2, err := encryptContext2.EncryptRTP(nil, pktRaw, nil)
-		if err != nil {
-			t.Fatal(err)
-		}
+		assert.NoError(t, err)
 
 		decrypted1, err := decryptContext.DecryptRTP(nil, encrypted1, nil)
-		if err != nil {
-			t.Fatal(err)
-		}
+		assert.NoError(t, err)
+
 		decrypted2, err := decryptContext.DecryptRTP(nil, encrypted2, nil)
-		if err != nil {
-			t.Fatal(err)
-		}
+		assert.NoError(t, err)
 
 		assert.Equal(t, pktRaw, decrypted1)
 		assert.Equal(t, pktRaw, decrypted2)
@@ -1067,62 +872,43 @@ func TestRTPSwitchMKI(t *testing.T) { //nolint:cyclop
 	masterSalt2 := []byte{0xff, 0x77, 0x60, 0x38, 0xc0, 0x6d, 0xc9, 0x41, 0x9f, 0x6d, 0xd9, 0x43, 0x3e, 0x7c}
 
 	encryptContext, err := buildTestContext(profileCTR, MasterKeyIndicator(mki1))
-	if err != nil {
-		t.Fatal(err)
-	}
+	assert.NoError(t, err)
+
 	err = encryptContext.AddCipherForMKI(mki2, masterKey2, masterSalt2)
-	if err != nil {
-		t.Fatal(err)
-	}
+	assert.NoError(t, err)
 
 	decryptContext1, err := buildTestContext(profileCTR, MasterKeyIndicator(mki1))
-	if err != nil {
-		t.Fatal(err)
-	}
+	assert.NoError(t, err)
+
 	decryptContext2, err := CreateContext(masterKey2, masterSalt2, profileCTR, MasterKeyIndicator(mki2))
-	if err != nil {
-		t.Fatal(err)
-	}
+	assert.NoError(t, err)
 
 	for _, testCase := range rtpTestCases() {
 		pkt := &rtp.Packet{Payload: rtpTestCaseDecrypted(), Header: rtp.Header{SequenceNumber: testCase.sequenceNumber}}
 		pktRaw, err := pkt.Marshal()
-		if err != nil {
-			t.Fatal(err)
-		}
+		assert.NoError(t, err)
 
 		encrypted1, err := encryptContext.EncryptRTP(nil, pktRaw, nil)
-		if err != nil {
-			t.Fatal(err)
-		}
+		assert.NoError(t, err)
 
 		err = encryptContext.SetSendMKI(mki2)
-		if err != nil {
-			t.Fatal(err)
-		}
+		assert.NoError(t, err)
 
 		encrypted2, err := encryptContext.EncryptRTP(nil, pktRaw, nil)
-		if err != nil {
-			t.Fatal(err)
-		}
+		assert.NoError(t, err)
 
 		assert.NotEqual(t, encrypted1, encrypted2)
 
 		decrypted1, err := decryptContext1.DecryptRTP(nil, encrypted1, nil)
-		if err != nil {
-			t.Fatal(err)
-		}
+		assert.NoError(t, err)
+
 		decrypted2, err := decryptContext2.DecryptRTP(nil, encrypted2, nil)
-		if err != nil {
-			t.Fatal(err)
-		}
+		assert.NoError(t, err)
 
 		assert.Equal(t, pktRaw, decrypted1)
 		assert.Equal(t, pktRaw, decrypted2)
 
 		err = encryptContext.SetSendMKI(mki1)
-		if err != nil {
-			t.Fatal(err)
-		}
+		assert.NoError(t, err)
 	}
 }

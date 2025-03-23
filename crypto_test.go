@@ -21,7 +21,7 @@ func xorBytesCTRReference(block cipher.Block, iv []byte, dst, src []byte) {
 func TestXorBytesCTR(t *testing.T) {
 	for keysize := 16; keysize < 64; keysize *= 2 {
 		key := make([]byte, keysize)
-		_, err := rand.Read(key) //nolint: gosec
+		_, err := rand.Read(key) //nolint: gosec,staticcheck
 		require.NoError(t, err)
 
 		block, err := aes.NewCipher(key)
@@ -32,10 +32,10 @@ func TestXorBytesCTR(t *testing.T) {
 			src := make([]byte, i)
 			dst := make([]byte, i)
 			reference := make([]byte, i)
-			_, err = rand.Read(iv) //nolint: gosec
+			_, err = rand.Read(iv) //nolint: gosec,staticcheck
 			require.NoError(t, err)
 
-			_, err = rand.Read(src) //nolint: gosec
+			_, err = rand.Read(src) //nolint: gosec,staticcheck
 			require.NoError(t, err)
 
 			assert.NoError(t, xorBytesCTR(block, iv, dst, src))

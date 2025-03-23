@@ -16,17 +16,18 @@ type testRfcAesCipher struct {
 }
 
 // createRfcAesTestCiphers returns a list of test ciphers for the RFC test vectors.
-func createRfcAesTestCiphers() []testRfcAesCipher {
+func createRfcAesTestCiphers(t *testing.T) []testRfcAesCipher {
+	t.Helper()
 	tests := []testRfcAesCipher{}
 
 	// AES-128-CM, RFC 3711, Appendix B.2
 	aes128Cm := testRfcAesCipher{
 		profile: ProtectionProfileAes128CmHmacSha1_80,
 		keys: derivedSessionKeys{
-			srtpSessionKey:  fromHex(`2B7E151628AED2A6ABF7158809CF4F3C`),
-			srtpSessionSalt: fromHex(`F0F1F2F3F4F5F6F7F8F9FAFBFCFD0000`),
+			srtpSessionKey:  fromHex(t, `2B7E151628AED2A6ABF7158809CF4F3C`),
+			srtpSessionSalt: fromHex(t, `F0F1F2F3F4F5F6F7F8F9FAFBFCFD0000`),
 		},
-		keystream: fromHex(`E03EAD0935C95E80E166B16DD92B4EB4
+		keystream: fromHex(t, `E03EAD0935C95E80E166B16DD92B4EB4
 			D23513162B02D0F72A43A2FE4A5F97AB
 			41E95B3BB0A2E8DD477901E4FCA894C0`),
 	}
@@ -38,11 +39,11 @@ func createRfcAesTestCiphers() []testRfcAesCipher {
 	aes256Cm := testRfcAesCipher{
 		profile: ProtectionProfileAes256CmHmacSha1_80,
 		keys: derivedSessionKeys{
-			srtpSessionKey: fromHex(`57f82fe3613fd170a85ec93c40b1f092
+			srtpSessionKey: fromHex(t, `57f82fe3613fd170a85ec93c40b1f092
 				2ec4cb0dc025b58272147cc438944a98`),
-			srtpSessionSalt: fromHex(`f0f1f2f3f4f5f6f7f8f9fafbfcfd0000`),
+			srtpSessionSalt: fromHex(t, `f0f1f2f3f4f5f6f7f8f9fafbfcfd0000`),
 		},
-		keystream: fromHex(`92bdd28a93c3f52511c677d08b5515a4
+		keystream: fromHex(t, `92bdd28a93c3f52511c677d08b5515a4
 			9da71b2378a854f67050756ded165bac
 			63c4868b7096d88421b563b8c94c9a31`),
 	}
@@ -54,7 +55,7 @@ func createRfcAesTestCiphers() []testRfcAesCipher {
 }
 
 func TestAesCiphersWithRfcTestVectors(t *testing.T) {
-	for _, testCase := range createRfcAesTestCiphers() {
+	for _, testCase := range createRfcAesTestCiphers(t) {
 		t.Run(testCase.profile.String(), func(t *testing.T) {
 			// Use zero SSRC and sequence number as specified in RFC
 			rtpHeader := []byte{

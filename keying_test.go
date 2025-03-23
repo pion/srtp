@@ -4,10 +4,11 @@
 package srtp
 
 import (
-	"bytes"
 	"crypto/rand"
 	"fmt"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
 )
 
 type mockKeyingMaterialExporter struct {
@@ -39,9 +40,7 @@ func TestExtractSessionKeysFromDTLS(t *testing.T) {
 	for i, tc := range tt {
 		// Test client
 		err := tc.config.ExtractSessionKeysFromDTLS(mockExporter, true)
-		if err != nil {
-			t.Errorf("failed to extract keys for %d-client: %v", i, err)
-		}
+		assert.NoErrorf(t, err, "failed to extract keys for %d-client: %v", i, err)
 
 		keys := tc.config.Keys
 		clientMaterial := append([]byte{}, keys.LocalMasterKey...)
@@ -49,18 +48,12 @@ func TestExtractSessionKeysFromDTLS(t *testing.T) {
 		clientMaterial = append(clientMaterial, keys.LocalMasterSalt...)
 		clientMaterial = append(clientMaterial, keys.RemoteMasterSalt...)
 
-		if !bytes.Equal(clientMaterial, mockExporter.exported) {
-			t.Errorf(
-				"material reconstruction failed for %d-client:\n%#v\nexpected\n%#v",
-				i, clientMaterial, mockExporter.exported,
-			)
-		}
+		assert.Equalf(t, mockExporter.exported, clientMaterial,
+			"material reconstruction failed for %d-client:\n%#v\nexpected\n%#v")
 
 		// Test server
 		err = tc.config.ExtractSessionKeysFromDTLS(mockExporter, false)
-		if err != nil {
-			t.Errorf("failed to extract keys for %d-server: %v", i, err)
-		}
+		assert.NoErrorf(t, err, "failed to extract keys for %d-server: %v", i, err)
 
 		keys = tc.config.Keys
 		serverMaterial := append([]byte{}, keys.RemoteMasterKey...)
@@ -68,11 +61,8 @@ func TestExtractSessionKeysFromDTLS(t *testing.T) {
 		serverMaterial = append(serverMaterial, keys.RemoteMasterSalt...)
 		serverMaterial = append(serverMaterial, keys.LocalMasterSalt...)
 
-		if !bytes.Equal(serverMaterial, mockExporter.exported) {
-			t.Errorf(
-				"material reconstruction failed for %d-server:\n%#v\nexpected\n%#v",
-				i, serverMaterial, mockExporter.exported,
-			)
-		}
+		assert.Equalf(t, mockExporter.exported, serverMaterial,
+			"material reconstruction failed for %d-server:\n%#v\nexpected\n%#v",
+			i, serverMaterial, mockExporter.exported)
 	}
 }
