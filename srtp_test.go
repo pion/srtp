@@ -85,7 +85,7 @@ func TestRolloverCount(t *testing.T) { //nolint:cyclop
 	assert.Empty(t, roc, "Initial rollover counter must be 0")
 	assert.False(t, ovf, "Should not overflow")
 
-	ssrcState.updateRolloverCount(65530, diff)
+	ssrcState.updateRolloverCount(65530, diff, false, 0)
 
 	// Invalid packets never update ROC
 	ssrcState.nextRolloverCount(0)
@@ -99,45 +99,45 @@ func TestRolloverCount(t *testing.T) { //nolint:cyclop
 	assert.Equal(t, uint32(1), roc, "rolloverCounter must be incremented after wrapping")
 	assert.False(t, ovf, "Should not overflow")
 
-	ssrcState.updateRolloverCount(0, diff)
+	ssrcState.updateRolloverCount(0, diff, false, 0)
 
 	roc, diff, ovf = ssrcState.nextRolloverCount(65530)
 	assert.Empty(t, roc, "rolloverCounter was not updated when it rolled back, failed to handle out of order")
 	assert.False(t, ovf, "Should not overflow")
 
-	ssrcState.updateRolloverCount(65530, diff)
+	ssrcState.updateRolloverCount(65530, diff, false, 0)
 
 	roc, diff, ovf = ssrcState.nextRolloverCount(5)
 	assert.Equal(t, uint32(1), roc, "rolloverCounter was not updated when it rolled over initial, to handle out of order")
 	assert.False(t, ovf, "Should not overflow")
 
-	ssrcState.updateRolloverCount(5, diff)
+	ssrcState.updateRolloverCount(5, diff, false, 0)
 
 	_, diff, _ = ssrcState.nextRolloverCount(6)
-	ssrcState.updateRolloverCount(6, diff)
+	ssrcState.updateRolloverCount(6, diff, false, 0)
 	_, diff, _ = ssrcState.nextRolloverCount(7)
-	ssrcState.updateRolloverCount(7, diff)
+	ssrcState.updateRolloverCount(7, diff, false, 0)
 	roc, diff, _ = ssrcState.nextRolloverCount(8)
 	assert.Equal(t, uint32(1), roc, "rolloverCounter was improperly updated for non-significant packets")
 
-	ssrcState.updateRolloverCount(8, diff)
+	ssrcState.updateRolloverCount(8, diff, false, 0)
 
 	// valid packets never update ROC
 	roc, diff, ovf = ssrcState.nextRolloverCount(0x4000)
 	assert.Equal(t, uint32(1), roc, "rolloverCounter was improperly updated for non-significant packets")
 	assert.False(t, ovf, "Should not overflow")
 
-	ssrcState.updateRolloverCount(0x4000, diff)
+	ssrcState.updateRolloverCount(0x4000, diff, false, 0)
 	roc, diff, ovf = ssrcState.nextRolloverCount(0x8000)
 	assert.Equal(t, uint32(1), roc, "rolloverCounter was improperly updated for non-significant packets")
 	assert.False(t, ovf, "Should not overflow")
 
-	ssrcState.updateRolloverCount(0x8000, diff)
+	ssrcState.updateRolloverCount(0x8000, diff, false, 0)
 	roc, diff, ovf = ssrcState.nextRolloverCount(0xFFFF)
 	assert.Equal(t, uint32(1), roc, "rolloverCounter was improperly updated for non-significant packets")
 	assert.False(t, ovf, "Should not overflow")
 
-	ssrcState.updateRolloverCount(0xFFFF, diff)
+	ssrcState.updateRolloverCount(0xFFFF, diff, false, 0)
 	roc, _, ovf = ssrcState.nextRolloverCount(0)
 	assert.Equal(t, uint32(2), roc, "rolloverCounter must be incremented after wrapping")
 	assert.False(t, ovf, "Should not overflow")
@@ -148,7 +148,7 @@ func TestRolloverCountOverflow(t *testing.T) {
 		ssrc:  defaultSsrc,
 		index: maxROC << 16,
 	}
-	s.updateRolloverCount(0xFFFF, 0)
+	s.updateRolloverCount(0xFFFF, 0, false, 0)
 	_, _, ovf := s.nextRolloverCount(0)
 	assert.True(t, ovf, "Should overflow")
 }
@@ -573,54 +573,54 @@ func TestRolloverCount2(t *testing.T) { //nolint:cyclop
 	assert.Equal(t, uint32(0), roc, "Initial rolloverCounter must be 0")
 	assert.False(t, ovf, "Should not overflow")
 
-	srtpState.updateRolloverCount(30123, diff)
+	srtpState.updateRolloverCount(30123, diff, false, 0)
 
 	roc, diff, ovf = srtpState.nextRolloverCount(62892) // 30123 + (1 << 15) + 1
 	assert.Equal(t, uint32(0), roc, "Initial rolloverCounter must be 0")
 	assert.False(t, ovf, "Should not overflow")
 
-	srtpState.updateRolloverCount(62892, diff)
+	srtpState.updateRolloverCount(62892, diff, false, 0)
 	roc, diff, ovf = srtpState.nextRolloverCount(204)
 	assert.Equal(t, uint32(1), roc, "rolloverCounter was not updated after it crossed 0")
 	assert.False(t, ovf, "Should not overflow")
 
-	srtpState.updateRolloverCount(62892, diff)
+	srtpState.updateRolloverCount(62892, diff, false, 0)
 	roc, diff, ovf = srtpState.nextRolloverCount(64535)
 	assert.Equal(t, uint32(0), roc, "rolloverCounter was not updated when it rolled back, failed to handle out of order")
 	assert.False(t, ovf, "Should not overflow")
 
-	srtpState.updateRolloverCount(64535, diff)
+	srtpState.updateRolloverCount(64535, diff, false, 0)
 	roc, diff, ovf = srtpState.nextRolloverCount(205)
 	assert.Equal(t, uint32(1), roc, "rolloverCounter was improperly updated for non-significant packets")
 	assert.False(t, ovf, "Should not overflow")
 
-	srtpState.updateRolloverCount(205, diff)
+	srtpState.updateRolloverCount(205, diff, false, 0)
 	roc, diff, ovf = srtpState.nextRolloverCount(1)
 	assert.Equal(t, uint32(1), roc, "rolloverCounter was improperly updated for non-significant packets")
 	assert.False(t, ovf, "Should not overflow")
 
-	srtpState.updateRolloverCount(1, diff)
+	srtpState.updateRolloverCount(1, diff, false, 0)
 
 	roc, diff, ovf = srtpState.nextRolloverCount(64532)
 	assert.Equal(t, uint32(0), roc, "rolloverCounter was improperly updated for non-significant packets")
 	assert.False(t, ovf, "Should not overflow")
 
-	srtpState.updateRolloverCount(64532, diff)
+	srtpState.updateRolloverCount(64532, diff, false, 0)
 	roc, diff, ovf = srtpState.nextRolloverCount(65534)
 	assert.Equal(t, uint32(0), roc, "rolloverCounter was improperly updated for non-significant packets")
 	assert.False(t, ovf, "Should not overflow")
 
-	srtpState.updateRolloverCount(65534, diff)
+	srtpState.updateRolloverCount(65534, diff, false, 0)
 	roc, diff, ovf = srtpState.nextRolloverCount(64532)
 	assert.Equal(t, uint32(0), roc, "rolloverCounter was improperly updated for non-significant packets")
 	assert.False(t, ovf, "Should not overflow")
 
-	srtpState.updateRolloverCount(65532, diff)
+	srtpState.updateRolloverCount(65532, diff, false, 0)
 	roc, diff, ovf = srtpState.nextRolloverCount(205)
 	assert.Equal(t, uint32(1), roc, "index was not updated after it crossed 0")
 	assert.False(t, ovf, "Should not overflow")
 
-	srtpState.updateRolloverCount(65532, diff)
+	srtpState.updateRolloverCount(65532, diff, false, 0)
 }
 
 func TestProtectionProfileAes128CmHmacSha1_32(t *testing.T) {

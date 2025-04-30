@@ -104,6 +104,8 @@ func SRTPEncryption() ContextOption { // nolint:revive
 // SRTPNoEncryption disables SRTP encryption.
 // This option is useful when you want to use NullCipher for SRTP and keep authentication only.
 // It simplifies debugging and testing, but it is not recommended for production use.
+//
+// Note: you can also use SRTPAuthenticationTagLength(0) to disable authentication tag too.
 func SRTPNoEncryption() ContextOption { // nolint:revive
 	return func(c *Context) error {
 		c.encryptSRTP = false
@@ -127,6 +129,46 @@ func SRTCPEncryption() ContextOption {
 func SRTCPNoEncryption() ContextOption {
 	return func(c *Context) error {
 		c.encryptSRTCP = false
+
+		return nil
+	}
+}
+
+// RolloverCounterCarryingTransform enables Rollover Counter Carrying Transform from RFC 4771.
+// ROC value is sent in Authentication Tag of SRTP packets every rocTransmitRate packets.
+//
+// RFC 4771 defines 3 RCC modes. pion/srtp supports mode RCCm2 for AES-CM and NULL profiles,
+// and mode RCCm3 for AES-GCM (AEAD) profiles.
+//
+// From RFC 4771: "[For modes RCCm1 and and RCCm3] the length of the MAC is shorter than the length
+// of the authentication tag. To achieve the same (or less) MAC forgery success probability on all
+// packets when using RCCm1 or RCCm2, as with the default integrity transform in RFC 3711,
+// the tag-length must be set to 14 octets, which means that the length of MAC_tr is 10 octets."
+//
+// Protection profiles ProtectionProfile*CmHmacSha1_32 uses 4-byte SRTP auth tag, so in RCCm2 mode
+// SRTP packets with ROC will not be integrity protected.
+//
+// You can increase the length of the authentication tag using SRTPAuthenticationTagLength option
+// to mitigate this issue.
+func RolloverCounterCarryingTransform(mode RCCMode, rocTransmitRate uint16) ContextOption {
+	return func(c *Context) error {
+		c.rccMode = mode
+		c.rocTransmitRate = rocTransmitRate
+
+		return nil
+	}
+}
+
+// SRTPAuthenticationTagLength sets length of SRTP authentication tag in bytes for AES-CM protection
+// profiles. Decreasing the length of the authentication tag is not recommended for production use,
+// as it decreases integrity protection.
+//
+// Zero value means that there is no authentication tag, what may be useful for debugging and testing.
+//
+// This option is ignored for AEAD profiles.
+func SRTPAuthenticationTagLength(authTagRTPLen int) ContextOption { // nolint:revive
+	return func(c *Context) error {
+		c.authTagRTPLen = &authTagRTPLen
 
 		return nil
 	}

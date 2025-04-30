@@ -17,7 +17,7 @@ const (
 )
 
 type srtpCipherAeadAesGcm struct {
-	ProtectionProfile
+	protectionProfileWithArgs
 
 	srtpCipher, srtcpCipher cipher.AEAD
 
@@ -29,14 +29,14 @@ type srtpCipherAeadAesGcm struct {
 }
 
 func newSrtpCipherAeadAesGcm(
-	profile ProtectionProfile,
+	profile protectionProfileWithArgs,
 	masterKey, masterSalt, mki []byte,
 	encryptSRTP, encryptSRTCP bool,
 ) (*srtpCipherAeadAesGcm, error) {
 	srtpCipher := &srtpCipherAeadAesGcm{
-		ProtectionProfile: profile,
-		srtpEncrypted:     encryptSRTP,
-		srtcpEncrypted:    encryptSRTCP,
+		protectionProfileWithArgs: profile,
+		srtpEncrypted:             encryptSRTP,
+		srtcpEncrypted:            encryptSRTCP,
 	}
 
 	srtpSessionKey, err := aesCmKeyDerivation(labelSRTPEncryption, masterKey, masterSalt, 0, len(masterKey))
@@ -93,13 +93,19 @@ func (s *srtpCipherAeadAesGcm) encryptRTP(
 	header *rtp.Header,
 	payload []byte,
 	roc uint32,
+	rocInAuthTag bool,
 ) (ciphertext []byte, err error) {
 	// Grow the given buffer to fit the output.
 	authTagLen, err := s.AEADAuthTagLen()
 	if err != nil {
 		return nil, err
 	}
-	dst = growBufferSize(dst, header.MarshalSize()+len(payload)+authTagLen+len(s.mki))
+	authPartLen := header.MarshalSize() + len(payload) + authTagLen
+	dstLen := authPartLen + len(s.mki)
+	if rocInAuthTag {
+		dstLen += 4
+	}
+	dst = growBufferSize(dst, dstLen)
 
 	n, err := header.MarshalTo(dst)
 	if err != nil {
@@ -117,7 +123,11 @@ func (s *srtpCipherAeadAesGcm) encryptRTP(
 
 	// Add MKI after the encrypted payload
 	if len(s.mki) > 0 {
-		copy(dst[len(dst)-len(s.mki):], s.mki)
+		copy(dst[authPartLen:], s.mki)
+	}
+
+	if rocInAuthTag {
+		binary.BigEndian.PutUint32(dst[len(dst)-4:], roc)
 	}
 
 	return dst, nil
@@ -128,13 +138,18 @@ func (s *srtpCipherAeadAesGcm) decryptRTP(
 	header *rtp.Header,
 	headerLen int,
 	roc uint32,
+	rocInAuthTag bool,
 ) ([]byte, error) {
 	// Grow the given buffer to fit the output.
 	authTagLen, err := s.AEADAuthTagLen()
 	if err != nil {
 		return nil, err
 	}
-	nDst := len(ciphertext) - authTagLen - len(s.mki)
+	rocLen := 0
+	if rocInAuthTag {
+		rocLen = 4
+	}
+	nDst := len(ciphertext) - authTagLen - len(s.mki) - rocLen
 	if nDst < headerLen {
 		// Size of ciphertext is shorter than AEAD auth tag len.
 		return nil, ErrFailedToVerifyAuthTag
@@ -143,7 +158,7 @@ func (s *srtpCipherAeadAesGcm) decryptRTP(
 
 	iv := s.rtpInitializationVector(header, roc)
 
-	nEnd := len(ciphertext) - len(s.mki)
+	nEnd := len(ciphertext) - len(s.mki) - rocLen
 	if s.srtpEncrypted {
 		if _, err := s.srtpCipher.Open(
 			dst[headerLen:headerLen], iv[:], ciphertext[headerLen:nEnd], ciphertext[:headerLen],
@@ -295,15 +310,4 @@ func (s *srtpCipherAeadAesGcm) rtcpAdditionalAuthenticatedData(rtcpPacket []byte
 
 func (s *srtpCipherAeadAesGcm) getRTCPIndex(in []byte) uint32 {
 	return binary.BigEndian.Uint32(in[len(in)-len(s.mki)-4:]) &^ (rtcpEncryptionFlag << 24)
-}
-
-func (s *srtpCipherAeadAesGcm) getMKI(in []byte, _ bool) []byte {
-	mkiLen := len(s.mki)
-	if mkiLen == 0 {
-		return nil
-	}
-
-	tailOffset := len(in) - mkiLen
-
-	return in[tailOffset:]
 }
