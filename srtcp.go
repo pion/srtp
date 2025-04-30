@@ -10,6 +10,16 @@ import (
 	"github.com/pion/rtcp"
 )
 
+/*
+Simplified structure of SRTCP Packets:
+- RTCP Header
+- Payload
+- AEAD Auth Tag - used by AEAD profiles only
+- E flag and SRTCP Index
+- MKI (optional)
+- Auth Tag - used by non-AEAD profiles only
+*/
+
 const maxSRTCPIndex = 0x7FFFFFFF
 
 const srtcpHeaderSize = 8
@@ -42,7 +52,7 @@ func (c *Context) decryptRTCP(dst, encrypted []byte) ([]byte, error) {
 	cipher := c.cipher
 	if len(c.mkis) > 0 {
 		// Find cipher for MKI
-		actualMKI := c.cipher.getMKI(encrypted, false)
+		actualMKI := encrypted[len(encrypted)-mkiLen-authTagLen : len(encrypted)-authTagLen]
 		cipher, ok = c.mkis[string(actualMKI)]
 		if !ok {
 			return nil, ErrMKINotFound
