@@ -10,6 +10,16 @@ import (
 	"github.com/pion/rtcp"
 )
 
+/*
+Simplified structure of SRTCP Packets:
+- RTCP Header
+- Payload
+- AEAD Auth Tag - used by AEAD profiles only
+- E flag and SRTCP Index
+- MKI (optional)
+- Auth Tag - used by non-AEAD profiles only
+*/
+
 const maxSRTCPIndex = 0x7FFFFFFF
 
 const srtcpHeaderSize = 8

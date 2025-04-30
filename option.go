@@ -131,3 +131,17 @@ func SRTCPNoEncryption() ContextOption {
 		return nil
 	}
 }
+
+// RolloverCounterCarryingTransform enables Rollover Counter Carrying Transform from RFC 4771.
+// ROC value is sent in Authentication Tag of SRTP packets every rocTransmitRate packets.
+//
+// RFC 4771 defines 3 RCC modes. pion/srtp supports mode RCCm2 for AES-CM and NULL profiles,
+// and mode RCCm3 for AES-GCM (AEAD) profiles.
+func RolloverCounterCarryingTransform(mode RCCMode, rocTransmitRate uint16) ContextOption {
+	return func(c *Context) error {
+		c.rccMode = mode
+		c.rocTransmitRate = rocTransmitRate
+
+		return nil
+	}
+}
