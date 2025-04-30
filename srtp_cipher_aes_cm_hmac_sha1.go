@@ -16,7 +16,7 @@ import ( //nolint:gci
 )
 
 type srtpCipherAesCmHmacSha1 struct {
-	ProtectionProfile
+	protectionProfileWithArgs
 
 	srtpSessionSalt []byte
 	srtpSessionAuth hash.Hash
@@ -33,19 +33,21 @@ type srtpCipherAesCmHmacSha1 struct {
 
 //nolint:cyclop
 func newSrtpCipherAesCmHmacSha1(
-	profile ProtectionProfile,
+	profile protectionProfileWithArgs,
 	masterKey, masterSalt, mki []byte,
 	encryptSRTP, encryptSRTCP bool,
 ) (*srtpCipherAesCmHmacSha1, error) {
-	if profile == ProtectionProfileNullHmacSha1_80 || profile == ProtectionProfileNullHmacSha1_32 {
+	switch profile.ProtectionProfile {
+	case ProtectionProfileNullHmacSha1_80, ProtectionProfileNullHmacSha1_32:
 		encryptSRTP = false
 		encryptSRTCP = false
+	default:
 	}
 
 	srtpCipher := &srtpCipherAesCmHmacSha1{
-		ProtectionProfile: profile,
-		srtpEncrypted:     encryptSRTP,
-		srtcpEncrypted:    encryptSRTCP,
+		protectionProfileWithArgs: profile,
+		srtpEncrypted:             encryptSRTP,
+		srtcpEncrypted:            encryptSRTCP,
 	}
 
 	srtpSessionKey, err := aesCmKeyDerivation(labelSRTPEncryption, masterKey, masterSalt, 0, len(masterKey))
@@ -104,6 +106,7 @@ func (s *srtpCipherAesCmHmacSha1) encryptRTP(
 	header *rtp.Header,
 	payload []byte,
 	roc uint32,
+	rocInAuthTag bool,
 ) (ciphertext []byte, err error) {
 	// Grow the given buffer to fit the output.
 	authTagLen, err := s.AuthTagRTPLen()
@@ -130,7 +133,7 @@ func (s *srtpCipherAesCmHmacSha1) encryptRTP(
 	n += len(payload)
 
 	// Generate the auth tag.
-	authTag, err := s.generateSrtpAuthTag(dst[:n], roc)
+	authTag, err := s.generateSrtpAuthTag(dst[:n], roc, rocInAuthTag)
 	if err != nil {
 		return nil, err
 	}
@@ -152,6 +155,7 @@ func (s *srtpCipherAesCmHmacSha1) decryptRTP(
 	header *rtp.Header,
 	headerLen int,
 	roc uint32,
+	rocInAuthTag bool,
 ) ([]byte, error) {
 	// Split the auth tag and the cipher text into two parts.
 	authTagLen, err := s.AuthTagRTPLen()
@@ -164,7 +168,7 @@ func (s *srtpCipherAesCmHmacSha1) decryptRTP(
 	ciphertext = ciphertext[:len(ciphertext)-len(s.mki)-authTagLen]
 
 	// Generate the auth tag we expect to see from the ciphertext.
-	expectedTag, err := s.generateSrtpAuthTag(ciphertext, roc)
+	expectedTag, err := s.generateSrtpAuthTag(ciphertext, roc, rocInAuthTag)
 	if err != nil {
 		return nil, err
 	}
@@ -264,7 +268,7 @@ func (s *srtpCipherAesCmHmacSha1) decryptRTCP(out, encrypted []byte, index, ssrc
 	return out, err
 }
 
-func (s *srtpCipherAesCmHmacSha1) generateSrtpAuthTag(buf []byte, roc uint32) ([]byte, error) {
+func (s *srtpCipherAesCmHmacSha1) generateSrtpAuthTag(buf []byte, roc uint32, rocInAuthTag bool) ([]byte, error) {
 	// https://tools.ietf.org/html/rfc3711#section-4.2
 	// In the case of SRTP, M SHALL consist of the Authenticated
 	// Portion of the packet (as specified in Figure 1) concatenated with
@@ -300,7 +304,12 @@ func (s *srtpCipherAesCmHmacSha1) generateSrtpAuthTag(buf []byte, roc uint32) ([
 		return nil, err
 	}
 
-	return s.srtpSessionAuth.Sum(nil)[0:authTagLen], nil
+	var authTag []byte
+	if rocInAuthTag {
+		authTag = append(authTag, rocRaw[:]...)
+	}
+
+	return s.srtpSessionAuth.Sum(authTag)[0:authTagLen], nil
 }
 
 func (s *srtpCipherAesCmHmacSha1) generateSrtcpAuthTag(buf []byte) ([]byte, error) {
@@ -334,21 +343,4 @@ func (s *srtpCipherAesCmHmacSha1) getRTCPIndex(in []byte) uint32 {
 	srtcpIndexBuffer := in[tailOffset : tailOffset+srtcpIndexSize]
 
 	return binary.BigEndian.Uint32(srtcpIndexBuffer) &^ (1 << 31)
-}
-
-func (s *srtpCipherAesCmHmacSha1) getMKI(in []byte, rtp bool) []byte {
-	mkiLen := len(s.mki)
-	if mkiLen == 0 {
-		return nil
-	}
-
-	var authTagLen int
-	if rtp {
-		authTagLen, _ = s.AuthTagRTPLen()
-	} else {
-		authTagLen, _ = s.AuthTagRTCPLen()
-	}
-	tailOffset := len(in) - (authTagLen + mkiLen)
-
-	return in[tailOffset : tailOffset+mkiLen]
 }
