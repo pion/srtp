@@ -142,3 +142,77 @@ func TestContextRemoveMKI(t *testing.T) {
 	err = ctx.RemoveMKI(mki3)
 	assert.Error(t, err)
 }
+
+func TestInvalidContextOptions(t *testing.T) {
+	profiles := []ProtectionProfile{
+		ProtectionProfileAes128CmHmacSha1_80,
+		ProtectionProfileAes128CmHmacSha1_32,
+		ProtectionProfileAes256CmHmacSha1_80,
+		ProtectionProfileAes256CmHmacSha1_32,
+		ProtectionProfileNullHmacSha1_80,
+		ProtectionProfileNullHmacSha1_32,
+		ProtectionProfileAeadAes128Gcm,
+		ProtectionProfileAeadAes256Gcm,
+	}
+
+	for _, profile := range profiles {
+		t.Run(profile.String(), func(t *testing.T) {
+			keyLen, err := profile.KeyLen()
+			assert.NoError(t, err)
+			saltLen, err := profile.SaltLen()
+			assert.NoError(t, err)
+			authTagLen, err := profile.AuthTagRTPLen()
+			assert.NoError(t, err)
+			authKeyLen, err := profile.AuthKeyLen()
+			assert.NoError(t, err)
+
+			masterKey := make([]byte, keyLen)
+			masterSalt := make([]byte, saltLen)
+			aeadAuthTagLen, err := profile.AEADAuthTagLen()
+			assert.NoError(t, err)
+
+			t.Run("InvalidRCCContextOptions", func(t *testing.T) {
+				authTagLenOpt := SRTPAuthenticationTagLength(authTagLen)
+
+				_, err = CreateContext(masterKey, masterSalt, profile, RolloverCounterCarryingTransform(RCCMode1, 0),
+					authTagLenOpt)
+				assert.ErrorIs(t, err, errZeroRocTransmitRate)
+				_, err = CreateContext(masterKey, masterSalt, profile, RolloverCounterCarryingTransform(RCCMode2, 0),
+					authTagLenOpt)
+				assert.ErrorIs(t, err, errZeroRocTransmitRate)
+				_, err = CreateContext(masterKey, masterSalt, profile, RolloverCounterCarryingTransform(RCCMode3, 0),
+					authTagLenOpt)
+				assert.ErrorIs(t, err, errZeroRocTransmitRate)
+
+				_, err = CreateContext(masterKey, masterSalt, profile, RolloverCounterCarryingTransform(RCCMode1, 10),
+					authTagLenOpt)
+				assert.ErrorIs(t, err, errUnsupportedRccMode)
+				if aeadAuthTagLen == 0 { // AES-CM
+					_, err = CreateContext(masterKey, masterSalt, profile, RolloverCounterCarryingTransform(RCCMode3, 10),
+						authTagLenOpt)
+					assert.ErrorIs(t, err, errUnsupportedRccMode)
+
+					if authTagLen == 4 {
+						_, err = CreateContext(masterKey, masterSalt, profile, RolloverCounterCarryingTransform(RCCMode2, 10))
+						assert.ErrorIs(t, err, errTooShortSRTPAuthTag)
+					}
+
+					for n := 0; n < 4; n++ {
+						_, err = CreateContext(masterKey, masterSalt, profile, RolloverCounterCarryingTransform(RCCMode2, 10),
+							SRTPAuthenticationTagLength(n))
+						assert.ErrorIs(t, err, errTooShortSRTPAuthTag)
+					}
+				} else { // AEAD
+					_, err = CreateContext(masterKey, masterSalt, profile, RolloverCounterCarryingTransform(RCCMode2, 10),
+						authTagLenOpt)
+					assert.ErrorIs(t, err, errUnsupportedRccMode)
+				}
+			})
+
+			t.Run("InvalidSRTPAuthTagLen", func(t *testing.T) {
+				_, err = CreateContext(masterKey, masterSalt, profile, SRTPAuthenticationTagLength(authKeyLen+1))
+				assert.ErrorIs(t, err, errTooLongSRTPAuthTag)
+			})
+		})
+	}
+}

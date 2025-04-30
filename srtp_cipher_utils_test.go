@@ -33,9 +33,9 @@ func newSrtpCipherAesCmHmacSha1WithDerivedKeys(
 	}
 
 	srtpCipher := &srtpCipherAesCmHmacSha1{
-		ProtectionProfile: profile,
-		srtpEncrypted:     encryptSRTP,
-		srtcpEncrypted:    encryptSRTCP,
+		protectionProfileWithArgs: protectionProfileWithArgs{ProtectionProfile: profile},
+		srtpEncrypted:             encryptSRTP,
+		srtcpEncrypted:            encryptSRTCP,
 	}
 
 	var err error
@@ -62,9 +62,9 @@ func newSrtpCipherAeadAesGcmWithDerivedKeys(
 	encryptSRTP, encryptSRTCP bool,
 ) (*srtpCipherAeadAesGcm, error) {
 	srtpCipher := &srtpCipherAeadAesGcm{
-		ProtectionProfile: profile,
-		srtpEncrypted:     encryptSRTP,
-		srtcpEncrypted:    encryptSRTCP,
+		protectionProfileWithArgs: protectionProfileWithArgs{ProtectionProfile: profile},
+		srtpEncrypted:             encryptSRTP,
+		srtcpEncrypted:            encryptSRTCP,
 	}
 
 	srtpBlock, err := aes.NewCipher(keys.srtpSessionKey)
