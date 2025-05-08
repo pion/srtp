@@ -104,6 +104,7 @@ func (s *srtpCipherAesCmHmacSha1) encryptRTP(
 	header *rtp.Header,
 	payload []byte,
 	roc uint32,
+	rocInAuthTag bool,
 ) (ciphertext []byte, err error) {
 	// Grow the given buffer to fit the output.
 	authTagLen, err := s.AuthTagRTPLen()
@@ -130,7 +131,7 @@ func (s *srtpCipherAesCmHmacSha1) encryptRTP(
 	n += len(payload)
 
 	// Generate the auth tag.
-	authTag, err := s.generateSrtpAuthTag(dst[:n], roc)
+	authTag, err := s.generateSrtpAuthTag(dst[:n], roc, rocInAuthTag)
 	if err != nil {
 		return nil, err
 	}
@@ -152,6 +153,7 @@ func (s *srtpCipherAesCmHmacSha1) decryptRTP(
 	header *rtp.Header,
 	headerLen int,
 	roc uint32,
+	rocInAuthTag bool,
 ) ([]byte, error) {
 	// Split the auth tag and the cipher text into two parts.
 	authTagLen, err := s.AuthTagRTPLen()
@@ -164,7 +166,7 @@ func (s *srtpCipherAesCmHmacSha1) decryptRTP(
 	ciphertext = ciphertext[:len(ciphertext)-len(s.mki)-authTagLen]
 
 	// Generate the auth tag we expect to see from the ciphertext.
-	expectedTag, err := s.generateSrtpAuthTag(ciphertext, roc)
+	expectedTag, err := s.generateSrtpAuthTag(ciphertext, roc, rocInAuthTag)
 	if err != nil {
 		return nil, err
 	}
@@ -264,7 +266,7 @@ func (s *srtpCipherAesCmHmacSha1) decryptRTCP(out, encrypted []byte, index, ssrc
 	return out, err
 }
 
-func (s *srtpCipherAesCmHmacSha1) generateSrtpAuthTag(buf []byte, roc uint32) ([]byte, error) {
+func (s *srtpCipherAesCmHmacSha1) generateSrtpAuthTag(buf []byte, roc uint32, rocInAuthTag bool) ([]byte, error) {
 	// https://tools.ietf.org/html/rfc3711#section-4.2
 	// In the case of SRTP, M SHALL consist of the Authenticated
 	// Portion of the packet (as specified in Figure 1) concatenated with
@@ -300,7 +302,12 @@ func (s *srtpCipherAesCmHmacSha1) generateSrtpAuthTag(buf []byte, roc uint32) ([
 		return nil, err
 	}
 
-	return s.srtpSessionAuth.Sum(nil)[0:authTagLen], nil
+	var authTag []byte
+	if rocInAuthTag {
+		authTag = append(authTag, rocRaw[:]...)
+	}
+
+	return s.srtpSessionAuth.Sum(authTag)[0:authTagLen], nil
 }
 
 func (s *srtpCipherAesCmHmacSha1) generateSrtcpAuthTag(buf []byte) ([]byte, error) {

@@ -36,6 +36,9 @@ var (
 	errStreamAlreadyClosed = errors.New("stream is already closed")
 	errStreamAlreadyInited = errors.New("stream is already inited")
 	errFailedTypeAssertion = errors.New("failed to cast child")
+
+	errZeroRocTransmitRate = errors.New("ROC transmit rate is zero")
+	errUnsupportedRccMmode = errors.New("unsupported RCC mode")
 )
 
 type duplicatedError struct {

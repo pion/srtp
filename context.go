@@ -43,6 +43,23 @@ type srtcpSSRCState struct {
 	replayDetector replaydetector.ReplayDetector
 }
 
+// RCCMode is the mode of Roll-over Counter Carrying Transform from RFC 4771.
+type RCCMode int
+
+const (
+	// RCCModeNone is the default mode.
+	RCCModeNone RCCMode = iota
+	// RCCMode1 is RCCm1 mode from RFC 4771. In this mode ROC and truncated auth tag is sent every R-th packet,
+	// and no auth tag in other ones. This mode is not supported by pion/srtp.
+	RCCMode1
+	// RCCMode2 is RCCm2 mode from RFC 4771. In this mode ROC and truncated auth tag is sent every R-th packet,
+	// and full auth tag in other ones. This mode is supported for AES-CM and NULL profiles only.
+	RCCMode2
+	// RCCMode3 is RCCm3 mode from RFC 4771. In this mode ROC is sent every R-th packet (without truncated auth tag),
+	// and no auth tag in other ones. This mode is supported for AES-GCM profiles only.
+	RCCMode3
+)
+
 // Context represents a SRTP cryptographic context.
 // Context can only be used for one-way operations.
 // it must either used ONLY for encryption or ONLY for decryption.
@@ -67,6 +84,9 @@ type Context struct {
 
 	encryptSRTP  bool
 	encryptSRTCP bool
+
+	rccMode         RCCMode
+	rocTransmitRate uint16
 }
 
 // CreateContext creates a new SRTP Context.
@@ -100,6 +120,10 @@ func CreateContext(
 		if errOpt := o(c); errOpt != nil {
 			return nil, errOpt
 		}
+	}
+
+	if err = c.checkRCCMode(); err != nil {
+		return nil, err
 	}
 
 	c.cipher, err = c.createCipher(c.sendMKI, masterKey, masterSalt, c.encryptSRTP, c.encryptSRTCP)
@@ -197,7 +221,7 @@ func (c *Context) SetSendMKI(mki []byte) error {
 }
 
 // https://tools.ietf.org/html/rfc3550#appendix-A.1
-func (s *srtpSSRCState) nextRolloverCount(sequenceNumber uint16) (roc uint32, diff int32, overflow bool) {
+func (s *srtpSSRCState) nextRolloverCount(sequenceNumber uint16) (roc uint32, diff int64, overflow bool) {
 	seq := int32(sequenceNumber)
 	localRoc := uint32(s.index >> 16)            //nolint:gosec // G115
 	localSeq := int32(s.index & (seqNumMax - 1)) //nolint:gosec // G115
@@ -232,17 +256,20 @@ func (s *srtpSSRCState) nextRolloverCount(sequenceNumber uint16) (roc uint32, di
 		}
 	}
 
-	return guessRoc, difference, (guessRoc == 0 && localRoc == maxROC)
+	return guessRoc, int64(difference), (guessRoc == 0 && localRoc == maxROC)
 }
 
-func (s *srtpSSRCState) updateRolloverCount(sequenceNumber uint16, difference int32) {
-	if !s.rolloverHasProcessed {
+func (s *srtpSSRCState) updateRolloverCount(sequenceNumber uint16, difference int64, hasRemoteRoc bool,
+	remoteRoc uint32,
+) {
+	//nolint:gocritic
+	if hasRemoteRoc {
+		s.index = (uint64(remoteRoc) << 16) | uint64(sequenceNumber)
+		s.rolloverHasProcessed = true
+	} else if !s.rolloverHasProcessed {
 		s.index |= uint64(sequenceNumber)
 		s.rolloverHasProcessed = true
-
-		return
-	}
-	if difference > 0 {
+	} else if difference > 0 {
 		s.index += uint64(difference)
 	}
 }
@@ -308,4 +335,34 @@ func (c *Context) Index(ssrc uint32) (uint32, bool) {
 func (c *Context) SetIndex(ssrc uint32, index uint32) {
 	s := c.getSRTCPSSRCState(ssrc)
 	s.srtcpIndex = index % (maxSRTCPIndex + 1)
+}
+
+func (c *Context) checkRCCMode() error {
+	if c.rccMode != RCCModeNone {
+		if c.rocTransmitRate == 0 {
+			return errZeroRocTransmitRate
+		}
+
+		switch c.profile {
+		case ProtectionProfileAeadAes128Gcm, ProtectionProfileAeadAes256Gcm:
+			// AEAD profiles support RCCMode3 only
+			if c.rccMode != RCCMode3 {
+				return errUnsupportedRccMmode
+			}
+		case ProtectionProfileAes128CmHmacSha1_32,
+			ProtectionProfileAes128CmHmacSha1_80,
+			ProtectionProfileAes256CmHmacSha1_32,
+			ProtectionProfileAes256CmHmacSha1_80,
+			ProtectionProfileNullHmacSha1_32,
+			ProtectionProfileNullHmacSha1_80:
+			// AES-CM and NULL profiles support RCCMode2 only
+			if c.rccMode != RCCMode2 {
+				return errUnsupportedRccMmode
+			}
+		default:
+			return errUnsupportedRccMmode
+		}
+	}
+
+	return nil
 }
