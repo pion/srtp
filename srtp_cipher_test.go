@@ -575,6 +575,7 @@ func createTestCiphers(t *testing.T) []testCipher { //nolint:maintidx
 	return tests
 }
 
+// nolint:maintidx
 func TestSrtpCipher(t *testing.T) {
 	for _, testCase := range createTestCiphers(t) {
 		t.Run(testCase.profile.String(), func(t *testing.T) {
@@ -804,6 +805,34 @@ func TestSrtpCipher(t *testing.T) {
 					assert.Equal(t, testCase.decryptedRTCPPacket, actualDecrypted)
 				})
 			})
+
+			srtpAuthTagLen, err := testCase.profile.AuthTagRTPLen()
+			assert.NoError(t, err)
+			if srtpAuthTagLen != 0 {
+				t.Run("Encrypt RTP with changed RTP auth tag len", func(t *testing.T) {
+					ctx, err := CreateContext(testCase.masterKey, testCase.masterSalt, testCase.profile,
+						SRTPAuthenticationTagLength(srtpAuthTagLen-2))
+					assert.NoError(t, err)
+
+					t.Run("New Allocation", func(t *testing.T) {
+						actualEncrypted, err := ctx.EncryptRTP(nil, testCase.decryptedRTPPacket, nil)
+						assert.NoError(t, err)
+						assert.Equal(t, testCase.encryptedRTPPacket[:len(testCase.encryptedRTPPacket)-2], actualEncrypted)
+					})
+				})
+
+				t.Run("Decrypt RTP with changed RTP auth tag len", func(t *testing.T) {
+					ctx, err := CreateContext(testCase.masterKey, testCase.masterSalt, testCase.profile,
+						SRTPAuthenticationTagLength(srtpAuthTagLen-2))
+					assert.NoError(t, err)
+
+					t.Run("New Allocation", func(t *testing.T) {
+						actualDecrypted, err := ctx.DecryptRTP(nil, testCase.encryptedRTPPacket[:len(testCase.encryptedRTPPacket)-2], nil)
+						assert.NoError(t, err)
+						assert.Equal(t, testCase.decryptedRTPPacket, actualDecrypted)
+					})
+				})
+			}
 		})
 	}
 }
