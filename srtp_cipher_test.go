@@ -591,6 +591,18 @@ func TestSrtpCipher(t *testing.T) {
 					assert.NoError(t, err)
 					assert.Equal(t, testCase.encryptedRTPPacket, actualEncrypted)
 				})
+
+				t.Run("Same buffer", func(t *testing.T) {
+					buffer := make([]byte, 0, 1000)
+					src, dst := buffer, buffer
+					src = append(src, testCase.decryptedRTPPacket...)
+					assert.True(t, isSameBuffer(dst, src))
+
+					actualEncrypted, err := ctx.EncryptRTP(dst, src, nil)
+					assert.NoError(t, err)
+					assert.Equal(t, testCase.encryptedRTPPacket, actualEncrypted)
+					assert.True(t, isSameBuffer(actualEncrypted, src))
+				})
 			})
 
 			t.Run("Decrypt RTP", func(t *testing.T) {
