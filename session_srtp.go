@@ -150,8 +150,20 @@ func (s *SessionSRTP) writeRTP(header *rtp.Header, payload []byte) (int, error) 
 	ibuf := bufferpool.Get()
 	defer bufferpool.Put(ibuf)
 
+	buf := ibuf.([]byte)                                                      // nolint:forcetypeassert
+	headerLen, marshalSize := rtp.HeaderAndPacketMarshalSize(header, payload) // nolint:staticcheck
+	if len(buf) < marshalSize+20 {
+		// The buffer is too small, so we need to allocate a new one. Add 20 bytes for auth tag like
+		// for bufferpool above.
+		buf = make([]byte, marshalSize+20)
+	}
+	_, err := rtp.MarshalPacketTo(buf, header, payload) // nolint:staticcheck
+	if err != nil {
+		return 0, err
+	}
+
 	s.session.localContextMutex.Lock()
-	encrypted, err := s.localContext.encryptRTP(ibuf.([]byte), header, payload) //nolint:forcetypeassert
+	encrypted, err := s.localContext.encryptRTP(buf, header, headerLen, buf[:marshalSize])
 	s.session.localContextMutex.Unlock()
 
 	if err != nil {

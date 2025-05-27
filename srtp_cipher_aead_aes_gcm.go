@@ -91,10 +91,14 @@ func newSrtpCipherAeadAesGcm(
 func (s *srtpCipherAeadAesGcm) encryptRTP(
 	dst []byte,
 	header *rtp.Header,
-	payload []byte,
+	headerLen int,
+	plaintext []byte,
 	roc uint32,
 	rocInAuthTag bool,
 ) (ciphertext []byte, err error) {
+	payload := plaintext[headerLen:]
+	payloadLen := len(payload)
+
 	// Grow the given buffer to fit the output.
 	authTagLen, err := s.AEADAuthTagLen()
 	if err != nil {
@@ -106,18 +110,21 @@ func (s *srtpCipherAeadAesGcm) encryptRTP(
 		dstLen += 4
 	}
 	dst = growBufferSize(dst, dstLen)
+	sameBuffer := isSameBuffer(dst, plaintext)
 
-	n, err := header.MarshalTo(dst)
-	if err != nil {
-		return nil, err
+	// Copy the header unencrypted.
+	if !sameBuffer {
+		copy(dst, plaintext[:headerLen])
 	}
 
 	iv := s.rtpInitializationVector(header, roc)
 	if s.srtpEncrypted {
-		s.srtpCipher.Seal(dst[n:n], iv[:], payload, dst[:n])
+		s.srtpCipher.Seal(dst[headerLen:headerLen], iv[:], payload, dst[:headerLen])
 	} else {
-		clearLen := n + len(payload)
-		copy(dst[n:], payload)
+		clearLen := headerLen + payloadLen
+		if !sameBuffer {
+			copy(dst[headerLen:], payload)
+		}
 		s.srtpCipher.Seal(dst[clearLen:clearLen], iv[:], nil, dst[:clearLen])
 	}
 

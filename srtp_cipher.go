@@ -17,7 +17,7 @@ type srtpCipher interface {
 	AEADAuthTagLen() (int, error)
 	getRTCPIndex([]byte) uint32
 
-	encryptRTP([]byte, *rtp.Header, []byte, uint32, bool) ([]byte, error)
+	encryptRTP([]byte, *rtp.Header, int, []byte, uint32, bool) ([]byte, error)
 	encryptRTCP([]byte, []byte, uint32, uint32) ([]byte, error)
 
 	decryptRTP([]byte, []byte, *rtp.Header, int, uint32, bool) ([]byte, error)

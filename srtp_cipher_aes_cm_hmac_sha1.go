@@ -104,33 +104,37 @@ func newSrtpCipherAesCmHmacSha1(
 func (s *srtpCipherAesCmHmacSha1) encryptRTP(
 	dst []byte,
 	header *rtp.Header,
-	payload []byte,
+	headerLen int,
+	plaintext []byte,
 	roc uint32,
 	rocInAuthTag bool,
 ) (ciphertext []byte, err error) {
+	payload := plaintext[headerLen:]
+	payloadLen := len(payload)
+
 	// Grow the given buffer to fit the output.
 	authTagLen, err := s.AuthTagRTPLen()
 	if err != nil {
 		return nil, err
 	}
-	dst = growBufferSize(dst, header.MarshalSize()+len(payload)+len(s.mki)+authTagLen)
+	dst = growBufferSize(dst, headerLen+payloadLen+len(s.mki)+authTagLen)
+	sameBuffer := isSameBuffer(dst, plaintext)
 
 	// Copy the header unencrypted.
-	n, err := header.MarshalTo(dst)
-	if err != nil {
-		return nil, err
+	if !sameBuffer {
+		copy(dst, plaintext[:headerLen])
 	}
 
 	// Encrypt the payload
 	if s.srtpEncrypted {
 		counter := generateCounter(header.SequenceNumber, roc, header.SSRC, s.srtpSessionSalt)
-		if err = xorBytesCTR(s.srtpBlock, counter[:], dst[n:], payload); err != nil {
+		if err = xorBytesCTR(s.srtpBlock, counter[:], dst[headerLen:], payload); err != nil {
 			return nil, err
 		}
-	} else {
-		copy(dst[n:], payload)
+	} else if !sameBuffer {
+		copy(dst[headerLen:], payload)
 	}
-	n += len(payload)
+	n := headerLen + payloadLen
 
 	// Generate the auth tag.
 	authTag, err := s.generateSrtpAuthTag(dst[:n], roc, rocInAuthTag)
