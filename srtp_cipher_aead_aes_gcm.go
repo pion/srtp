@@ -91,9 +91,12 @@ func newSrtpCipherAeadAesGcm(
 func (s *srtpCipherAeadAesGcm) encryptRTP(
 	dst []byte,
 	header *rtp.Header,
-	payload []byte,
+	headerLen int,
+	plaintext []byte,
 	roc uint32,
 ) (ciphertext []byte, err error) {
+	payload := plaintext[headerLen:]
+
 	// Grow the given buffer to fit the output.
 	authTagLen, err := s.AEADAuthTagLen()
 	if err != nil {
