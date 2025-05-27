@@ -147,11 +147,29 @@ func (s *SessionSRTP) writeRTP(header *rtp.Header, payload []byte) (int, error) 
 	// small, allocate a new buffer itself.  In either case, it is
 	// safe to put the buffer back into the pool, but only after
 	// nextConn.Write has returned.
-	ibuf := bufferpool.Get()
-	defer bufferpool.Put(ibuf)
+	// Similar case is for source buffer, used to marshal RTP packet.
+	srcibuf := bufferpool.Get()
+	dstibuf := bufferpool.Get()
+	defer func() {
+		bufferpool.Put(srcibuf)
+		bufferpool.Put(dstibuf)
+	}()
 
+	srcbuf := srcibuf.([]byte) //nolint:forcetypeassert
+	marshalSize := rtp.PacketMarshalSize(header, payload)
+	if len(srcbuf) < marshalSize {
+		// The buffer is too small, so we need to allocate a new one.
+		srcbuf = make([]byte, marshalSize)
+	}
+	_, err := rtp.MarshalPacketTo(srcbuf, header, payload)
+	if err != nil {
+		return 0, err
+	}
+
+	headerLen := header.MarshalSize()
 	s.session.localContextMutex.Lock()
-	encrypted, err := s.localContext.encryptRTP(ibuf.([]byte), header, payload) //nolint:forcetypeassert
+	encrypted, err := s.localContext.encryptRTP(dstibuf.([]byte), header, headerLen,
+		srcbuf[:marshalSize]) //nolint:forcetypeassert
 	s.session.localContextMutex.Unlock()
 
 	if err != nil {

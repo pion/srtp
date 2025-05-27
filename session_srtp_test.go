@@ -363,3 +363,51 @@ func encryptSRTP(context *Context, pkt *rtp.Packet) ([]byte, error) {
 
 	return encrypted, nil
 }
+
+func TestSessionSRTPPacketWithPadding(t *testing.T) {
+	lim := test.TimeOut(time.Second * 5)
+	defer lim.Stop()
+
+	report := test.CheckRoutines(t)
+	defer report()
+
+	const (
+		testSSRC      = 5000
+		rtpHeaderSize = 12
+		paddingSize   = 5
+		authTagLen    = 10 // For AES_CM_128_HMAC_SHA1_80, the auth tag length is 10 bytes.
+	)
+	testPayload := []byte{0x00, 0x01, 0x03, 0x04}
+	readBuffer := make([]byte, rtpHeaderSize+paddingSize+len(testPayload))
+	aSession, bSession := buildSessionSRTPPair(t)
+
+	aWriteStream, err := aSession.OpenWriteStream()
+	assert.NoError(t, err)
+
+	writeBytes, err := aWriteStream.WriteRTP(&rtp.Header{SSRC: testSSRC, Padding: true, PaddingSize: paddingSize},
+		append([]byte{}, testPayload...))
+	assert.NoError(t, err)
+	assert.Equalf(t, rtpHeaderSize+paddingSize+len(testPayload)+authTagLen, writeBytes,
+		"WriteRTP should return the size of the packet including padding, exp(%v) actual(%v)",
+		rtpHeaderSize+paddingSize+len(testPayload)+authTagLen, writeBytes)
+
+	bReadStream, ssrc, err := bSession.AcceptStream()
+	assert.NoError(t, err)
+	assert.Equalf(t, uint32(testSSRC), ssrc, "SSRC mismatch during accept exp(%v) actual(%v)", testSSRC, ssrc)
+
+	readBytes, err := bReadStream.Read(readBuffer)
+	assert.NoError(t, err)
+	assert.Equal(t, rtpHeaderSize+paddingSize+len(testPayload), readBytes,
+		"Read should return the size of the packet including padding, exp(%v) actual(%v)",
+		rtpHeaderSize+paddingSize+len(testPayload), readBytes)
+
+	var rtpPacket rtp.Packet
+	err = rtpPacket.Unmarshal(readBuffer[:readBytes])
+	assert.NoError(t, err)
+	assert.Equal(t, rtpPacket.Padding, true)
+	assert.Equal(t, rtpPacket.PaddingSize, byte(paddingSize))
+	assert.Equal(t, rtpPacket.Payload, testPayload)
+
+	assert.NoError(t, aSession.Close())
+	assert.NoError(t, bSession.Close())
+}
