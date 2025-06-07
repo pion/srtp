@@ -575,8 +575,10 @@ func createTestCiphers(t *testing.T) []testCipher { //nolint:maintidx
 	return tests
 }
 
-// nolint:maintidx
+// nolint:maintidx,dupl
 func TestSrtpCipher(t *testing.T) {
+	const testSSRC = 0xcafebabe
+
 	for _, testCase := range createTestCiphers(t) {
 		t.Run(testCase.profile.String(), func(t *testing.T) {
 			assert.Equal(t, testCase.decryptedRTPPacket, testCase.authenticatedRTPPacket[:len(testCase.decryptedRTPPacket)])
@@ -614,6 +616,18 @@ func TestSrtpCipher(t *testing.T) {
 					assert.NoError(t, err)
 					assert.Equal(t, testCase.decryptedRTPPacket, actualDecrypted)
 				})
+
+				t.Run("Same buffer", func(t *testing.T) {
+					buffer := make([]byte, 0, 1000)
+					src, dst := buffer, buffer
+					src = append(src, testCase.encryptedRTPPacket...)
+					assert.True(t, isSameBuffer(dst, src))
+
+					actualDecrypted, err := ctx.DecryptRTP(dst, src, nil)
+					assert.NoError(t, err)
+					assert.Equal(t, testCase.decryptedRTPPacket, actualDecrypted)
+					assert.True(t, isSameBuffer(actualDecrypted, src))
+				})
 			})
 
 			t.Run("Encrypt RTCP", func(t *testing.T) {
@@ -621,9 +635,24 @@ func TestSrtpCipher(t *testing.T) {
 				assert.NoError(t, err)
 
 				t.Run("New Allocation", func(t *testing.T) {
+					ctx.SetIndex(testSSRC, 0)
 					actualEncrypted, err := ctx.EncryptRTCP(nil, testCase.decryptedRTCPPacket, nil)
 					assert.NoError(t, err)
 					assert.Equal(t, testCase.encryptedRTCPPacket, actualEncrypted)
+				})
+
+				t.Run("Same buffer", func(t *testing.T) {
+					ctx.SetIndex(testSSRC, 0)
+
+					buffer := make([]byte, 0, 1000)
+					src, dst := buffer, buffer
+					src = append(src, testCase.decryptedRTCPPacket...)
+					assert.True(t, isSameBuffer(dst, src))
+
+					actualEncrypted, err := ctx.EncryptRTCP(dst, src, nil)
+					assert.NoError(t, err)
+					assert.Equal(t, testCase.encryptedRTCPPacket, actualEncrypted)
+					assert.True(t, isSameBuffer(actualEncrypted, src))
 				})
 			})
 
@@ -632,9 +661,24 @@ func TestSrtpCipher(t *testing.T) {
 				assert.NoError(t, err)
 
 				t.Run("New Allocation", func(t *testing.T) {
+					ctx.SetIndex(testSSRC, 0)
 					actualDecrypted, err := ctx.DecryptRTCP(nil, testCase.encryptedRTCPPacket, nil)
 					assert.NoError(t, err)
 					assert.Equal(t, testCase.decryptedRTCPPacket, actualDecrypted)
+				})
+
+				t.Run("Same buffer", func(t *testing.T) {
+					ctx.SetIndex(testSSRC, 0)
+
+					buffer := make([]byte, 0, 1000)
+					src, dst := buffer, buffer
+					src = append(src, testCase.encryptedRTCPPacket...)
+					assert.True(t, isSameBuffer(dst, src))
+
+					actualDecrypted, err := ctx.DecryptRTCP(dst, src, nil)
+					assert.NoError(t, err)
+					assert.Equal(t, testCase.decryptedRTCPPacket, actualDecrypted)
+					assert.True(t, isSameBuffer(actualDecrypted, src))
 				})
 			})
 
