@@ -411,3 +411,49 @@ func TestSessionSRTPPacketWithPadding(t *testing.T) {
 	assert.NoError(t, aSession.Close())
 	assert.NoError(t, bSession.Close())
 }
+
+// Regression test for https://github.com/pion/transport/issues/339
+func TestSessionSRTP_PaddingRegression(t *testing.T) {
+	lim := test.TimeOut(5 * time.Second)
+	defer lim.Stop()
+	defer test.CheckRoutines(t)()
+
+	const (
+		testSSRC      = 5000
+		rtpHeaderSize = 12
+		padLen        = 5
+	)
+
+	aSess, bSess := buildSessionSRTPPair(t)
+
+	ws, err := aSess.OpenWriteStream()
+	assert.NoError(t, err)
+
+	hdr := &rtp.Header{
+		Version:     2,
+		Padding:     true,
+		PayloadType: 96,
+		SSRC:        testSSRC,
+		PaddingSize: byte(padLen),
+	}
+
+	payload := []byte{0xca, 0xfe, 0xba, 0xbe}
+
+	_, err = ws.WriteRTP(hdr, payload)
+	assert.NoError(t, err)
+
+	rs, ssrc, err := bSess.AcceptStream()
+	assert.NoError(t, err)
+	assert.Equal(t, uint32(testSSRC), ssrc, "SSRC mismatch: exp %d got %d", testSSRC, ssrc)
+
+	readBuf := make([]byte, rtpHeaderSize+len(payload)+padLen+10)
+	n, err := rs.Read(readBuf)
+	assert.NoError(t, err)
+
+	var pkt rtp.Packet
+	assert.NoError(t, pkt.Unmarshal(readBuf[:n]))
+	assert.Equal(t, pkt.Payload, payload)
+
+	_ = aSess.Close()
+	_ = bSess.Close()
+}
