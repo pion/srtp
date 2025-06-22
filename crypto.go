@@ -20,16 +20,18 @@ func incrementCTR(ctr []byte) {
 	}
 }
 
+const aesBlockSize = 16
+
 var xorBufferPool = sync.Pool{ // nolint:gochecknoglobals
 	New: func() interface{} {
-		return make([]byte, 1500)
+		return make([]byte, 32)
 	},
 }
 
 // xorBytesCTR performs CTR encryption and decryption.
 // It is equivalent to cipher.NewCTR followed by XORKeyStream.
 func xorBytesCTR(block cipher.Block, iv []byte, dst, src []byte) error {
-	if len(iv) != block.BlockSize() {
+	if len(iv) != aesBlockSize {
 		return errBadIVLength
 	}
 

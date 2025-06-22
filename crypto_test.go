@@ -18,6 +18,40 @@ func xorBytesCTRReference(block cipher.Block, iv []byte, dst, src []byte) {
 	stream.XORKeyStream(dst, src)
 }
 
+func benchmarkAESCTR(block cipher.Block, iv []byte, dst, src []byte) {
+	xorBytesCTR(block, iv, dst, src)
+}
+
+func BenchmarkAES128CTRAlloc(b *testing.B) {
+	b.ReportAllocs()
+	const keysize = 16
+	key := make([]byte, keysize)
+	_, _ = rand.Read(key)
+	block, _ := aes.NewCipher(key)
+	iv := make([]byte, block.BlockSize())
+	src := make([]byte, 0)
+	dst := make([]byte, 0)
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		benchmarkAESCTR(block, iv, dst, src)
+	}
+}
+
+func BenchmarkAES256CTRAlloc(b *testing.B) {
+	b.ReportAllocs()
+	const keysize = 32
+	key := make([]byte, keysize)
+	_, _ = rand.Read(key)
+	block, _ := aes.NewCipher(key)
+	iv := make([]byte, block.BlockSize())
+	src := make([]byte, 0)
+	dst := make([]byte, 0)
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		benchmarkAESCTR(block, iv, dst, src)
+	}
+}
+
 func TestXorBytesCTR(t *testing.T) {
 	for keysize := 16; keysize < 64; keysize *= 2 {
 		key := make([]byte, keysize)
