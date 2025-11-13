@@ -9,6 +9,7 @@ import (
 
 	"github.com/pion/logging"
 	"github.com/pion/rtcp"
+	"github.com/pion/transport/v3"
 )
 
 const defaultSessionSRTCPReplayProtectionWindow = 64
@@ -24,6 +25,15 @@ type SessionSRTCP struct {
 
 // NewSessionSRTCP creates a SRTCP session using conn as the underlying transport.
 func NewSessionSRTCP(conn net.Conn, config *Config) (*SessionSRTCP, error) { //nolint:dupl
+	return NewSessionSRTCPWithNewSocket(
+		transport.NewNetConnToNetConnSocket(conn),
+		config,
+	)
+}
+
+// NewSessionSRTCPWithNewSocket creates a SRTCP session using conn as the underlying transport.
+// The conn argument implements transport.NetConnSocket, with more capabilities than a net.Conn socket.
+func NewSessionSRTCPWithNewSocket(conn transport.NetConnSocket, config *Config) (*SessionSRTCP, error) { //nolint:dupl
 	if config == nil {
 		return nil, errNoConfig
 	} else if conn == nil {
@@ -157,6 +167,10 @@ func destinationSSRC(pkts []rtcp.Packet) []uint32 {
 }
 
 func (s *SessionSRTCP) decrypt(buf []byte) error {
+	return s.decryptWithAttributes(buf, nil)
+}
+
+func (s *SessionSRTCP) decryptWithAttributes(buf []byte, attr *transport.PacketAttributes) error {
 	decrypted, err := s.remoteContext.DecryptRTCP(buf, buf, nil)
 	if err != nil {
 		return err
@@ -183,7 +197,7 @@ func (s *SessionSRTCP) decrypt(buf []byte) error {
 			return errFailedTypeAssertion
 		}
 
-		_, err = readStream.write(decrypted)
+		_, err = readStream.writeWithAttributes(decrypted, attr)
 		if err != nil {
 			return err
 		}

@@ -10,6 +10,7 @@ import (
 
 	"github.com/pion/logging"
 	"github.com/pion/rtp"
+	"github.com/pion/transport/v3"
 )
 
 const defaultSessionSRTPReplayProtectionWindow = 64
@@ -25,6 +26,15 @@ type SessionSRTP struct {
 
 // NewSessionSRTP creates a SRTP session using conn as the underlying transport.
 func NewSessionSRTP(conn net.Conn, config *Config) (*SessionSRTP, error) { //nolint:dupl
+	return NewSessionSRTPWithNewSocket(
+		transport.NewNetConnToNetConnSocket(conn),
+		config,
+	)
+}
+
+// NewSessionSRTPWithNewSocket creates a SRTP session using conn as the underlying transport.
+// The conn argument implements transport.NetConnSocket, with more capabilities than a net.Conn socket.
+func NewSessionSRTPWithNewSocket(conn transport.NetConnSocket, config *Config) (*SessionSRTP, error) { //nolint:dupl
 	if config == nil {
 		return nil, errNoConfig
 	} else if conn == nil {
@@ -178,6 +188,10 @@ func (s *SessionSRTP) setWriteDeadline(t time.Time) error {
 }
 
 func (s *SessionSRTP) decrypt(buf []byte) error {
+	return s.decryptWithAttributes(buf, nil)
+}
+
+func (s *SessionSRTP) decryptWithAttributes(buf []byte, attr *transport.PacketAttributes) error {
 	header := &rtp.Header{}
 	headerLen, err := header.Unmarshal(buf)
 	if err != nil {
@@ -204,7 +218,7 @@ func (s *SessionSRTP) decrypt(buf []byte) error {
 		return err
 	}
 
-	_, err = readStream.write(decrypted)
+	_, err = readStream.writeWithAttributes(decrypted, attr)
 	if err != nil {
 		return err
 	}

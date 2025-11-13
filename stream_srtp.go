@@ -5,11 +5,11 @@ package srtp
 
 import (
 	"errors"
-	"io"
 	"sync"
 	"time"
 
 	"github.com/pion/rtp"
+	"github.com/pion/transport/v3"
 	"github.com/pion/transport/v3/packetio"
 )
 
@@ -26,7 +26,7 @@ type ReadStreamSRTP struct {
 	ssrc     uint32
 	isInited bool
 
-	buffer io.ReadWriteCloser
+	buffer *packetio.Buffer
 }
 
 // Used by getOrCreateReadStream.
@@ -63,20 +63,16 @@ func (r *ReadStreamSRTP) init(child streamSession, ssrc uint32) error {
 	return nil
 }
 
-func (r *ReadStreamSRTP) write(buf []byte) (n int, err error) {
-	n, err = r.buffer.Write(buf)
-
-	if errors.Is(err, packetio.ErrFull) {
-		// Silently drop data when the buffer is full.
-		return len(buf), nil
-	}
-
-	return n, err
-}
-
 // Read reads and decrypts full RTP packet from the nextConn.
 func (r *ReadStreamSRTP) Read(buf []byte) (int, error) {
 	return r.buffer.Read(buf)
+}
+
+// Read reads and decrypts full RTP packet from the nextConn with additional packet attributes.
+func (r *ReadStreamSRTP) ReadWithAttributes(buf []byte, attr *transport.PacketAttributes) (int, error) {
+	n, err := r.buffer.ReadWithAttributes(buf, attr)
+
+	return n, err
 }
 
 // ReadRTP reads and decrypts full RTP packet and its header from the nextConn.
@@ -99,13 +95,7 @@ func (r *ReadStreamSRTP) ReadRTP(buf []byte) (int, *rtp.Header, error) {
 // SetReadDeadline sets the deadline for the Read operation.
 // Setting to zero means no deadline.
 func (r *ReadStreamSRTP) SetReadDeadline(t time.Time) error {
-	if b, ok := r.buffer.(interface {
-		SetReadDeadline(time.Time) error
-	}); ok {
-		return b.SetReadDeadline(t)
-	}
-
-	return nil
+	return r.buffer.SetReadDeadline(t)
 }
 
 // Close removes the ReadStream from the session and cleans up any associated state.
@@ -156,4 +146,15 @@ func (w *WriteStreamSRTP) Write(b []byte) (int, error) {
 // Setting to zero means no deadline.
 func (w *WriteStreamSRTP) SetWriteDeadline(t time.Time) error {
 	return w.session.setWriteDeadline(t)
+}
+
+func (r *ReadStreamSRTP) writeWithAttributes(buff []byte, attr *transport.PacketAttributes) (n int, err error) {
+	n, err = r.buffer.WriteWithAttributes(buff, attr)
+
+	if errors.Is(err, packetio.ErrFull) {
+		// Silently drop data when the buffer is full.
+		return len(buff), nil
+	}
+
+	return n, err
 }

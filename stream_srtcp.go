@@ -5,11 +5,11 @@ package srtp
 
 import (
 	"errors"
-	"io"
 	"sync"
 	"time"
 
 	"github.com/pion/rtcp"
+	"github.com/pion/transport/v3"
 	"github.com/pion/transport/v3/packetio"
 )
 
@@ -26,18 +26,7 @@ type ReadStreamSRTCP struct {
 	ssrc     uint32
 	isInited bool
 
-	buffer io.ReadWriteCloser
-}
-
-func (r *ReadStreamSRTCP) write(buf []byte) (n int, err error) {
-	n, err = r.buffer.Write(buf)
-
-	if errors.Is(err, packetio.ErrFull) {
-		// Silently drop data when the buffer is full.
-		return len(buf), nil
-	}
-
-	return n, err
+	buffer *packetio.Buffer
 }
 
 // Used by getOrCreateReadStream.
@@ -66,16 +55,17 @@ func (r *ReadStreamSRTCP) Read(buf []byte) (int, error) {
 	return r.buffer.Read(buf)
 }
 
+// ReadWithAttributes reads and decrypts full RTCP packet from the nextConn with additional packet attributes.
+func (r *ReadStreamSRTCP) ReadWithAttributes(b []byte, attr *transport.PacketAttributes) (int, error) {
+	n, err := r.buffer.ReadWithAttributes(b, attr)
+
+	return n, err
+}
+
 // SetReadDeadline sets the deadline for the Read operation.
 // Setting to zero means no deadline.
 func (r *ReadStreamSRTCP) SetReadDeadline(t time.Time) error {
-	if b, ok := r.buffer.(interface {
-		SetReadDeadline(time.Time) error
-	}); ok {
-		return b.SetReadDeadline(t)
-	}
-
-	return nil
+	return r.buffer.SetReadDeadline(t)
 }
 
 // Close removes the ReadStream from the session and cleans up any associated state.
@@ -159,4 +149,15 @@ func (w *WriteStreamSRTCP) Write(b []byte) (int, error) {
 // Setting to zero means no deadline.
 func (w *WriteStreamSRTCP) SetWriteDeadline(t time.Time) error {
 	return w.session.setWriteDeadline(t)
+}
+
+func (r *ReadStreamSRTCP) writeWithAttributes(b []byte, attr *transport.PacketAttributes) (int, error) {
+	n, err := r.buffer.WriteWithAttributes(b, attr)
+
+	if errors.Is(err, packetio.ErrFull) {
+		// Silently drop data when the buffer is full.
+		return 0, nil
+	}
+
+	return n, err
 }
