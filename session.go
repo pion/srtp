@@ -146,7 +146,7 @@ func (s *session) start(
 		}()
 
 		b := make([]byte, 8192)
-		attr := transport.NewPacketAttributes()
+		attr := transport.NewPacketAttributesWithLen(transport.MaxAttributesLen)
 		for {
 			n, err := s.nextConn.ReadWithAttributes(b, attr)
 			if err != nil {
@@ -157,7 +157,7 @@ func (s *session) start(
 				return
 			}
 
-			if err = child.decryptWithAttributes(b[:n], attr); err != nil {
+			if err = child.decryptWithAttributes(b[:n], attr.GetReadPacketAttributes()); err != nil {
 				s.log.Info(err.Error())
 			}
 		}
