@@ -39,7 +39,7 @@ func TestBufferFactory(t *testing.T) {
 	wg := sync.WaitGroup{}
 	wg.Add(2)
 	conn := newNoopConn()
-	bf := func(_ packetio.BufferPacketType, _ uint32) io.ReadWriteCloser {
+	bf := func(_ packetio.BufferPacketType, _ uint32) *packetio.Buffer {
 		wg.Done()
 
 		return packetio.NewBuffer()
