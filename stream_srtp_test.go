@@ -35,6 +35,105 @@ func (c *noopConn) SetDeadline(time.Time) error      { return nil }
 func (c *noopConn) SetReadDeadline(time.Time) error  { return nil }
 func (c *noopConn) SetWriteDeadline(time.Time) error { return nil }
 
+func TestPeek(t *testing.T) {
+	firstBuffer := []byte{0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA}
+	secondBuffer := []byte{0xBB, 0xBB, 0xBB}
+	thirdBuffer := []byte{0xCC, 0xCC, 0xCC}
+
+	buffer := packetio.NewBuffer()
+	stream := &ReadStreamSRTP{buffer: buffer}
+
+	t.Run("Short Peek", func(t *testing.T) {
+		_, err := buffer.Write(firstBuffer)
+		assert.NoError(t, err)
+
+		readBuff := make([]byte, 1)
+		_, err = stream.Peek(readBuff)
+		assert.Error(t, err, io.ErrShortBuffer)
+	})
+
+	t.Run("Short Read", func(t *testing.T) {
+		_, err := buffer.Write(firstBuffer)
+		assert.NoError(t, err)
+
+		readBuff := make([]byte, 6)
+		n, err := stream.Peek(readBuff)
+		assert.NoError(t, err)
+		assert.Equal(t, n, 6)
+		assert.Equal(t, readBuff, firstBuffer)
+
+		n, err = stream.Read([]byte{})
+		assert.Error(t, err, io.ErrShortBuffer)
+		assert.Equal(t, n, 0)
+		assert.Equal(t, readBuff, firstBuffer)
+
+		n, err = stream.Read(readBuff)
+		assert.NoError(t, err)
+		assert.Equal(t, n, 6)
+		assert.Equal(t, readBuff, firstBuffer)
+	})
+
+	t.Run("Single Peek", func(t *testing.T) {
+		_, err := buffer.Write(firstBuffer)
+		assert.NoError(t, err)
+
+		readBuff := make([]byte, 6)
+
+		n, err := stream.Peek(readBuff)
+		assert.NoError(t, err)
+		assert.Equal(t, n, 6)
+		assert.Equal(t, readBuff, firstBuffer)
+
+		n, err = stream.Read(readBuff)
+		assert.NoError(t, err)
+		assert.Equal(t, n, 6)
+		assert.Equal(t, readBuff, firstBuffer)
+	})
+
+	t.Run("Multi Peek", func(t *testing.T) {
+		_, err := buffer.Write(firstBuffer)
+		assert.NoError(t, err)
+
+		_, err = buffer.Write(secondBuffer)
+		assert.NoError(t, err)
+
+		_, err = buffer.Write(thirdBuffer)
+		assert.NoError(t, err)
+
+		readBuff := make([]byte, 6)
+
+		n, err := stream.Peek(readBuff)
+		assert.NoError(t, err)
+		assert.Equal(t, n, 6)
+		assert.Equal(t, readBuff[:n], firstBuffer)
+
+		n, err = stream.Peek(readBuff)
+		assert.NoError(t, err)
+		assert.Equal(t, n, 3)
+		assert.Equal(t, readBuff[:n], secondBuffer)
+
+		n, err = stream.Peek(readBuff)
+		assert.NoError(t, err)
+		assert.Equal(t, n, 3)
+		assert.Equal(t, readBuff[:n], thirdBuffer)
+
+		n, err = stream.Read(readBuff)
+		assert.NoError(t, err)
+		assert.Equal(t, n, 6)
+		assert.Equal(t, readBuff[:n], firstBuffer)
+
+		n, err = stream.Read(readBuff)
+		assert.NoError(t, err)
+		assert.Equal(t, n, 3)
+		assert.Equal(t, readBuff[:n], secondBuffer)
+
+		n, err = stream.Read(readBuff)
+		assert.NoError(t, err)
+		assert.Equal(t, n, 3)
+		assert.Equal(t, readBuff[:n], thirdBuffer)
+	})
+}
+
 func TestBufferFactory(t *testing.T) {
 	wg := sync.WaitGroup{}
 	wg.Add(2)
