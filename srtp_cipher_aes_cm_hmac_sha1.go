@@ -31,6 +31,10 @@ type srtpCipherAesCmHmacSha1 struct {
 	mki []byte
 
 	useCryptex bool
+
+	// Pre-allocated buffers for auth tag to avoid heap allocation in hot path.
+	authBuf     [4 + sha1.Size]byte // 4 bytes ROC + 20 bytes SHA1
+	rtcpAuthBuf [sha1.Size]byte
 }
 
 //nolint:cyclop
@@ -382,10 +386,9 @@ func (s *srtpCipherAesCmHmacSha1) generateSrtpAuthTag(buf []byte, roc uint32, ro
 	}
 
 	// For SRTP only, we need to hash the rollover counter as well.
-	rocRaw := [4]byte{}
-	binary.BigEndian.PutUint32(rocRaw[:], roc)
+	binary.BigEndian.PutUint32(s.authBuf[:4], roc)
 
-	_, err := s.srtpSessionAuth.Write(rocRaw[:])
+	_, err := s.srtpSessionAuth.Write(s.authBuf[:4])
 	if err != nil {
 		return nil, err
 	}
@@ -396,12 +399,18 @@ func (s *srtpCipherAesCmHmacSha1) generateSrtpAuthTag(buf []byte, roc uint32, ro
 		return nil, err
 	}
 
+	// Use pre-allocated buffer to avoid allocation in Sum().
+	// When rocInAuthTag is true, we prepend the ROC (4 bytes) before the hash.
 	var authTag []byte
 	if rocInAuthTag {
-		authTag = append(authTag, rocRaw[:]...)
+		// ROC is already in buffer at [0:4], Sum will append hash starting at offset 4
+		authTag = s.srtpSessionAuth.Sum(s.authBuf[:4])[:authTagLen]
+	} else {
+		// No ROC prefix, Sum appends hash starting at offset 0
+		authTag = s.srtpSessionAuth.Sum(s.authBuf[:0])[:authTagLen]
 	}
 
-	return s.srtpSessionAuth.Sum(authTag)[0:authTagLen], nil
+	return authTag, nil
 }
 
 func (s *srtpCipherAesCmHmacSha1) generateSrtcpAuthTag(buf []byte) ([]byte, error) {
@@ -426,7 +435,8 @@ func (s *srtpCipherAesCmHmacSha1) generateSrtcpAuthTag(buf []byte) ([]byte, erro
 		return nil, err
 	}
 
-	return s.srtcpSessionAuth.Sum(nil)[0:authTagLen], nil
+	// Use pre-allocated buffer to avoid allocation in Sum()
+	return s.srtcpSessionAuth.Sum(s.rtcpAuthBuf[:0])[:authTagLen], nil
 }
 
 func (s *srtpCipherAesCmHmacSha1) getRTCPIndex(in []byte) uint32 {
