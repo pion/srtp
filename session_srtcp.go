@@ -138,14 +138,11 @@ func (s *SessionSRTCP) setWriteDeadline(t time.Time) error {
 	return s.session.nextConn.SetWriteDeadline(t)
 }
 
-// create a list of Destination SSRCs
-// that's a superset of all Destinations in the slice.
-func destinationSSRC(pkts []rtcp.Packet) []uint32 {
+// create a list of Destination SSRCs for the packet.
+func destinationSSRC(pkt rtcp.Packet) []uint32 {
 	ssrcSet := make(map[uint32]struct{})
-	for _, p := range pkts {
-		for _, ssrc := range p.DestinationSSRC() {
-			ssrcSet[ssrc] = struct{}{}
-		}
+	for _, ssrc := range pkt.DestinationSSRC() {
+		ssrcSet[ssrc] = struct{}{}
 	}
 
 	out := make([]uint32, 0, len(ssrcSet))
@@ -156,36 +153,44 @@ func destinationSSRC(pkts []rtcp.Packet) []uint32 {
 	return out
 }
 
+//nolint:cyclop
 func (s *SessionSRTCP) decrypt(buf []byte) error {
 	decrypted, err := s.remoteContext.DecryptRTCP(buf, buf, nil)
 	if err != nil {
 		return err
 	}
 
-	pkt, err := rtcp.Unmarshal(decrypted)
+	pkts, err := rtcp.Unmarshal(decrypted)
 	if err != nil {
 		return err
 	}
 
-	for _, ssrc := range destinationSSRC(pkt) {
-		r, isNew := s.session.getOrCreateReadStream(ssrc, s, newReadStreamSRTCP)
-		if r == nil {
-			return nil // Session has been closed
-		} else if isNew {
-			if !s.session.acceptStreamTimeout.IsZero() {
-				_ = s.session.nextConn.SetReadDeadline(time.Time{})
-			}
-			s.session.newStream <- r // Notify AcceptStream
-		}
-
-		readStream, ok := r.(*ReadStreamSRTCP)
-		if !ok {
-			return errFailedTypeAssertion
-		}
-
-		_, err = readStream.write(decrypted)
+	for _, pkt := range pkts {
+		marshaled, err := pkt.Marshal()
 		if err != nil {
 			return err
+		}
+
+		for _, ssrc := range destinationSSRC(pkt) {
+			r, isNew := s.session.getOrCreateReadStream(ssrc, s, newReadStreamSRTCP)
+			if r == nil {
+				return nil // Session has been closed
+			} else if isNew {
+				if !s.session.acceptStreamTimeout.IsZero() {
+					_ = s.session.nextConn.SetReadDeadline(time.Time{})
+				}
+				s.session.newStream <- r // Notify AcceptStream
+			}
+
+			readStream, ok := r.(*ReadStreamSRTCP)
+			if !ok {
+				return errFailedTypeAssertion
+			}
+
+			_, err = readStream.write(marshaled)
+			if err != nil {
+				return err
+			}
 		}
 	}
 
