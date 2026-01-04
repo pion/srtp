@@ -411,3 +411,171 @@ func TestSessionSRTPPacketWithPadding(t *testing.T) {
 	assert.NoError(t, aSession.Close())
 	assert.NoError(t, bSession.Close())
 }
+
+// pairWriterConn wraps a net.Conn and adds WriteToPair support for testing.
+type pairWriterConn struct {
+	net.Conn
+	pairID            uint64
+	writtenData       []byte
+	writeToPairCalled bool
+	mu                sync.Mutex
+}
+
+func (c *pairWriterConn) WriteToPair(pairID uint64, data []byte) (int, error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.pairID = pairID
+	c.writtenData = make([]byte, len(data))
+	copy(c.writtenData, data)
+	c.writeToPairCalled = true
+
+	return c.Conn.Write(data)
+}
+
+func (c *pairWriterConn) getWriteToPairState() (uint64, []byte, bool) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	return c.pairID, c.writtenData, c.writeToPairCalled
+}
+
+func TestSessionSRTPWriteRTPToPair(t *testing.T) {
+	lim := test.TimeOut(time.Second * 5)
+	defer lim.Stop()
+
+	report := test.CheckRoutines(t)
+	defer report()
+
+	const (
+		testSSRC      = 5000
+		rtpHeaderSize = 12
+		testPairID    = 42
+	)
+	testPayload := []byte{0x00, 0x01, 0x03, 0x04}
+	readBuffer := make([]byte, rtpHeaderSize+len(testPayload))
+
+	// Create pipes
+	aPipe, bPipe := net.Pipe()
+	config := &Config{
+		Profile: ProtectionProfileAes128CmHmacSha1_80,
+		Keys: SessionKeys{
+			[]byte{0xE1, 0xF9, 0x7A, 0x0D, 0x3E, 0x01, 0x8B, 0xE0, 0xD6, 0x4F, 0xA3, 0x2C, 0x06, 0xDE, 0x41, 0x39},
+			[]byte{0x0E, 0xC6, 0x75, 0xAD, 0x49, 0x8A, 0xFE, 0xEB, 0xB6, 0x96, 0x0B, 0x3A, 0xAB, 0xE6},
+			[]byte{0xE1, 0xF9, 0x7A, 0x0D, 0x3E, 0x01, 0x8B, 0xE0, 0xD6, 0x4F, 0xA3, 0x2C, 0x06, 0xDE, 0x41, 0x39},
+			[]byte{0x0E, 0xC6, 0x75, 0xAD, 0x49, 0x8A, 0xFE, 0xEB, 0xB6, 0x96, 0x0B, 0x3A, 0xAB, 0xE6},
+		},
+	}
+
+	// Wrap aPipe with pairWriterConn to track WriteToPair calls
+	pairWriter := &pairWriterConn{Conn: aPipe}
+
+	aSession, err := NewSessionSRTP(pairWriter, config)
+	assert.NoError(t, err)
+
+	bSession, err := NewSessionSRTP(bPipe, config)
+	assert.NoError(t, err)
+
+	// Test WriteRTPToPair
+	header := &rtp.Header{SSRC: testSSRC}
+	n, err := aSession.WriteRTPToPair(testPairID, header, append([]byte{}, testPayload...))
+	assert.NoError(t, err)
+	assert.Greater(t, n, 0, "WriteRTPToPair should return bytes written")
+
+	// Verify WriteToPair was called with correct pair ID
+	pairID, _, called := pairWriter.getWriteToPairState()
+	assert.True(t, called, "WriteToPair should have been called")
+	assert.Equal(t, uint64(testPairID), pairID, "WriteToPair should be called with correct pair ID")
+
+	// Verify the packet can be decrypted by the receiver
+	bReadStream, ssrc, err := bSession.AcceptStream()
+	assert.NoError(t, err)
+	assert.Equal(t, uint32(testSSRC), ssrc)
+
+	_, err = bReadStream.Read(readBuffer)
+	assert.NoError(t, err)
+	assert.Equal(t, testPayload, readBuffer[rtpHeaderSize:])
+
+	assert.NoError(t, aSession.Close())
+	assert.NoError(t, bSession.Close())
+}
+
+func TestSessionSRTPWriteRTPToPairNotSupported(t *testing.T) {
+	lim := test.TimeOut(time.Second * 5)
+	defer lim.Stop()
+
+	report := test.CheckRoutines(t)
+	defer report()
+
+	// Create session with a plain net.Conn that doesn't support WriteToPair
+	aSession, _, _ := buildSessionSRTP(t)
+
+	// Test WriteRTPToPair returns error when underlying conn doesn't support it
+	header := &rtp.Header{SSRC: 5000}
+	_, err := aSession.WriteRTPToPair(42, header, []byte{0x00, 0x01})
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "WriteToPair")
+
+	assert.NoError(t, aSession.Close())
+}
+
+func TestSessionSRTPWriteRTPToPairSharedContext(t *testing.T) {
+	// This test verifies that WriteRTPToPair and writeRTP share the same
+	// encryption context (ROC state). Sending packets via both methods
+	// should result in consecutive sequence numbers being decryptable.
+	lim := test.TimeOut(time.Second * 5)
+	defer lim.Stop()
+
+	report := test.CheckRoutines(t)
+	defer report()
+
+	const (
+		testSSRC      = 5000
+		rtpHeaderSize = 12
+	)
+	testPayload := []byte{0x00, 0x01, 0x03, 0x04}
+
+	aPipe, bPipe := net.Pipe()
+	config := &Config{
+		Profile: ProtectionProfileAes128CmHmacSha1_80,
+		Keys: SessionKeys{
+			[]byte{0xE1, 0xF9, 0x7A, 0x0D, 0x3E, 0x01, 0x8B, 0xE0, 0xD6, 0x4F, 0xA3, 0x2C, 0x06, 0xDE, 0x41, 0x39},
+			[]byte{0x0E, 0xC6, 0x75, 0xAD, 0x49, 0x8A, 0xFE, 0xEB, 0xB6, 0x96, 0x0B, 0x3A, 0xAB, 0xE6},
+			[]byte{0xE1, 0xF9, 0x7A, 0x0D, 0x3E, 0x01, 0x8B, 0xE0, 0xD6, 0x4F, 0xA3, 0x2C, 0x06, 0xDE, 0x41, 0x39},
+			[]byte{0x0E, 0xC6, 0x75, 0xAD, 0x49, 0x8A, 0xFE, 0xEB, 0xB6, 0x96, 0x0B, 0x3A, 0xAB, 0xE6},
+		},
+	}
+
+	pairWriter := &pairWriterConn{Conn: aPipe}
+
+	aSession, err := NewSessionSRTP(pairWriter, config)
+	assert.NoError(t, err)
+
+	bSession, err := NewSessionSRTP(bPipe, config)
+	assert.NoError(t, err)
+
+	bReadStream, err := bSession.OpenReadStream(testSSRC)
+	assert.NoError(t, err)
+
+	aWriteStream, err := aSession.OpenWriteStream()
+	assert.NoError(t, err)
+
+	// Send packets alternating between writeRTP and WriteRTPToPair
+	// All should be decryptable if they share the same context
+	for i := uint16(0); i < 10; i++ {
+		header := &rtp.Header{SSRC: testSSRC, SequenceNumber: i}
+		if i%2 == 0 {
+			_, err = aWriteStream.WriteRTP(header, testPayload)
+		} else {
+			_, err = aSession.WriteRTPToPair(42, header, testPayload)
+		}
+		assert.NoError(t, err)
+
+		readBuffer := make([]byte, rtpHeaderSize+len(testPayload))
+		_, err = bReadStream.Read(readBuffer)
+		assert.NoError(t, err, "Failed to read packet %d", i)
+		assert.Equal(t, testPayload, readBuffer[rtpHeaderSize:], "Payload mismatch for packet %d", i)
+	}
+
+	assert.NoError(t, aSession.Close())
+	assert.NoError(t, bSession.Close())
+}
