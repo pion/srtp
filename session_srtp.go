@@ -139,8 +139,34 @@ var bufferpool = sync.Pool{ // nolint:gochecknoglobals
 }
 
 func (s *SessionSRTP) writeRTP(header *rtp.Header, payload []byte) (int, error) {
+	encrypted, err := s.encryptRTP(header, payload)
+	if err != nil {
+		return 0, err
+	}
+
+	return s.session.nextConn.Write(encrypted)
+}
+
+// WriteRTPToPair encrypts an RTP packet and writes it to a specific ICE candidate pair.
+func (s *SessionSRTP) WriteRTPToPair(pairID uint64, header *rtp.Header, payload []byte) (int, error) {
+	encrypted, err := s.encryptRTP(header, payload)
+	if err != nil {
+		return 0, err
+	}
+
+	if pw, ok := s.session.nextConn.(interface {
+		WriteToPair(uint64, []byte) (int, error)
+	}); ok {
+		return pw.WriteToPair(pairID, encrypted)
+	}
+
+	return 0, errPairWriterNotSupported
+}
+
+// encryptRTP encrypts an RTP packet using the local context.
+func (s *SessionSRTP) encryptRTP(header *rtp.Header, payload []byte) ([]byte, error) {
 	if _, ok := <-s.session.started; ok {
-		return 0, errStartedChannelUsedIncorrectly
+		return nil, errStartedChannelUsedIncorrectly
 	}
 
 	// encryptRTP will either return our buffer, or, if it is too
@@ -159,7 +185,7 @@ func (s *SessionSRTP) writeRTP(header *rtp.Header, payload []byte) (int, error) 
 	}
 	_, err := rtp.MarshalPacketTo(buf, header, payload) // nolint:staticcheck
 	if err != nil {
-		return 0, err
+		return nil, err
 	}
 
 	s.session.localContextMutex.Lock()
@@ -167,10 +193,10 @@ func (s *SessionSRTP) writeRTP(header *rtp.Header, payload []byte) (int, error) 
 	s.session.localContextMutex.Unlock()
 
 	if err != nil {
-		return 0, err
+		return nil, err
 	}
 
-	return s.session.nextConn.Write(encrypted)
+	return encrypted, nil
 }
 
 func (s *SessionSRTP) setWriteDeadline(t time.Time) error {
