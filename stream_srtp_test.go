@@ -11,7 +11,7 @@ import (
 	"time"
 
 	"github.com/pion/rtp"
-	"github.com/pion/transport/v3/packetio"
+	"github.com/pion/transport/v4/packetio"
 	"github.com/stretchr/testify/assert"
 )
 
