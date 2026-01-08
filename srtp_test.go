@@ -7,7 +7,7 @@ import (
 	"testing"
 
 	"github.com/pion/rtp"
-	"github.com/pion/transport/v3/replaydetector"
+	"github.com/pion/transport/v4/replaydetector"
 	"github.com/stretchr/testify/assert"
 )
 
