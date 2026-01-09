@@ -135,7 +135,7 @@ func (s *srtpCipherAeadAesGcm) encryptRTP(
 func (s *srtpCipherAeadAesGcm) doEncryptRTP(dst []byte, header *rtp.Header, headerLen int, plaintext []byte, roc uint32,
 	rocInAuthTag bool, sameBuffer bool, payloadLen int, authPartLen int,
 ) error {
-	s.rtpIV = s.rtpInitializationVector(header, roc)
+	s.rtpInitializationVector(header, roc)
 	encrypt := func(dst, plaintext []byte, headerLen int) error {
 		s.srtpCipher.Seal(dst[headerLen:headerLen], s.rtpIV[:], plaintext[headerLen:], plaintext[:headerLen])
 
@@ -211,7 +211,7 @@ func (s *srtpCipherAeadAesGcm) decryptRTP(
 func (s *srtpCipherAeadAesGcm) doDecryptRTP(dst, ciphertext []byte, header *rtp.Header, headerLen int, roc uint32,
 	sameBuffer bool, nEnd int, authTagLen int,
 ) error {
-	s.rtpIV = s.rtpInitializationVector(header, roc)
+	s.rtpInitializationVector(header, roc)
 	decrypt := func(dst, ciphertext []byte, headerLen int) error {
 		_, err := s.srtpCipher.Open(dst[headerLen:headerLen], s.rtpIV[:], ciphertext[headerLen:nEnd], ciphertext[:headerLen])
 
@@ -342,17 +342,14 @@ func (s *srtpCipherAeadAesGcm) decryptRTCP(dst, encrypted []byte, srtcpIndex, ss
 // value is then XORed to the 12-octet salt to form the 12-octet IV.
 //
 // https://tools.ietf.org/html/rfc7714#section-8.1
-func (s *srtpCipherAeadAesGcm) rtpInitializationVector(header *rtp.Header, roc uint32) [12]byte {
-	var iv [12]byte
-	binary.BigEndian.PutUint32(iv[2:], header.SSRC)
-	binary.BigEndian.PutUint32(iv[6:], roc)
-	binary.BigEndian.PutUint16(iv[10:], header.SequenceNumber)
+func (s *srtpCipherAeadAesGcm) rtpInitializationVector(header *rtp.Header, roc uint32) {
+	binary.BigEndian.PutUint32(s.rtpIV[2:], header.SSRC)
+	binary.BigEndian.PutUint32(s.rtpIV[6:], roc)
+	binary.BigEndian.PutUint16(s.rtpIV[10:], header.SequenceNumber)
 
-	for i := range iv {
-		iv[i] ^= s.srtpSessionSalt[i]
+	for i := range s.rtpIV {
+		s.rtpIV[i] ^= s.srtpSessionSalt[i]
 	}
-
-	return iv
 }
 
 // The 12-octet IV used by AES-GCM SRTCP is formed by first
