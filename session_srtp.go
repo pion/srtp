@@ -139,8 +139,19 @@ var bufferpool = sync.Pool{ // nolint:gochecknoglobals
 }
 
 func (s *SessionSRTP) writeRTP(header *rtp.Header, payload []byte) (int, error) {
+	encrypted, err := s.EncryptRTP(header, payload)
+	if err != nil {
+		return 0, err
+	}
+
+	return s.session.nextConn.Write(encrypted)
+}
+
+// EncryptRTP encrypts an RTP packet and returns the encrypted bytes.
+// This allows the caller to handle writing to any destination.
+func (s *SessionSRTP) EncryptRTP(header *rtp.Header, payload []byte) ([]byte, error) {
 	if _, ok := <-s.session.started; ok {
-		return 0, errStartedChannelUsedIncorrectly
+		return nil, errStartedChannelUsedIncorrectly
 	}
 
 	// encryptRTP will either return our buffer, or, if it is too
@@ -159,7 +170,7 @@ func (s *SessionSRTP) writeRTP(header *rtp.Header, payload []byte) (int, error) 
 	}
 	_, err := rtp.MarshalPacketTo(buf, header, payload) // nolint:staticcheck
 	if err != nil {
-		return 0, err
+		return nil, err
 	}
 
 	s.session.localContextMutex.Lock()
@@ -167,10 +178,10 @@ func (s *SessionSRTP) writeRTP(header *rtp.Header, payload []byte) (int, error) 
 	s.session.localContextMutex.Unlock()
 
 	if err != nil {
-		return 0, err
+		return nil, err
 	}
 
-	return s.session.nextConn.Write(encrypted)
+	return encrypted, nil
 }
 
 func (s *SessionSRTP) setWriteDeadline(t time.Time) error {
