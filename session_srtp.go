@@ -134,7 +134,9 @@ func (s *SessionSRTP) write(b []byte) (int, error) {
 // get expanded by growBuffer.
 var bufferpool = sync.Pool{ // nolint:gochecknoglobals
 	New: func() any {
-		return make([]byte, 1492)
+		buf := make([]byte, 1492)
+
+		return &buf
 	},
 }
 
@@ -147,10 +149,13 @@ func (s *SessionSRTP) writeRTP(header *rtp.Header, payload []byte) (int, error) 
 	// small, allocate a new buffer itself.  In either case, it is
 	// safe to put the buffer back into the pool, but only after
 	// nextConn.Write has returned.
-	ibuf := bufferpool.Get()
-	defer bufferpool.Put(ibuf)
+	pbuf, ok := bufferpool.Get().(*[]byte)
+	if !ok {
+		return 0, errStartedChannelUsedIncorrectly
+	}
+	defer bufferpool.Put(pbuf)
 
-	buf := ibuf.([]byte)                                                      // nolint:forcetypeassert
+	buf := *pbuf
 	headerLen, marshalSize := rtp.HeaderAndPacketMarshalSize(header, payload) // nolint:staticcheck
 	if len(buf) < marshalSize+20 {
 		// The buffer is too small, so we need to allocate a new one. Add 20 bytes for auth tag like
