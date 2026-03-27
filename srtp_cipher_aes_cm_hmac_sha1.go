@@ -3,7 +3,7 @@
 
 package srtp
 
-import ( //nolint:gci
+import (
 	"crypto/aes"
 	"crypto/cipher"
 	"crypto/hmac"
