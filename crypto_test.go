@@ -62,7 +62,7 @@ func TestXorBytesCTR(t *testing.T) {
 		require.NoError(t, err)
 
 		iv := make([]byte, block.BlockSize())
-		for i := 0; i < 1500; i++ {
+		for i := range 1500 {
 			src := make([]byte, i)
 			dst := make([]byte, i)
 			reference := make([]byte, i)

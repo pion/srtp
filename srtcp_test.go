@@ -121,10 +121,8 @@ func TestRTCPLifecycle(t *testing.T) {
 	}
 
 	for name, option := range options {
-		option := option
 		t.Run(name, func(t *testing.T) {
 			for caseName, testCase := range rtcpTestCases() {
-				testCase := testCase
 				t.Run(caseName, func(t *testing.T) {
 					assertT := assert.New(t)
 					encryptContext, err := CreateContext(testCase.masterKey, testCase.masterSalt, testCase.algo, option...)
@@ -151,7 +149,6 @@ func TestRTCPLifecycle(t *testing.T) {
 
 func TestRTCPLifecycleInPlace(t *testing.T) {
 	for caseName, testCase := range rtcpTestCases() {
-		testCase := testCase
 		t.Run(caseName, func(t *testing.T) {
 			assertT := assert.New(t)
 			authTagLen, err := testCase.algo.AuthTagRTCPLen()
@@ -202,7 +199,6 @@ func TestRTCPLifecycleInPlace(t *testing.T) {
 // Assert that passing a dst buffer that is too short doesn't result in a failure.
 func TestRTCPLifecyclePartialAllocation(t *testing.T) {
 	for caseName, testCase := range rtcpTestCases() {
-		testCase := testCase
 		t.Run(caseName, func(t *testing.T) {
 			assertT := assert.New(t)
 			encryptHeader := &rtcp.Header{}
@@ -237,7 +233,6 @@ func TestRTCPLifecyclePartialAllocation(t *testing.T) {
 
 func TestRTCPInvalidAuthTag(t *testing.T) {
 	for caseName, testCase := range rtcpTestCases() {
-		testCase := testCase
 		t.Run(caseName, func(t *testing.T) {
 			assertT := assert.New(t)
 			authTagLen, err := testCase.algo.AuthTagRTCPLen()
@@ -272,7 +267,6 @@ func TestRTCPInvalidAuthTag(t *testing.T) {
 
 func TestRTCPReplayDetectorSeparation(t *testing.T) {
 	for caseName, testCase := range rtcpTestCases() {
-		testCase := testCase
 		t.Run(caseName, func(t *testing.T) {
 			assertT := assert.New(t)
 			decryptContext, err := CreateContext(
@@ -306,7 +300,6 @@ func getRTCPIndex(encrypted []byte, authTagLen int) uint32 {
 
 func TestEncryptRTCPSeparation(t *testing.T) {
 	for caseName, testCase := range rtcpTestCases() {
-		testCase := testCase
 		t.Run(caseName, func(t *testing.T) {
 			assertT := assert.New(t)
 			encryptContext, err := CreateContext(testCase.masterKey, testCase.masterSalt, testCase.algo)
@@ -359,7 +352,6 @@ func TestEncryptRTCPSeparation(t *testing.T) {
 
 func TestRTCPDecryptShortenedPacket(t *testing.T) {
 	for caseName, testCase := range rtcpTestCases() {
-		testCase := testCase
 		t.Run(caseName, func(t *testing.T) {
 			pkt := testCase.packets[0]
 			for i := 1; i < len(pkt.encrypted)-1; i++ {
@@ -486,7 +478,6 @@ func TestRTCPMaxPackets(t *testing.T) {
 	}
 
 	for caseName, testCase := range testCases {
-		testCase := testCase
 		t.Run(caseName, func(t *testing.T) {
 			assertT := assert.New(t)
 			encryptContext, err := CreateContext(testCase.masterKey, testCase.masterSalt, testCase.algo)
@@ -571,7 +562,6 @@ func TestRTCPInvalidMKI(t *testing.T) {
 	mki2 := []byte{0x02, 0x03, 0x04, 0x05}
 
 	for caseName, testCase := range rtcpTestCases() {
-		testCase := testCase
 		t.Run(caseName, func(t *testing.T) {
 			encryptContext, err := CreateContext(
 				testCase.masterKey,
@@ -606,7 +596,6 @@ func TestRTCPHandleMultipleMKI(t *testing.T) { //nolint:cyclop
 	mki2 := []byte{0x02, 0x03, 0x04, 0x05}
 
 	for caseName, testCase := range rtcpTestCases() {
-		testCase := testCase
 		t.Run(caseName, func(t *testing.T) {
 			masterKey2 := make([]byte, len(testCase.masterKey))
 			copy(masterKey2, testCase.masterKey)
@@ -660,7 +649,6 @@ func TestRTCPSwitchMKI(t *testing.T) { //nolint:cyclop
 	mki2 := []byte{0x02, 0x03, 0x04, 0x05}
 
 	for caseName, testCase := range rtcpTestCases() {
-		testCase := testCase
 		t.Run(caseName, func(t *testing.T) {
 			masterKey2 := make([]byte, len(testCase.masterKey))
 			copy(masterKey2, testCase.masterKey)

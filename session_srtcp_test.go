@@ -193,7 +193,7 @@ func TestSessionSRTCPReplayProtection(t *testing.T) {
 	// Generate test packets
 	var packets [][]byte
 	var expectedSSRC []uint32
-	for i := uint32(0); i < 0x100; i++ {
+	for i := range uint32(0x100) {
 		testPacket := &rtcp.PictureLossIndication{
 			MediaSSRC:  testSSRC,
 			SenderSSRC: i,
