@@ -197,7 +197,7 @@ func TestInvalidContextOptions(t *testing.T) {
 						assert.ErrorIs(t, err, errTooShortSRTPAuthTag)
 					}
 
-					for n := 0; n < 4; n++ {
+					for n := range 4 {
 						_, err = CreateContext(masterKey, masterSalt, profile, RolloverCounterCarryingTransform(RCCMode2, 10),
 							SRTPAuthenticationTagLength(n))
 						assert.ErrorIs(t, err, errTooShortSRTPAuthTag)

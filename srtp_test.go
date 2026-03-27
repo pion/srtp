@@ -652,7 +652,6 @@ func TestRTPDecryptShotenedPacket(t *testing.T) {
 		"GCM": profileGCM,
 	}
 	for name, profile := range profiles {
-		profile := profile
 		t.Run(name, func(t *testing.T) {
 			for _, testCase := range rtpTestCases() {
 				decryptContext, err := buildTestContext(profile)
@@ -682,7 +681,6 @@ func TestRTPMaxPackets(t *testing.T) {
 		"GCM": profileGCM,
 	}
 	for name, profile := range profiles {
-		profile := profile
 		t.Run(name, func(t *testing.T) {
 			context, err := buildTestContext(profile)
 			assert.NoError(t, err)
@@ -724,7 +722,6 @@ func TestRTPBurstLossWithSetROC(t *testing.T) { //nolint:cyclop
 		"GCM": profileGCM,
 	}
 	for name, profile := range profiles {
-		profile := profile
 		t.Run(name, func(t *testing.T) {
 			assertT := assert.New(t)
 
@@ -746,8 +743,8 @@ func TestRTPBurstLossWithSetROC(t *testing.T) { //nolint:cyclop
 					pkt: rtp.Packet{
 						Payload: []byte{
 							byte(i >> 16),
-							byte(i >> 8),
-							byte(i),
+							byte(i >> 8), //nolint:gosec
+							byte(i),      //nolint:gosec
 						},
 						Header: rtp.Header{
 							Marker:         true,
