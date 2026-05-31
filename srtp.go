@@ -20,6 +20,7 @@ Simplified structure of SRTP Packets:
 - Auth Tag - used by non-AEAD profiles only. When RCC is used with AEAD profiles, the ROC is sent here.
 */
 
+// nolint:cyclop
 func (c *Context) decryptRTP(dst, ciphertext []byte, header *rtp.Header, headerLen int) ([]byte, error) {
 	authTagLen, err := c.cipher.AuthTagRTPLen()
 	if err != nil {
@@ -39,7 +40,11 @@ func (c *Context) decryptRTP(dst, ciphertext []byte, header *rtp.Header, headerL
 		return nil, fmt.Errorf("%w: %d", errTooShortRTP, len(ciphertext))
 	}
 
-	ssrcState := c.getSRTPSSRCState(header.SSRC)
+	// The SSRC in the RTP header is unauthenticated at this point. getSRTPSSRCState is
+	// called in read-only mode (existingState tracks whether it was pre-existing) so that
+	// no new map entry is inserted until after the auth tag has been verified. The state
+	// is committed to the map by setSRTPSSRCState only after markAsValid() succeeds below.
+	ssrcState, existingState := c.getSRTPSSRCState(header.SSRC, false)
 
 	var roc uint32
 	var diff int64
@@ -55,6 +60,11 @@ func (c *Context) decryptRTP(dst, ciphertext []byte, header *rtp.Header, headerL
 		diff = int64(ssrcState.index) - int64(index) //nolint:gosec
 	}
 
+	// The replay check is intentionally performed before authentication.
+	// Rejecting already-seen sequence numbers here avoids the CPU cost of
+	// AES decryption and HMAC/GCM verification on flooded duplicate packets.
+	// Safety relies on the replay detector only committing the index as "seen"
+	// when markAsValid() is explicitly called after successful authentication.
 	markAsValid, ok := ssrcState.replayDetector.Check(index)
 	if !ok {
 		return nil, &duplicatedError{
@@ -86,6 +96,10 @@ func (c *Context) decryptRTP(dst, ciphertext []byte, header *rtp.Header, headerL
 
 	markAsValid()
 	ssrcState.updateRolloverCount(header.SequenceNumber, diff, hasRocInPacket, roc)
+
+	if !existingState {
+		c.setSRTPSSRCState(ssrcState)
+	}
 
 	return dst, nil
 }
@@ -134,8 +148,8 @@ func (c *Context) encryptRTP(dst []byte, header *rtp.Header, headerLen int, plai
 		return nil, errUnsupportedHeaderExtension
 	}
 
-	s := c.getSRTPSSRCState(header.SSRC)
-	roc, diff, ovf := s.nextRolloverCount(header.SequenceNumber)
+	ssrcState, _ := c.getSRTPSSRCState(header.SSRC, true)
+	roc, diff, ovf := ssrcState.nextRolloverCount(header.SequenceNumber)
 	if ovf {
 		// ... when 2^48 SRTP packets or 2^31 SRTCP packets have been secured with the same key
 		// (whichever occurs before), the key management MUST be called to provide new master key(s)
@@ -143,7 +157,7 @@ func (c *Context) encryptRTP(dst []byte, header *rtp.Header, headerLen int, plai
 		// https://www.rfc-editor.org/rfc/rfc3711#section-9.2
 		return nil, errExceededMaxPackets
 	}
-	s.updateRolloverCount(header.SequenceNumber, diff, false, 0)
+	ssrcState.updateRolloverCount(header.SequenceNumber, diff, false, 0)
 
 	rocInPacket := c.rccMode != RCCModeNone && header.SequenceNumber%c.rocTransmitRate == 0
 

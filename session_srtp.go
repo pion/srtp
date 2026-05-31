@@ -189,6 +189,16 @@ func (s *SessionSRTP) decrypt(buf []byte) error {
 		return err
 	}
 
+	// Decrypt and authenticate the packet before using the SSRC from the header.
+	// The SSRC field is part of the unauthenticated RTP header, so it must not be
+	// used to allocate per-SSRC state (stream, replay detector, etc.) until after
+	// the auth tag has been verified. Doing so before authentication would allow an
+	// unauthenticated peer to exhaust memory by spoofing arbitrary SSRCs.
+	decrypted, err := s.remoteContext.decryptRTP(buf, buf, header, headerLen)
+	if err != nil {
+		return err
+	}
+
 	r, isNew := s.session.getOrCreateReadStream(header.SSRC, s, newReadStreamSRTP)
 	if r == nil {
 		return nil // Session has been closed
@@ -202,11 +212,6 @@ func (s *SessionSRTP) decrypt(buf []byte) error {
 	readStream, ok := r.(*ReadStreamSRTP)
 	if !ok {
 		return errFailedTypeAssertion
-	}
-
-	decrypted, err := s.remoteContext.decryptRTP(buf, buf, header, headerLen)
-	if err != nil {
-		return err
 	}
 
 	_, err = readStream.write(decrypted)
