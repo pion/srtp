@@ -308,67 +308,79 @@ func (s *srtpSSRCState) updateRolloverCount(sequenceNumber uint16, difference in
 	}
 }
 
-func (c *Context) getSRTPSSRCState(ssrc uint32) *srtpSSRCState {
-	s, ok := c.srtpSSRCStates[ssrc]
+func (c *Context) getSRTPSSRCState(ssrc uint32, keepNew bool) (*srtpSSRCState, bool) {
+	state, ok := c.srtpSSRCStates[ssrc]
 	if ok {
-		return s
+		return state, true
 	}
 
-	s = &srtpSSRCState{
+	state = &srtpSSRCState{
 		ssrc:           ssrc,
 		replayDetector: c.newSRTPReplayDetector(),
 	}
-	c.srtpSSRCStates[ssrc] = s
-
-	return s
-}
-
-func (c *Context) getSRTCPSSRCState(ssrc uint32) *srtcpSSRCState {
-	s, ok := c.srtcpSSRCStates[ssrc]
-	if ok {
-		return s
+	if keepNew {
+		c.srtpSSRCStates[ssrc] = state
 	}
 
-	s = &srtcpSSRCState{
+	return state, false
+}
+
+func (c *Context) getSRTCPSSRCState(ssrc uint32, keepNew bool) (*srtcpSSRCState, bool) {
+	state, ok := c.srtcpSSRCStates[ssrc]
+	if ok {
+		return state, true
+	}
+
+	state = &srtcpSSRCState{
 		ssrc:           ssrc,
 		replayDetector: c.newSRTCPReplayDetector(),
 	}
-	c.srtcpSSRCStates[ssrc] = s
+	if keepNew {
+		c.srtcpSSRCStates[ssrc] = state
+	}
 
-	return s
+	return state, false
+}
+
+func (c *Context) setSRTPSSRCState(state *srtpSSRCState) {
+	c.srtpSSRCStates[state.ssrc] = state
+}
+
+func (c *Context) setSRTCPSSRCState(state *srtcpSSRCState) {
+	c.srtcpSSRCStates[state.ssrc] = state
 }
 
 // ROC returns SRTP rollover counter value of specified SSRC.
 func (c *Context) ROC(ssrc uint32) (uint32, bool) {
-	s, ok := c.srtpSSRCStates[ssrc]
+	state, ok := c.srtpSSRCStates[ssrc]
 	if !ok {
 		return 0, false
 	}
 
-	return uint32(s.index >> 16), true //nolint:gosec // G115
+	return uint32(state.index >> 16), true //nolint:gosec // G115
 }
 
 // SetROC sets SRTP rollover counter value of specified SSRC.
 func (c *Context) SetROC(ssrc uint32, roc uint32) {
-	s := c.getSRTPSSRCState(ssrc)
-	s.index = uint64(roc) << 16
-	s.rolloverHasProcessed = false
+	state, _ := c.getSRTPSSRCState(ssrc, true)
+	state.index = uint64(roc) << 16
+	state.rolloverHasProcessed = false
 }
 
 // Index returns SRTCP index value of specified SSRC.
 func (c *Context) Index(ssrc uint32) (uint32, bool) {
-	s, ok := c.srtcpSSRCStates[ssrc]
+	state, ok := c.srtcpSSRCStates[ssrc]
 	if !ok {
 		return 0, false
 	}
 
-	return s.srtcpIndex, true
+	return state.srtcpIndex, true
 }
 
 // SetIndex sets SRTCP index value of specified SSRC.
 func (c *Context) SetIndex(ssrc uint32, index uint32) {
-	s := c.getSRTCPSSRCState(ssrc)
-	s.srtcpIndex = index % (maxSRTCPIndex + 1)
+	state, _ := c.getSRTCPSSRCState(ssrc, true)
+	state.srtcpIndex = index % (maxSRTCPIndex + 1)
 }
 
 //nolint:cyclop

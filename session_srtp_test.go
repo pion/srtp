@@ -349,6 +349,62 @@ func assertPayloadSRTP(
 	return hdr.SequenceNumber, nil
 }
 
+func TestSessionSRTPFailedAuthDoesNotGrowStreams(t *testing.T) {
+	lim := test.TimeOut(time.Second * 5)
+	defer lim.Stop()
+
+	report := test.CheckRoutines(t)
+	defer report()
+
+	const (
+		badSSRC  = uint32(0xDEADBEEF)
+		goodSSRC = uint32(0x12345678)
+	)
+
+	aSession, bSession := buildSessionSRTPPair(t)
+
+	// Encrypt a packet for badSSRC with the correct key, then corrupt its auth tag
+	// so that bSession's remote context rejects it without creating a stream entry.
+	badPkt := &rtp.Packet{
+		Payload: []byte{0x00, 0x01, 0x02, 0x03},
+		Header:  rtp.Header{SSRC: badSSRC, SequenceNumber: 1},
+	}
+	badEncrypted, err := encryptSRTP(aSession.session.localContext, badPkt)
+	assert.NoError(t, err)
+	badEncrypted[len(badEncrypted)-1] ^= 0xFF // corrupt last byte of auth tag
+
+	_, err = aSession.session.nextConn.Write(badEncrypted)
+	assert.NoError(t, err)
+
+	// Write a valid packet for goodSSRC so we can synchronize via AcceptStream.
+	// The read goroutine processes packets sequentially, so when AcceptStream
+	// returns the bad packet has already been handled.
+	goodPkt := &rtp.Packet{
+		Payload: []byte{0x00, 0x01, 0x02, 0x03},
+		Header:  rtp.Header{SSRC: goodSSRC, SequenceNumber: 1},
+	}
+	goodEncrypted, err := encryptSRTP(aSession.session.localContext, goodPkt)
+	assert.NoError(t, err)
+
+	_, err = aSession.session.nextConn.Write(goodEncrypted)
+	assert.NoError(t, err)
+
+	_, receivedSSRC, err := bSession.AcceptStream()
+	assert.NoError(t, err)
+	assert.Equal(t, goodSSRC, receivedSSRC, "AcceptStream must return the valid SSRC")
+
+	bSession.session.readStreamsLock.Lock()
+	streamCount := len(bSession.session.readStreams)
+	_, hasBadSSRC := bSession.session.readStreams[badSSRC]
+	bSession.session.readStreamsLock.Unlock()
+
+	assert.Equal(t, 1, streamCount, "readStreams must not grow after failed authentication")
+	assert.False(t, hasBadSSRC, "readStreams must not contain the SSRC from the rejected packet")
+
+	assert.NoError(t, aSession.Close())
+	assert.NoError(t, bSession.Close())
+}
+
 func encryptSRTP(context *Context, pkt *rtp.Packet) ([]byte, error) {
 	decryptedRaw, err := pkt.Marshal()
 	if err != nil {

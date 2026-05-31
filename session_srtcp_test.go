@@ -306,6 +306,56 @@ func getSenderSSRC(t *testing.T, stream *ReadStreamSRTCP) (ssrc uint32, err erro
 	return pli.SenderSSRC, nil
 }
 
+func TestSessionSRTCPFailedAuthDoesNotGrowStreams(t *testing.T) {
+	lim := test.TimeOut(time.Second * 10)
+	defer lim.Stop()
+
+	report := test.CheckRoutines(t)
+	defer report()
+
+	const (
+		badMediaSSRC  = uint32(0xDEADBEEF)
+		goodMediaSSRC = uint32(0x12345678)
+	)
+
+	aSession, bSession := buildSessionSRTCPPair(t)
+
+	// Encrypt a PLI for badMediaSSRC with the correct key, then corrupt its auth tag
+	// so that bSession's remote context rejects it without creating a stream entry.
+	badEncrypted, err := encryptSRTCP(aSession.session.localContext,
+		&rtcp.PictureLossIndication{MediaSSRC: badMediaSSRC})
+	assert.NoError(t, err)
+	badEncrypted[len(badEncrypted)-1] ^= 0xFF // corrupt last byte of auth tag
+
+	_, err = aSession.session.nextConn.Write(badEncrypted)
+	assert.NoError(t, err)
+
+	// Write a valid PLI for goodMediaSSRC so we can synchronize via AcceptStream.
+	// The read goroutine processes packets sequentially, so when AcceptStream
+	// returns the bad packet has already been handled.
+	goodEncrypted, err := encryptSRTCP(aSession.session.localContext,
+		&rtcp.PictureLossIndication{MediaSSRC: goodMediaSSRC})
+	assert.NoError(t, err)
+
+	_, err = aSession.session.nextConn.Write(goodEncrypted)
+	assert.NoError(t, err)
+
+	_, receivedSSRC, err := bSession.AcceptStream()
+	assert.NoError(t, err)
+	assert.Equal(t, goodMediaSSRC, receivedSSRC, "AcceptStream must return the valid SSRC")
+
+	bSession.session.readStreamsLock.Lock()
+	streamCount := len(bSession.session.readStreams)
+	_, hasBadMediaSSRC := bSession.session.readStreams[badMediaSSRC]
+	bSession.session.readStreamsLock.Unlock()
+
+	assert.Equal(t, 1, streamCount, "readStreams must not grow after failed authentication")
+	assert.False(t, hasBadMediaSSRC, "readStreams must not contain the SSRC from the rejected packet")
+
+	assert.NoError(t, aSession.Close())
+	assert.NoError(t, bSession.Close())
+}
+
 func encryptSRTCP(context *Context, pkt rtcp.Packet) ([]byte, error) {
 	decryptedRaw, err := pkt.Marshal()
 	if err != nil {

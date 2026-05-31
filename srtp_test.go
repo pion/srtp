@@ -909,3 +909,42 @@ func TestRTPSwitchMKI(t *testing.T) { //nolint:cyclop
 		assert.NoError(t, err)
 	}
 }
+
+func TestSRTPFailedAuthDoesNotGrowSSRCMap(t *testing.T) {
+	testSRTPFailedAuthDoesNotGrowSSRCMap := func(t *testing.T, profile ProtectionProfile) {
+		t.Helper()
+
+		encryptCtx, err := buildTestContext(profile)
+		assert.NoError(t, err)
+
+		// Use all-zero key and salt so the authentication tag will never match.
+		keyLen, err := profile.KeyLen()
+		assert.NoError(t, err)
+
+		saltLen, err := profile.SaltLen()
+		assert.NoError(t, err)
+
+		decryptCtx, err := CreateContext(make([]byte, keyLen), make([]byte, saltLen), profile)
+		assert.NoError(t, err)
+
+		pkt := &rtp.Packet{
+			Payload: rtpTestCaseDecrypted(),
+			Header:  rtp.Header{SequenceNumber: 5000, SSRC: 0xDEADBEEF},
+		}
+
+		pktRaw, err := pkt.Marshal()
+		assert.NoError(t, err)
+
+		encrypted, err := encryptCtx.EncryptRTP(nil, pktRaw, nil)
+		assert.NoError(t, err)
+
+		_, err = decryptCtx.DecryptRTP(nil, encrypted, nil)
+		assert.Error(t, err, "DecryptRTP must fail when key does not match")
+
+		assert.Empty(t, decryptCtx.srtpSSRCStates,
+			"SRTP SSRC state map must not grow after failed authentication")
+	}
+
+	t.Run("CTR", func(t *testing.T) { testSRTPFailedAuthDoesNotGrowSSRCMap(t, profileCTR) })
+	t.Run("GCM", func(t *testing.T) { testSRTPFailedAuthDoesNotGrowSSRCMap(t, profileGCM) })
+}
