@@ -265,6 +265,32 @@ func TestRTCPInvalidAuthTag(t *testing.T) {
 	}
 }
 
+func TestRTCPInvalidAuthDoesNotCreateSSRCState(t *testing.T) {
+	for caseName, testCase := range rtcpTestCases() {
+		t.Run(caseName, func(t *testing.T) {
+			assertT := assert.New(t)
+			decryptContext, err := CreateContext(testCase.masterKey, testCase.masterSalt, testCase.algo)
+			assertT.NoError(err)
+
+			pkt := testCase.packets[0]
+			invalid := append([]byte{}, pkt.encrypted...)
+			invalid[len(invalid)-1] ^= 0xff
+
+			_, err = decryptContext.DecryptRTCP(nil, invalid, nil)
+			assertT.ErrorIs(err, ErrFailedToVerifyAuthTag)
+			_, ok := decryptContext.Index(pkt.ssrc)
+			assertT.False(ok)
+			assertT.Empty(decryptContext.srtcpSSRCStates)
+
+			_, err = decryptContext.DecryptRTCP(nil, pkt.encrypted, nil)
+			assertT.NoError(err)
+			_, ok = decryptContext.Index(pkt.ssrc)
+			assertT.True(ok)
+			assertT.Len(decryptContext.srtcpSSRCStates, 1)
+		})
+	}
+}
+
 func TestRTCPReplayDetectorSeparation(t *testing.T) {
 	for caseName, testCase := range rtcpTestCases() {
 		t.Run(caseName, func(t *testing.T) {

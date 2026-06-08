@@ -294,6 +294,101 @@ func TestSessionSRTPReplayProtection(t *testing.T) {
 		expectedSequenceNumber, receivedSequenceNumber)
 }
 
+func TestSessionSRTPInvalidAuthDoesNotCreateReadStream(t *testing.T) {
+	lim := test.TimeOut(time.Second * 5)
+	defer lim.Stop()
+
+	report := test.CheckRoutines(t)
+	defer report()
+
+	const invalidSSRC = 0xdecafbad
+	aSession, bSession := buildSessionSRTPPair(t)
+	defer func() {
+		assert.NoError(t, aSession.Close())
+		assert.NoError(t, bSession.Close())
+	}()
+
+	assert.NoError(t, aSession.session.nextConn.SetWriteDeadline(time.Now().Add(time.Second)))
+	_, err := aSession.session.nextConn.Write(invalidSRTPPacket(t, invalidSSRC))
+	assert.NoError(t, err)
+
+	select {
+	case stream := <-bSession.newStream:
+		assert.Failf(t, "unexpected stream", "unauthenticated packet created stream for SSRC %d", stream.GetSSRC())
+
+		return
+	case <-time.After(100 * time.Millisecond):
+	}
+
+	assert.False(t, sessionSRTPHasReadStream(bSession, invalidSSRC))
+	assert.Zero(t, sessionSRTPReadStreamCount(bSession))
+	_, ok := bSession.remoteContext.ROC(invalidSSRC)
+	assert.False(t, ok)
+}
+
+func TestSessionSRTPInvalidUnknownSSRCDoesNotBlockValidPacket(t *testing.T) {
+	lim := test.TimeOut(time.Second * 5)
+	defer lim.Stop()
+
+	report := test.CheckRoutines(t)
+	defer report()
+
+	const (
+		invalidSSRC   = 0xdecafbad
+		validSSRC     = 5000
+		rtpHeaderSize = 12
+	)
+	testPayload := []byte{0x00, 0x01, 0x03, 0x04}
+	readBuffer := make([]byte, rtpHeaderSize+len(testPayload))
+	aSession, bSession := buildSessionSRTPPair(t)
+	defer func() {
+		assert.NoError(t, aSession.Close())
+		assert.NoError(t, bSession.Close())
+	}()
+
+	aWriteStream, err := aSession.OpenWriteStream()
+	assert.NoError(t, err)
+
+	assert.NoError(t, aSession.session.nextConn.SetWriteDeadline(time.Now().Add(time.Second)))
+	_, err = aSession.session.nextConn.Write(invalidSRTPPacket(t, invalidSSRC))
+	assert.NoError(t, err)
+
+	_, err = aWriteStream.WriteRTP(&rtp.Header{SSRC: validSSRC}, append([]byte{}, testPayload...))
+	if !assert.NoError(t, err) {
+		select {
+		case <-bSession.newStream:
+		default:
+		}
+
+		return
+	}
+
+	var bReadStream *ReadStreamSRTP
+	var ok bool
+	var ssrc uint32
+	select {
+	case stream := <-bSession.newStream:
+		bReadStream, ok = stream.(*ReadStreamSRTP)
+		if !assert.True(t, ok) {
+			return
+		}
+		ssrc = stream.GetSSRC()
+	case <-time.After(time.Second):
+		assert.Fail(t, "timed out waiting for valid stream")
+
+		return
+	}
+
+	assert.Equal(t, uint32(validSSRC), ssrc)
+	assert.False(t, sessionSRTPHasReadStream(bSession, invalidSSRC))
+	_, ok = bSession.remoteContext.ROC(invalidSSRC)
+	assert.False(t, ok)
+
+	_, err = bReadStream.Read(readBuffer)
+	assert.NoError(t, err)
+	assert.Equal(t, testPayload, readBuffer[rtpHeaderSize:])
+}
+
 // nolint: dupl
 func TestSessionSRTPAcceptStreamTimeout(t *testing.T) {
 	lim := test.TimeOut(time.Second * 5)
@@ -362,6 +457,41 @@ func encryptSRTP(context *Context, pkt *rtp.Packet) ([]byte, error) {
 	}
 
 	return encrypted, nil
+}
+
+func invalidSRTPPacket(t *testing.T, ssrc uint32) []byte {
+	t.Helper()
+
+	authTagLen, err := ProtectionProfileAes128CmHmacSha1_80.AuthTagRTPLen()
+	assert.NoError(t, err)
+
+	pkt := &rtp.Packet{
+		Header: rtp.Header{
+			SSRC:           ssrc,
+			SequenceNumber: 1,
+		},
+		Payload: []byte{0x00, 0x01},
+	}
+	raw, err := pkt.Marshal()
+	assert.NoError(t, err)
+
+	return append(raw, make([]byte, authTagLen)...)
+}
+
+func sessionSRTPHasReadStream(s *SessionSRTP, ssrc uint32) bool {
+	s.session.readStreamsLock.Lock()
+	defer s.session.readStreamsLock.Unlock()
+
+	_, ok := s.session.readStreams[ssrc]
+
+	return ok
+}
+
+func sessionSRTPReadStreamCount(s *SessionSRTP) int {
+	s.session.readStreamsLock.Lock()
+	defer s.session.readStreamsLock.Unlock()
+
+	return len(s.session.readStreams)
 }
 
 func TestSessionSRTPPacketWithPadding(t *testing.T) {

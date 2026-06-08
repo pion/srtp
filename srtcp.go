@@ -47,8 +47,8 @@ func (c *Context) decryptRTCP(dst, encrypted []byte) ([]byte, error) {
 	index := c.cipher.getRTCPIndex(encrypted)
 	ssrc := binary.BigEndian.Uint32(encrypted[4:])
 
-	s := c.getSRTCPSSRCState(ssrc)
-	markAsValid, ok := s.replayDetector.Check(uint64(index))
+	state, isNewSSRCState := c.getSRTCPSSRCStateForDecrypt(ssrc)
+	markAsValid, ok := state.replayDetector.Check(uint64(index))
 	if !ok {
 		return nil, &duplicatedError{Proto: "srtcp", SSRC: ssrc, Index: index}
 	}
@@ -69,6 +69,9 @@ func (c *Context) decryptRTCP(dst, encrypted []byte) ([]byte, error) {
 	}
 
 	markAsValid()
+	if isNewSSRCState {
+		c.srtcpSSRCStates[ssrc] = state
+	}
 
 	return out, nil
 }

@@ -11,15 +11,14 @@ import (
 	"github.com/pion/rtp"
 )
 
-/*
-Simplified structure of SRTP Packets:
-- RTP Header (with optional RTP Header Extension)
-- Payload (with optional padding)
-- AEAD Auth Tag - used by AEAD profiles only
-- MKI (optional)
-- Auth Tag - used by non-AEAD profiles only. When RCC is used with AEAD profiles, the ROC is sent here.
-*/
-
+// Simplified structure of SRTP Packets:
+// - RTP Header (with optional RTP Header Extension)
+// - Payload (with optional padding)
+// - AEAD Auth Tag - used by AEAD profiles only
+// - MKI (optional)
+// - Auth Tag - used by non-AEAD profiles only. When RCC is used with AEAD profiles, the ROC is sent here.
+//
+//nolint:cyclop
 func (c *Context) decryptRTP(dst, ciphertext []byte, header *rtp.Header, headerLen int) ([]byte, error) {
 	authTagLen, err := c.cipher.AuthTagRTPLen()
 	if err != nil {
@@ -39,7 +38,7 @@ func (c *Context) decryptRTP(dst, ciphertext []byte, header *rtp.Header, headerL
 		return nil, fmt.Errorf("%w: %d", errTooShortRTP, len(ciphertext))
 	}
 
-	ssrcState := c.getSRTPSSRCState(header.SSRC)
+	ssrcState, isNewSSRCState := c.getSRTPSSRCStateForDecrypt(header.SSRC)
 
 	var roc uint32
 	var diff int64
@@ -86,6 +85,9 @@ func (c *Context) decryptRTP(dst, ciphertext []byte, header *rtp.Header, headerL
 
 	markAsValid()
 	ssrcState.updateRolloverCount(header.SequenceNumber, diff, hasRocInPacket, roc)
+	if isNewSSRCState {
+		c.srtpSSRCStates[header.SSRC] = ssrcState
+	}
 
 	return dst, nil
 }

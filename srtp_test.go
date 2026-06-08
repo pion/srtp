@@ -194,6 +194,62 @@ func TestRTPInvalidAuth(t *testing.T) {
 	}
 }
 
+func TestRTPInvalidAuthDoesNotCreateSSRCState(t *testing.T) {
+	profiles := map[string]ProtectionProfile{
+		"CTR": profileCTR,
+		"GCM": profileGCM,
+	}
+
+	for name, profile := range profiles {
+		t.Run(name, func(t *testing.T) {
+			assertT := assert.New(t)
+			encryptContext, err := buildTestContext(profile)
+			assertT.NoError(err)
+
+			decryptContext, err := buildTestContext(profile, SRTPReplayProtection(64))
+			assertT.NoError(err)
+
+			const firstSSRC uint32 = 0xdecafbad
+			var firstValid []byte
+			for i := range 32 {
+				ssrc := firstSSRC + uint32(i) //nolint:gosec // G115
+				pkt := &rtp.Packet{
+					Header: rtp.Header{
+						SSRC:           ssrc,
+						SequenceNumber: uint16(i + 1), //nolint:gosec // G115
+					},
+					Payload: rtpTestCaseDecrypted(),
+				}
+				var raw []byte
+				raw, err = pkt.Marshal()
+				assertT.NoError(err)
+				var valid []byte
+				valid, err = encryptContext.EncryptRTP(nil, raw, nil)
+				assertT.NoError(err)
+				if i == 0 {
+					firstValid = append([]byte{}, valid...)
+				}
+
+				invalid := append([]byte{}, valid...)
+				invalid[len(invalid)-1] ^= 0xff
+
+				_, err = decryptContext.DecryptRTP(nil, invalid, nil)
+				assertT.ErrorIs(err, ErrFailedToVerifyAuthTag)
+			}
+
+			_, ok := decryptContext.ROC(firstSSRC)
+			assertT.False(ok)
+			assertT.Empty(decryptContext.srtpSSRCStates)
+
+			_, err = decryptContext.DecryptRTP(nil, firstValid, nil)
+			assertT.NoError(err)
+			_, ok = decryptContext.ROC(firstSSRC)
+			assertT.True(ok)
+			assertT.Len(decryptContext.srtpSSRCStates, 1)
+		})
+	}
+}
+
 func rtpTestCaseDecrypted() []byte { return []byte{0x00, 0x01, 0x02, 0x03, 0x04, 0x05} }
 
 func rtpTestCases() []rtpTestCase {

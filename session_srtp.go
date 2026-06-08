@@ -189,24 +189,26 @@ func (s *SessionSRTP) decrypt(buf []byte) error {
 		return err
 	}
 
-	r, isNew := s.session.getOrCreateReadStream(header.SSRC, s, newReadStreamSRTP)
-	if r == nil {
-		return nil // Session has been closed
-	} else if isNew {
-		if !s.session.acceptStreamTimeout.IsZero() {
-			_ = s.session.nextConn.SetReadDeadline(time.Time{})
-		}
-		s.session.newStream <- r // Notify AcceptStream
+	decrypted, err := s.remoteContext.decryptRTP(buf, buf, header, headerLen)
+	if err != nil {
+		return err
 	}
 
-	readStream, ok := r.(*ReadStreamSRTP)
+	read, isNew := s.session.getOrCreateReadStream(header.SSRC, s, newReadStreamSRTP)
+	if read == nil {
+		return nil // Session has been closed
+	}
+
+	readStream, ok := read.(*ReadStreamSRTP)
 	if !ok {
 		return errFailedTypeAssertion
 	}
 
-	decrypted, err := s.remoteContext.decryptRTP(buf, buf, header, headerLen)
-	if err != nil {
-		return err
+	if isNew {
+		if !s.session.acceptStreamTimeout.IsZero() {
+			_ = s.session.nextConn.SetReadDeadline(time.Time{})
+		}
+		s.session.newStream <- read // Notify AcceptStream
 	}
 
 	_, err = readStream.write(decrypted)

@@ -323,6 +323,18 @@ func (c *Context) getSRTPSSRCState(ssrc uint32) *srtpSSRCState {
 	return s
 }
 
+func (c *Context) getSRTPSSRCStateForDecrypt(ssrc uint32) (*srtpSSRCState, bool) {
+	s, ok := c.srtpSSRCStates[ssrc]
+	if ok {
+		return s, false
+	}
+
+	return &srtpSSRCState{
+		ssrc:           ssrc,
+		replayDetector: c.newSRTPReplayDetector(),
+	}, true
+}
+
 func (c *Context) getSRTCPSSRCState(ssrc uint32) *srtcpSSRCState {
 	s, ok := c.srtcpSSRCStates[ssrc]
 	if ok {
@@ -336,6 +348,18 @@ func (c *Context) getSRTCPSSRCState(ssrc uint32) *srtcpSSRCState {
 	c.srtcpSSRCStates[ssrc] = s
 
 	return s
+}
+
+func (c *Context) getSRTCPSSRCStateForDecrypt(ssrc uint32) (*srtcpSSRCState, bool) {
+	s, ok := c.srtcpSSRCStates[ssrc]
+	if ok {
+		return s, false
+	}
+
+	return &srtcpSSRCState{
+		ssrc:           ssrc,
+		replayDetector: c.newSRTCPReplayDetector(),
+	}, true
 }
 
 // ROC returns SRTP rollover counter value of specified SSRC.
