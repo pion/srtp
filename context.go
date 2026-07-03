@@ -201,7 +201,7 @@ func (c *Context) createCipher(mki, masterKey, masterSalt []byte, encryptSRTP, e
 	}
 
 	if masterKeyLen := len(masterKey); masterKeyLen != keyLen {
-		return nil, fmt.Errorf("%w expected(%d) actual(%d)", errShortSrtpMasterKey, keyLen, masterKey)
+		return nil, fmt.Errorf("%w expected(%d) actual(%d)", errShortSrtpMasterKey, keyLen, masterKeyLen)
 	} else if masterSaltLen := len(masterSalt); masterSaltLen != saltLen {
 		return nil, fmt.Errorf("%w expected(%d) actual(%d)", errShortSrtpMasterSalt, saltLen, masterSaltLen)
 	}
