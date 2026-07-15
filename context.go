@@ -80,6 +80,10 @@ const (
 // access to a Context from multiple goroutines requires external
 // synchronization.
 type Context struct {
+	// constructed is set to true after the Context is fully initialized.
+	// Options can check this flag to reject updates that are only valid during construction.
+	constructed bool
+
 	cipher srtpCipher
 
 	srtpSSRCStates  map[uint32]*srtpSSRCState
@@ -138,6 +142,8 @@ func CreateContext(
 			return nil, errOpt
 		}
 	}
+
+	c.constructed = true
 
 	if err = c.checkRCCMode(); err != nil {
 		return nil, err
