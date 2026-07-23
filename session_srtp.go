@@ -21,6 +21,10 @@ const defaultSessionSRTPReplayProtectionWindow = 64
 type SessionSRTP struct {
 	session
 	writeStream *WriteStreamSRTP
+
+	// readHeader is reused by decrypt across packets to avoid a per-packet
+	// allocation and must only be used on the session read loop.
+	readHeader rtp.Header
 }
 
 // NewSessionSRTP creates a SRTP session using conn as the underlying transport.
@@ -183,9 +187,19 @@ func (s *SessionSRTP) setWriteDeadline(t time.Time) error {
 }
 
 func (s *SessionSRTP) decrypt(buf []byte) error {
-	header := &rtp.Header{}
+	header := &s.readHeader
+
+	// Save the CSRC and extension slices in case the packet fails to decrypt
+	// or authenticate; if the packet doesn't authenticate, then restore the
+	// old slices to prevent an attacker from growing the memory footprint.
+	oldCSRC := header.CSRC
+	oldExtensions := header.Extensions
+
 	headerLen, err := header.Unmarshal(buf)
 	if err != nil {
+		header.CSRC = oldCSRC
+		header.Extensions = oldExtensions
+
 		return err
 	}
 
@@ -196,6 +210,9 @@ func (s *SessionSRTP) decrypt(buf []byte) error {
 	// unauthenticated peer to exhaust memory by spoofing arbitrary SSRCs.
 	decrypted, err := s.remoteContext.decryptRTP(buf, buf, header, headerLen)
 	if err != nil {
+		header.CSRC = oldCSRC
+		header.Extensions = oldExtensions
+
 		return err
 	}
 
