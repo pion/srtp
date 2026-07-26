@@ -1,6 +1,7 @@
 // SPDX-FileCopyrightText: 2026 The Pion community <https://pion.ly>
 // SPDX-License-Identifier: MIT
 
+// Example of encrypting and decrypting RTP packets using SRTP.
 package main
 
 import (
