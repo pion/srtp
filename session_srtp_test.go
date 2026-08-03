@@ -590,88 +590,94 @@ func TestSessionSRTPRejectedPacketDoesNotGrowRetainedHeader(t *testing.T) {
 }
 
 func TestSessionSRTPReadWriteDoesNotAllocate(t *testing.T) {
-	lim := test.TimeOut(time.Second * 5)
-	defer lim.Stop()
-
-	report := test.CheckRoutines(t)
-	defer report()
-
-	const testSSRC = 5000
-	testPayload := []byte{0x00, 0x01, 0x03, 0x04}
-	readBuffer := make([]byte, 1500)
-
-	// Note: this does not use buildSessionSRTPPair for two reasons:
-	// - The CTR cipher uses a sync.Pool, which under the race detector
-	//   always allocates.
-	// - The default replay detector (as of pion/transport 4.0.2) allocates
-	//
-	// In order to isolate allocations to this package and avoid race
-	// detector related allocations, test the GCM cipher using a no-op
-	// replay detector instead.
-	aPipe, bPipe := net.Pipe()
-	noReplayProtection := []ContextOption{
-		SRTPNoReplayProtection(),
-		SRTCPNoReplayProtection(),
-	}
-	config := &Config{
-		Profile: ProtectionProfileAeadAes128Gcm,
-		Keys: SessionKeys{
-			[]byte{0xE1, 0xF9, 0x7A, 0x0D, 0x3E, 0x01, 0x8B, 0xE0, 0xD6, 0x4F, 0xA3, 0x2C, 0x06, 0xDE, 0x41, 0x39},
-			[]byte{0x0E, 0xC6, 0x75, 0xAD, 0x49, 0x8A, 0xFE, 0xEB, 0xB6, 0x96, 0x0B, 0x3A},
-			[]byte{0xE1, 0xF9, 0x7A, 0x0D, 0x3E, 0x01, 0x8B, 0xE0, 0xD6, 0x4F, 0xA3, 0x2C, 0x06, 0xDE, 0x41, 0x39},
-			[]byte{0x0E, 0xC6, 0x75, 0xAD, 0x49, 0x8A, 0xFE, 0xEB, 0xB6, 0x96, 0x0B, 0x3A},
+	// Exercise both disabled and enabled replay protection variants.
+	for name, replayOptions := range map[string][]ContextOption{
+		"NoReplayProtection": {
+			SRTPNoReplayProtection(),
+			SRTCPNoReplayProtection(),
 		},
-		LocalOptions:  noReplayProtection,
-		RemoteOptions: noReplayProtection,
+		"ReplayProtection": {
+			SRTPReplayProtection(64),
+			SRTCPReplayProtection(64),
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			lim := test.TimeOut(time.Second * 5)
+			defer lim.Stop()
+
+			report := test.CheckRoutines(t)
+			defer report()
+
+			const testSSRC = 5000
+			testPayload := []byte{0x00, 0x01, 0x03, 0x04}
+			readBuffer := make([]byte, 1500)
+
+			// Note: this does not use buildSessionSRTPPair because the CTR cipher
+			// uses a sync.Pool, which under the race detector always allocates.
+			// In order to isolate allocations to this package and avoid race
+			// detector related allocations, test the GCM cipher instead.
+			aPipe, bPipe := net.Pipe()
+			config := &Config{
+				Profile: ProtectionProfileAeadAes128Gcm,
+				Keys: SessionKeys{
+					[]byte{0xE1, 0xF9, 0x7A, 0x0D, 0x3E, 0x01, 0x8B, 0xE0, 0xD6, 0x4F, 0xA3, 0x2C, 0x06, 0xDE, 0x41, 0x39},
+					[]byte{0x0E, 0xC6, 0x75, 0xAD, 0x49, 0x8A, 0xFE, 0xEB, 0xB6, 0x96, 0x0B, 0x3A},
+					[]byte{0xE1, 0xF9, 0x7A, 0x0D, 0x3E, 0x01, 0x8B, 0xE0, 0xD6, 0x4F, 0xA3, 0x2C, 0x06, 0xDE, 0x41, 0x39},
+					[]byte{0x0E, 0xC6, 0x75, 0xAD, 0x49, 0x8A, 0xFE, 0xEB, 0xB6, 0x96, 0x0B, 0x3A},
+				},
+				LocalOptions:  replayOptions,
+				RemoteOptions: replayOptions,
+			}
+
+			aSession, err := NewSessionSRTP(aPipe, config)
+			assert.NoError(t, err)
+			assert.NotNil(t, aSession, "NewSessionSRTP did not error, but returned nil session")
+
+			bSession, err := NewSessionSRTP(bPipe, config)
+			assert.NoError(t, err)
+			assert.NotNil(t, bSession, "NewSessionSRTP did not error, but returned nil session")
+
+			bReadStream, err := bSession.OpenReadStream(testSSRC)
+			assert.NoError(t, err)
+			aWriteStream, err := aSession.OpenWriteStream()
+			assert.NoError(t, err)
+
+			header := &rtp.Header{
+				Version:          2,
+				SSRC:             testSSRC,
+				Extension:        true,
+				ExtensionProfile: rtp.ExtensionProfileOneByte,
+			}
+			assert.NoError(t, header.SetExtension(1, []byte{0xAA, 0xBB}))
+
+			roundTrip := func() (int, error) {
+				header.SequenceNumber++
+				if _, err := aWriteStream.WriteRTP(header, testPayload); err != nil {
+					return 0, err
+				}
+
+				return bReadStream.Read(readBuffer)
+			}
+
+			for range 100 {
+				_, err := roundTrip()
+				assert.NoError(t, err)
+			}
+
+			var roundTripErr error
+			allocs := testing.AllocsPerRun(1000, func() {
+				if _, err := roundTrip(); err != nil {
+					roundTripErr = err
+				}
+			})
+
+			assert.NoError(t, roundTripErr)
+			assert.Zero(t, allocs)
+
+			assert.NoError(t, aSession.Close())
+			assert.NoError(t, bSession.Close())
+		})
 	}
-
-	aSession, err := NewSessionSRTP(aPipe, config)
-	assert.NoError(t, err)
-	assert.NotNil(t, aSession, "NewSessionSRTP did not error, but returned nil session")
-
-	bSession, err := NewSessionSRTP(bPipe, config)
-	assert.NoError(t, err)
-	assert.NotNil(t, bSession, "NewSessionSRTP did not error, but returned nil session")
-
-	bReadStream, err := bSession.OpenReadStream(testSSRC)
-	assert.NoError(t, err)
-	aWriteStream, err := aSession.OpenWriteStream()
-	assert.NoError(t, err)
-
-	header := &rtp.Header{
-		Version:          2,
-		SSRC:             testSSRC,
-		Extension:        true,
-		ExtensionProfile: rtp.ExtensionProfileOneByte,
-	}
-	assert.NoError(t, header.SetExtension(1, []byte{0xAA, 0xBB}))
-
-	roundTrip := func() (int, error) {
-		header.SequenceNumber++
-		if _, err := aWriteStream.WriteRTP(header, testPayload); err != nil {
-			return 0, err
-		}
-
-		return bReadStream.Read(readBuffer)
-	}
-
-	for range 100 {
-		_, err := roundTrip()
-		assert.NoError(t, err)
-	}
-
-	var roundTripErr error
-	allocs := testing.AllocsPerRun(1000, func() {
-		if _, err := roundTrip(); err != nil {
-			roundTripErr = err
-		}
-	})
-
-	assert.NoError(t, roundTripErr)
-	assert.Zero(t, allocs)
-
-	assert.NoError(t, aSession.Close())
-	assert.NoError(t, bSession.Close())
 }
 
 func BenchmarkSessionSRTPReadWrite(b *testing.B) {
@@ -685,78 +691,86 @@ func BenchmarkSessionSRTPReadWrite(b *testing.B) {
 		ProtectionProfileAeadAes128Gcm,
 		ProtectionProfileAeadAes256Gcm,
 	} {
-		b.Run(profile.String(), func(b *testing.B) {
-			keyLen, err := profile.KeyLen()
-			assert.NoError(b, err)
-			saltLen, err := profile.SaltLen()
-			assert.NoError(b, err)
-			key := make([]byte, keyLen)
-			salt := make([]byte, saltLen)
-			for i := range key {
-				key[i] = byte(i + 1)
-			}
-			for i := range salt {
-				salt[i] = byte(i + 101)
-			}
-
-			// See TestSessionSRTPReadWriteDoesNotAllocate for why this
-			// doesn't use buildSessionSRTPPair.
-			aPipe, bPipe := net.Pipe()
-			noReplayProtection := []ContextOption{
+		// Exercise both disabled and enabled replay protection variants.
+		for name, replayOptions := range map[string][]ContextOption{
+			"NoReplayProtection": {
 				SRTPNoReplayProtection(),
 				SRTCPNoReplayProtection(),
-			}
-			loggerFactory := logging.NewDefaultLoggerFactory()
-			loggerFactory.DefaultLogLevel.Set(logging.LogLevelDisabled)
-			config := &Config{
-				LoggerFactory: loggerFactory,
-				Profile:       profile,
-				Keys: SessionKeys{
-					LocalMasterKey:   key,
-					LocalMasterSalt:  salt,
-					RemoteMasterKey:  key,
-					RemoteMasterSalt: salt,
-				},
-				LocalOptions:  noReplayProtection,
-				RemoteOptions: noReplayProtection,
-			}
-
-			aSession, err := NewSessionSRTP(aPipe, config)
-			assert.NoError(b, err)
-			bSession, err := NewSessionSRTP(bPipe, config)
-			assert.NoError(b, err)
-			defer func() {
-				assert.NoError(b, aSession.Close())
-				assert.NoError(b, bSession.Close())
-			}()
-
-			bReadStream, err := bSession.OpenReadStream(5000)
-			assert.NoError(b, err)
-			aWriteStream, err := aSession.OpenWriteStream()
-			assert.NoError(b, err)
-
-			header := &rtp.Header{
-				Version:          2,
-				SSRC:             5000,
-				Extension:        true,
-				ExtensionProfile: rtp.ExtensionProfileOneByte,
-			}
-			assert.NoError(b, header.SetExtension(1, []byte{0xAA, 0xBB}))
-			testPayload := []byte{0x00, 0x01, 0x03, 0x04}
-			readBuffer := make([]byte, 1500)
-
-			b.ReportAllocs()
-			b.ResetTimer()
-
-			for i := 0; i < b.N; i++ {
-				header.SequenceNumber++
-				if _, err := aWriteStream.WriteRTP(header, testPayload); err != nil {
-					b.Fatal(err)
+			},
+			"ReplayProtection": {
+				SRTPReplayProtection(64),
+				SRTCPReplayProtection(64),
+			},
+		} {
+			b.Run(profile.String()+"/"+name, func(b *testing.B) {
+				keyLen, err := profile.KeyLen()
+				assert.NoError(b, err)
+				saltLen, err := profile.SaltLen()
+				assert.NoError(b, err)
+				key := make([]byte, keyLen)
+				salt := make([]byte, saltLen)
+				for i := range key {
+					key[i] = byte(i + 1)
 				}
-				if _, err := bReadStream.Read(readBuffer); err != nil {
-					b.Fatal(err)
+				for i := range salt {
+					salt[i] = byte(i + 101)
 				}
-			}
-		})
+
+				// See TestSessionSRTPReadWriteDoesNotAllocate for why this
+				// doesn't use buildSessionSRTPPair.
+				aPipe, bPipe := net.Pipe()
+				loggerFactory := logging.NewDefaultLoggerFactory()
+				loggerFactory.DefaultLogLevel.Set(logging.LogLevelDisabled)
+				config := &Config{
+					LoggerFactory: loggerFactory,
+					Profile:       profile,
+					Keys: SessionKeys{
+						LocalMasterKey:   key,
+						LocalMasterSalt:  salt,
+						RemoteMasterKey:  key,
+						RemoteMasterSalt: salt,
+					},
+					LocalOptions:  replayOptions,
+					RemoteOptions: replayOptions,
+				}
+
+				aSession, err := NewSessionSRTP(aPipe, config)
+				assert.NoError(b, err)
+				bSession, err := NewSessionSRTP(bPipe, config)
+				assert.NoError(b, err)
+				defer func() {
+					assert.NoError(b, aSession.Close())
+					assert.NoError(b, bSession.Close())
+				}()
+
+				bReadStream, err := bSession.OpenReadStream(5000)
+				assert.NoError(b, err)
+				aWriteStream, err := aSession.OpenWriteStream()
+				assert.NoError(b, err)
+
+				header := &rtp.Header{
+					Version:          2,
+					SSRC:             5000,
+					Extension:        true,
+					ExtensionProfile: rtp.ExtensionProfileOneByte,
+				}
+				assert.NoError(b, header.SetExtension(1, []byte{0xAA, 0xBB}))
+				testPayload := []byte{0x00, 0x01, 0x03, 0x04}
+				readBuffer := make([]byte, 1500)
+
+				b.ReportAllocs()
+				b.ResetTimer()
+
+				for i := 0; i < b.N; i++ {
+					header.SequenceNumber++
+					if _, err := aWriteStream.WriteRTP(header, testPayload); err != nil {
+						b.Fatal(err)
+					}
+					if _, err := bReadStream.Read(readBuffer); err != nil {
+						b.Fatal(err)
+					}
+				}
+			})
+		}
 	}
 }

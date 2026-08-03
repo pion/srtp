@@ -32,6 +32,10 @@ type srtpSSRCState struct {
 	rolloverHasProcessed bool
 	index                uint64
 	replayDetector       replaydetector.ReplayDetector
+	// checkAccepter is non-nil when replayDetector also implements the
+	// allocation-free replaydetector.CheckAccepter API, which is then used
+	// instead of Check.
+	checkAccepter replaydetector.CheckAccepter
 }
 
 // Encrypt/Decrypt state for a single SRTCP SSRC.
@@ -39,6 +43,10 @@ type srtcpSSRCState struct {
 	srtcpIndex     uint32
 	ssrc           uint32
 	replayDetector replaydetector.ReplayDetector
+	// checkAccepter is non-nil when replayDetector also implements the
+	// allocation-free replaydetector.CheckAccepter API, which is then used
+	// instead of Check.
+	checkAccepter replaydetector.CheckAccepter
 }
 
 // RCCMode is the mode of Roll-over Counter Carrying Transform from RFC 4771.
@@ -318,6 +326,7 @@ func (c *Context) getSRTPSSRCState(ssrc uint32, keepNew bool) (*srtpSSRCState, b
 		ssrc:           ssrc,
 		replayDetector: c.newSRTPReplayDetector(),
 	}
+	state.checkAccepter, _ = state.replayDetector.(replaydetector.CheckAccepter)
 	if keepNew {
 		c.srtpSSRCStates[ssrc] = state
 	}
@@ -335,6 +344,7 @@ func (c *Context) getSRTCPSSRCState(ssrc uint32, keepNew bool) (*srtcpSSRCState,
 		ssrc:           ssrc,
 		replayDetector: c.newSRTCPReplayDetector(),
 	}
+	state.checkAccepter, _ = state.replayDetector.(replaydetector.CheckAccepter)
 	if keepNew {
 		c.srtcpSSRCStates[ssrc] = state
 	}
