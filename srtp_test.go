@@ -463,6 +463,45 @@ func TestRTPReplayDetectorFactory(t *testing.T) {
 	assertT.Equal(1, cntFactory)
 }
 
+// legacyOnlyDetector hides the CheckAccepter implementation of the wrapped
+// detector, modeling custom detectors written before CheckAccepter existed.
+type legacyOnlyDetector struct {
+	inner replaydetector.ReplayDetector
+}
+
+func (d *legacyOnlyDetector) Check(seq uint64) (func() bool, bool) {
+	return d.inner.Check(seq)
+}
+
+func TestRTPLegacyReplayDetector(t *testing.T) {
+	assertT := assert.New(t)
+	data := rtpTestCases()[0]
+
+	detector := &legacyOnlyDetector{inner: replaydetector.New(64, maxROC<<16|maxSequenceNumber)}
+	_, isCheckAccepter := any(detector).(replaydetector.CheckAccepter)
+	assertT.False(isCheckAccepter, "test detector must not implement CheckAccepter")
+
+	decryptContext, err := buildTestContext(
+		profileCTR, SRTPReplayDetectorFactory(func() replaydetector.ReplayDetector {
+			return detector
+		}),
+	)
+	assertT.NoError(err)
+
+	pkt := &rtp.Packet{
+		Payload: data.encrypted(t, profileCTR),
+		Header:  rtp.Header{SequenceNumber: data.sequenceNumber},
+	}
+	in, err := pkt.Marshal()
+	assertT.NoError(err)
+
+	_, err = decryptContext.DecryptRTP(nil, in, nil)
+	assertT.NoError(err)
+
+	_, err = decryptContext.DecryptRTP(nil, in, nil)
+	assertT.ErrorIs(err, errDuplicated, "legacy detector must still reject replayed packets")
+}
+
 func benchmarkEncryptRTP(b *testing.B, profile ProtectionProfile, size int) {
 	b.Helper()
 

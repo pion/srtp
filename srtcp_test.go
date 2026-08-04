@@ -533,6 +533,26 @@ func TestRTCPReplayDetectorFactory(t *testing.T) {
 	assertT.Equal(1, cntFactory)
 }
 
+func TestRTCPLegacyReplayDetector(t *testing.T) {
+	assertT := assert.New(t)
+	testCase := rtcpTestCases()["AEAD_AES_128_GCM"]
+	data := testCase.packets[0]
+
+	decryptContext, err := CreateContext(
+		testCase.masterKey, testCase.masterSalt, testCase.algo,
+		SRTCPReplayDetectorFactory(func() replaydetector.ReplayDetector {
+			return &legacyOnlyDetector{inner: replaydetector.New(64, maxSRTCPIndex)}
+		}),
+	)
+	assertT.NoError(err)
+
+	_, err = decryptContext.DecryptRTCP(nil, data.encrypted, nil)
+	assertT.NoError(err)
+
+	_, err = decryptContext.DecryptRTCP(nil, data.encrypted, nil)
+	assertT.ErrorIs(err, errDuplicated, "legacy detector must still reject replayed packets")
+}
+
 func TestDecryptInvalidSRTCP(t *testing.T) {
 	assertT := assert.New(t)
 	key := []byte{0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01}
