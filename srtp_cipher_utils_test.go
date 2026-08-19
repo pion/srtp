@@ -110,6 +110,7 @@ func createContextWithCipher(profile ProtectionProfile, cipher srtpCipher) (*Con
 	if err != nil {
 		return nil, err
 	}
+	ctx.constructed = true
 
 	return ctx, nil
 }
