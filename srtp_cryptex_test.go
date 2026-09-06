@@ -387,3 +387,154 @@ func TestCryptexModes(t *testing.T) {
 		})
 	}
 }
+
+func TestUpdateOptionsCryptexRuntime(t *testing.T) {
+	packetBytes := func(t *testing.T, sequenceNumber uint16) []byte {
+		t.Helper()
+
+		rtpPacket := rtp.Packet{
+			Header: rtp.Header{
+				Version:          2,
+				SequenceNumber:   sequenceNumber,
+				Extension:        true,
+				ExtensionProfile: rtp.ExtensionProfileOneByte,
+			},
+		}
+		err := rtpPacket.Header.SetExtension(1, []byte{0x01, 0x02, 0x03, 0x04})
+		assert.NoError(t, err)
+
+		rtpBytes, err := rtpPacket.Marshal()
+		assert.NoError(t, err)
+
+		return rtpBytes
+	}
+
+	createCtx := func(t *testing.T, profile ProtectionProfile, opts ...ContextOption) *Context {
+		t.Helper()
+		keyLen, _ := profile.KeyLen()
+		saltLen, _ := profile.SaltLen()
+		ctx, err := CreateContext(make([]byte, keyLen), make([]byte, saltLen), profile, opts...)
+		assert.NoError(t, err)
+
+		return ctx
+	}
+
+	assertExtensionProfile := func(t *testing.T, encrypted []byte, extensionProfile uint16) {
+		t.Helper()
+
+		var header rtp.Packet
+		err := header.Unmarshal(encrypted)
+		assert.NoError(t, err)
+		assert.Equal(t, extensionProfile, header.Header.ExtensionProfile)
+	}
+
+	profiles := []ProtectionProfile{
+		ProtectionProfileAes128CmHmacSha1_32,
+		ProtectionProfileAes128CmHmacSha1_80,
+		ProtectionProfileAes256CmHmacSha1_32,
+		ProtectionProfileAes256CmHmacSha1_80,
+		ProtectionProfileAeadAes128Gcm,
+		ProtectionProfileAeadAes256Gcm,
+	}
+
+	for _, profile := range profiles {
+		t.Run(profile.String(), func(t *testing.T) {
+			ctx := createCtx(t, profile, Cryptex(CryptexModeDisabled))
+
+			encrypted, err := ctx.EncryptRTP(nil, packetBytes(t, 0), nil)
+			assert.NoError(t, err)
+			assertExtensionProfile(t, encrypted, uint16(rtp.ExtensionProfileOneByte))
+
+			err = ctx.UpdateOptions(Cryptex(CryptexModeEnabled))
+			assert.NoError(t, err)
+
+			encrypted, err = ctx.EncryptRTP(nil, packetBytes(t, 1), nil)
+			assert.NoError(t, err)
+			assertExtensionProfile(t, encrypted, uint16(rtp.CryptexProfileOneByte))
+
+			err = ctx.UpdateOptions(Cryptex(CryptexModeDisabled))
+			assert.NoError(t, err)
+
+			encrypted, err = ctx.EncryptRTP(nil, packetBytes(t, 2), nil)
+			assert.NoError(t, err)
+			assertExtensionProfile(t, encrypted, uint16(rtp.ExtensionProfileOneByte))
+		})
+	}
+}
+
+func TestUpdateOptionsCryptexRuntimeDecrypt(t *testing.T) {
+	packetBytes := func(t *testing.T, sequenceNumber uint16) []byte {
+		t.Helper()
+
+		rtpPacket := rtp.Packet{
+			Header: rtp.Header{
+				Version:          2,
+				SequenceNumber:   sequenceNumber,
+				Extension:        true,
+				ExtensionProfile: rtp.ExtensionProfileOneByte,
+			},
+		}
+		err := rtpPacket.Header.SetExtension(1, []byte{0x01, 0x02, 0x03, 0x04})
+		assert.NoError(t, err)
+
+		rtpBytes, err := rtpPacket.Marshal()
+		assert.NoError(t, err)
+
+		return rtpBytes
+	}
+
+	createCtx := func(t *testing.T, profile ProtectionProfile, opts ...ContextOption) *Context {
+		t.Helper()
+		keyLen, _ := profile.KeyLen()
+		saltLen, _ := profile.SaltLen()
+		ctx, err := CreateContext(make([]byte, keyLen), make([]byte, saltLen), profile, opts...)
+		assert.NoError(t, err)
+
+		return ctx
+	}
+
+	profiles := []ProtectionProfile{
+		ProtectionProfileAes128CmHmacSha1_32,
+		ProtectionProfileAes128CmHmacSha1_80,
+		ProtectionProfileAes256CmHmacSha1_32,
+		ProtectionProfileAes256CmHmacSha1_80,
+		ProtectionProfileAeadAes128Gcm,
+		ProtectionProfileAeadAes256Gcm,
+	}
+
+	for _, profile := range profiles {
+		t.Run(profile.String(), func(t *testing.T) {
+			ctxNoCryptex := createCtx(t, profile, Cryptex(CryptexModeDisabled))
+			ctxCryptex := createCtx(t, profile, Cryptex(CryptexModeEnabled))
+			ctxDecrypt := createCtx(t, profile, Cryptex(CryptexModeDisabled))
+
+			srtpNoCryptex, err := ctxNoCryptex.EncryptRTP(nil, packetBytes(t, 10), nil)
+			assert.NoError(t, err)
+			srtpCryptex, err := ctxCryptex.EncryptRTP(nil, packetBytes(t, 11), nil)
+			assert.NoError(t, err)
+
+			err = ctxDecrypt.UpdateOptions(Cryptex(CryptexModeRequired))
+			assert.NoError(t, err)
+
+			_, err = ctxDecrypt.DecryptRTP(nil, srtpNoCryptex, nil)
+			assert.ErrorIs(t, err, errUnencryptedHeaderExtAndCSRCs)
+
+			_, err = ctxDecrypt.DecryptRTP(nil, srtpCryptex, nil)
+			assert.NoError(t, err)
+
+			srtpNoCryptex, err = ctxNoCryptex.EncryptRTP(nil, packetBytes(t, 12), nil)
+			assert.NoError(t, err)
+			srtpCryptex, err = ctxCryptex.EncryptRTP(nil, packetBytes(t, 13), nil)
+			assert.NoError(t, err)
+
+			err = ctxDecrypt.UpdateOptions(Cryptex(CryptexModeDisabled))
+			assert.NoError(t, err)
+
+			_, err = ctxDecrypt.DecryptRTP(nil, srtpNoCryptex, nil)
+			assert.NoError(t, err)
+
+			_, err = ctxDecrypt.DecryptRTP(nil, srtpCryptex, nil)
+			assert.ErrorIs(t, err, errCryptexDisabled)
+		})
+	}
+}

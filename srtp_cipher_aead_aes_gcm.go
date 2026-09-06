@@ -30,6 +30,10 @@ type srtpCipherAeadAesGcm struct {
 	rtcpIV [12]byte
 }
 
+func (s *srtpCipherAeadAesGcm) setCryptex(useCryptex bool) {
+	s.useCryptex = useCryptex
+}
+
 func newSrtpCipherAeadAesGcm(
 	profile protectionProfileWithArgs,
 	masterKey, masterSalt, mki []byte,

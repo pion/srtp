@@ -208,7 +208,9 @@ func (s *SessionSRTP) decrypt(buf []byte) error {
 	// used to allocate per-SSRC state (stream, replay detector, etc.) until after
 	// the auth tag has been verified. Doing so before authentication would allow an
 	// unauthenticated peer to exhaust memory by spoofing arbitrary SSRCs.
+	s.session.remoteContextMutex.Lock()
 	decrypted, err := s.remoteContext.decryptRTP(buf, buf, header, headerLen)
+	s.session.remoteContextMutex.Unlock()
 	if err != nil {
 		header.CSRC = oldCSRC
 		header.Extensions = oldExtensions
@@ -237,4 +239,20 @@ func (s *SessionSRTP) decrypt(buf []byte) error {
 	}
 
 	return nil
+}
+
+// UpdateOptions applies opts to both the local and remote Context. Unlike Context.UpdateOptions,
+// this is safe to call concurrently with WriteRTP and with the session's read loop.
+func (s *SessionSRTP) UpdateOptions(opts ...ContextOption) error {
+	s.session.localContextMutex.Lock()
+	err := s.localContext.UpdateOptions(opts...)
+	s.session.localContextMutex.Unlock()
+	if err != nil {
+		return err
+	}
+
+	s.session.remoteContextMutex.Lock()
+	defer s.session.remoteContextMutex.Unlock()
+
+	return s.remoteContext.UpdateOptions(opts...)
 }

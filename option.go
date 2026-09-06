@@ -235,10 +235,6 @@ func SRTPAuthenticationTagLength(authTagRTPLen int) ContextOption { // nolint:re
 // Sources, as defined in RFC 9335.
 func Cryptex(cryptexMode CryptexMode) ContextOption {
 	return func(c *Context) error {
-		if c.constructed {
-			return ErrContextOptionNotUpdatable
-		}
-
 		c.cryptexMode = cryptexMode
 
 		return nil

@@ -22,6 +22,7 @@ type streamSession interface {
 
 type session struct {
 	localContextMutex           sync.Mutex
+	remoteContextMutex          sync.Mutex
 	localContext, remoteContext *Context
 	localOptions, remoteOptions []ContextOption
 

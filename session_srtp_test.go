@@ -774,3 +774,77 @@ func BenchmarkSessionSRTPReadWrite(b *testing.B) {
 		}
 	}
 }
+
+// TestSessionSRTPUpdateOptionsCryptex verifies that SessionSRTP.UpdateOptions applies a
+// Cryptex option change to both the local and remote Context of a running session.
+func TestSessionSRTPUpdateOptionsCryptex(t *testing.T) {
+	lim := test.TimeOut(time.Second * 5)
+	defer lim.Stop()
+
+	report := test.CheckRoutines(t)
+	defer report()
+
+	const testSSRC = 5000
+	extPayload := []byte{0x01, 0x02, 0x03, 0x04}
+
+	buildExtHeader := func(seq uint16) *rtp.Header {
+		header := &rtp.Header{SSRC: testSSRC, SequenceNumber: seq}
+		assert.NoError(t, header.SetExtension(1, extPayload))
+
+		return header
+	}
+
+	aSession, bSession := buildSessionSRTPPair(t)
+
+	aWriteStream, err := aSession.OpenWriteStream()
+	assert.NoError(t, err)
+	bReadStream, err := bSession.OpenReadStream(testSSRC)
+	assert.NoError(t, err)
+
+	readBuffer := make([]byte, 1500)
+
+	// Cryptex is disabled by default on both sides; a packet with a header extension
+	// round-trips unchanged.
+	_, err = aWriteStream.WriteRTP(buildExtHeader(0), []byte{0xAA})
+	assert.NoError(t, err)
+
+	_, rHeader, err := bReadStream.ReadRTP(readBuffer)
+	assert.NoError(t, err)
+	assert.Equal(t, extPayload, rHeader.GetExtension(1))
+
+	// Enabling Cryptex only on the sender makes it encrypt the header extension, but the
+	// receiver still has Cryptex disabled and drops the packet as a result.
+	assert.NoError(t, aSession.UpdateOptions(Cryptex(CryptexModeEnabled)))
+
+	assert.NoError(t, bReadStream.SetReadDeadline(time.Now().Add(200*time.Millisecond)))
+	_, err = aWriteStream.WriteRTP(buildExtHeader(1), []byte{0xBB})
+	assert.NoError(t, err)
+
+	_, _, err = bReadStream.ReadRTP(readBuffer)
+	assert.Truef(t, errIsTimeout(err), "expected a read timeout since the receiver rejected the Cryptex packet: %v", err)
+	assert.NoError(t, bReadStream.SetReadDeadline(time.Time{}))
+
+	// Updating the receiver as well restores a working, Cryptex-protected round-trip.
+	assert.NoError(t, bSession.UpdateOptions(Cryptex(CryptexModeEnabled)))
+
+	_, err = aWriteStream.WriteRTP(buildExtHeader(2), []byte{0xCC})
+	assert.NoError(t, err)
+
+	_, rHeader, err = bReadStream.ReadRTP(readBuffer)
+	assert.NoError(t, err)
+	assert.Equal(t, extPayload, rHeader.GetExtension(1))
+
+	// Disabling Cryptex again on both sides also takes effect.
+	assert.NoError(t, aSession.UpdateOptions(Cryptex(CryptexModeDisabled)))
+	assert.NoError(t, bSession.UpdateOptions(Cryptex(CryptexModeDisabled)))
+
+	_, err = aWriteStream.WriteRTP(buildExtHeader(3), []byte{0xDD})
+	assert.NoError(t, err)
+
+	_, rHeader, err = bReadStream.ReadRTP(readBuffer)
+	assert.NoError(t, err)
+	assert.Equal(t, extPayload, rHeader.GetExtension(1))
+
+	assert.NoError(t, aSession.Close())
+	assert.NoError(t, bSession.Close())
+}

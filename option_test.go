@@ -184,3 +184,36 @@ func TestContextOptions(t *testing.T) {
 		})
 	}
 }
+
+func TestRuntimeUpdatableContextOptions(t *testing.T) {
+	tests := []struct {
+		name     string
+		option   func() ContextOption
+		validate func(t *testing.T, c *Context)
+	}{
+		{
+			name:   "Cryptex",
+			option: func() ContextOption { return Cryptex(CryptexModeEnabled) },
+			validate: func(t *testing.T, c *Context) {
+				t.Helper()
+				assert.Equal(t, CryptexModeEnabled, c.cryptexMode)
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Run("sets value", func(t *testing.T) {
+				c := &Context{}
+				require.NoError(t, tt.option()(c))
+				tt.validate(t, c)
+			})
+
+			t.Run("constructed context", func(t *testing.T) {
+				ctx := constructedContext(t)
+				require.NoError(t, tt.option()(ctx))
+				tt.validate(t, ctx)
+			})
+		})
+	}
+}

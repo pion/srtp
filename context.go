@@ -444,3 +444,29 @@ func (c *Context) checkRCCMode() error {
 
 	return nil
 }
+
+// UpdateOptions updates Context options after it has been created.
+// This function is not thread-safe, you need to provide synchronization with encrypting/decrypting packets.
+func (c *Context) UpdateOptions(opts ...ContextOption) error {
+	for _, opt := range opts {
+		if err := opt(c); err != nil {
+			return err
+		}
+	}
+
+	c.updateCryptexForCiphers()
+
+	return nil
+}
+
+func (c *Context) updateCryptexForCiphers() {
+	useCryptex := c.cryptexMode != CryptexModeDisabled && c.encryptSRTP
+
+	if c.cipher != nil {
+		c.cipher.setCryptex(useCryptex)
+	}
+
+	for _, cipher := range c.mkis {
+		cipher.setCryptex(useCryptex)
+	}
+}
