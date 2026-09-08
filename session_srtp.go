@@ -244,13 +244,25 @@ func (s *SessionSRTP) decrypt(buf []byte) error {
 // UpdateOptions applies opts to both the local and remote Context. Unlike Context.UpdateOptions,
 // this is safe to call concurrently with WriteRTP and with the session's read loop.
 func (s *SessionSRTP) UpdateOptions(opts ...ContextOption) error {
-	s.session.localContextMutex.Lock()
-	err := s.localContext.UpdateOptions(opts...)
-	s.session.localContextMutex.Unlock()
-	if err != nil {
+	if err := s.UpdateLocalOptions(opts...); err != nil {
 		return err
 	}
 
+	return s.UpdateRemoteOptions(opts...)
+}
+
+// UpdateLocalOptions applies opts to the local (encrypting) Context only. Unlike
+// Context.UpdateOptions, this is safe to call concurrently with WriteRTP.
+func (s *SessionSRTP) UpdateLocalOptions(opts ...ContextOption) error {
+	s.session.localContextMutex.Lock()
+	defer s.session.localContextMutex.Unlock()
+
+	return s.localContext.UpdateOptions(opts...)
+}
+
+// UpdateRemoteOptions applies opts to the remote (decrypting) Context only. Unlike
+// Context.UpdateOptions, this is safe to call concurrently with the session's read loop.
+func (s *SessionSRTP) UpdateRemoteOptions(opts ...ContextOption) error {
 	s.session.remoteContextMutex.Lock()
 	defer s.session.remoteContextMutex.Unlock()
 
