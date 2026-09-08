@@ -848,3 +848,101 @@ func TestSessionSRTPUpdateOptionsCryptex(t *testing.T) {
 	assert.NoError(t, aSession.Close())
 	assert.NoError(t, bSession.Close())
 }
+
+// TestSessionSRTPUpdateLocalRemoteOptions verifies that UpdateLocalOptions and
+// UpdateRemoteOptions only affect the encrypting and decrypting Context of a session,
+// respectively, without touching the other one.
+func TestSessionSRTPUpdateLocalRemoteOptions(t *testing.T) {
+	lim := test.TimeOut(time.Second * 5)
+	defer lim.Stop()
+
+	report := test.CheckRoutines(t)
+	defer report()
+
+	const testSSRC = 5000
+	extPayload := []byte{0x01, 0x02, 0x03, 0x04}
+
+	buildExtHeader := func(seq uint16) *rtp.Header {
+		header := &rtp.Header{SSRC: testSSRC, SequenceNumber: seq}
+		assert.NoError(t, header.SetExtension(1, extPayload))
+
+		return header
+	}
+
+	aSession, bSession := buildSessionSRTPPair(t)
+
+	aWriteStream, err := aSession.OpenWriteStream()
+	assert.NoError(t, err)
+	bWriteStream, err := bSession.OpenWriteStream()
+	assert.NoError(t, err)
+	bReadStream, err := bSession.OpenReadStream(testSSRC)
+	assert.NoError(t, err)
+	aReadStream, err := aSession.OpenReadStream(testSSRC)
+	assert.NoError(t, err)
+
+	readBuffer := make([]byte, 1500)
+
+	// Enabling Cryptex only on a's local (encrypting) Context makes a encrypt the header
+	// extension, but b's remote (decrypting) Context is untouched and drops the packet.
+	assert.NoError(t, aSession.UpdateLocalOptions(Cryptex(CryptexModeEnabled)))
+
+	assert.NoError(t, bReadStream.SetReadDeadline(time.Now().Add(200*time.Millisecond)))
+	_, err = aWriteStream.WriteRTP(buildExtHeader(0), []byte{0xAA})
+	assert.NoError(t, err)
+
+	_, _, err = bReadStream.ReadRTP(readBuffer)
+	assert.Truef(t, errIsTimeout(err), "expected a read timeout since b's remote Context is unchanged: %v", err)
+	assert.NoError(t, bReadStream.SetReadDeadline(time.Time{}))
+
+	// Updating only b's remote Context restores a working Cryptex round-trip from a to b,
+	// without needing b's local Context to change.
+	assert.NoError(t, bSession.UpdateRemoteOptions(Cryptex(CryptexModeEnabled)))
+
+	_, err = aWriteStream.WriteRTP(buildExtHeader(1), []byte{0xBB})
+	assert.NoError(t, err)
+
+	_, rHeader, err := bReadStream.ReadRTP(readBuffer)
+	assert.NoError(t, err)
+	assert.Equal(t, extPayload, rHeader.GetExtension(1))
+
+	// b's local Context and a's remote Context are still untouched, so a plain round-trip
+	// from b to a still works, proving the two update calls above did not leak across
+	// sessions or across the local/remote split.
+	_, err = bWriteStream.WriteRTP(buildExtHeader(2), []byte{0xCC})
+	assert.NoError(t, err)
+
+	_, rHeader, err = aReadStream.ReadRTP(readBuffer)
+	assert.NoError(t, err)
+	assert.Equal(t, extPayload, rHeader.GetExtension(1))
+
+	assert.NoError(t, aSession.Close())
+	assert.NoError(t, bSession.Close())
+}
+
+// TestSessionSRTPUpdateLocalRemoteOptionsError verifies that UpdateLocalOptions and
+// UpdateRemoteOptions propagate option errors, and that UpdateOptions does not apply
+// opts to the remote Context if applying them to the local Context fails.
+func TestSessionSRTPUpdateLocalRemoteOptionsError(t *testing.T) {
+	report := test.CheckRoutines(t)
+	defer report()
+
+	aSession, bSession := buildSessionSRTPPair(t)
+
+	// SRTPReplayProtection rejects updates once a Context has been constructed, making it
+	// a convenient error-returning option for a live session.
+	assert.ErrorIs(t, aSession.UpdateLocalOptions(SRTPReplayProtection(32)), ErrContextOptionNotUpdatable)
+	assert.ErrorIs(t, aSession.UpdateRemoteOptions(SRTPReplayProtection(32)), ErrContextOptionNotUpdatable)
+
+	var calls int
+	failingOption := func(*Context) error {
+		calls++
+
+		return ErrContextOptionNotUpdatable
+	}
+
+	assert.ErrorIs(t, aSession.UpdateOptions(failingOption), ErrContextOptionNotUpdatable)
+	assert.Equal(t, 1, calls)
+
+	assert.NoError(t, aSession.Close())
+	assert.NoError(t, bSession.Close())
+}
