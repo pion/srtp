@@ -4,7 +4,7 @@
 package srtp
 
 import (
-	"github.com/pion/transport/v4/replaydetector"
+	"github.com/pion/transport/v5/replaydetector"
 )
 
 // ContextOption configures a Context using the functional options pattern.

@@ -8,7 +8,7 @@ import (
 	"fmt"
 
 	"github.com/pion/rtcp"
-	"github.com/pion/transport/v4/replaydetector"
+	"github.com/pion/transport/v5/replaydetector"
 )
 
 /*
