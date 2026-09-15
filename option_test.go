@@ -6,7 +6,7 @@ package srtp
 import (
 	"testing"
 
-	"github.com/pion/transport/v4/replaydetector"
+	"github.com/pion/transport/v5/replaydetector"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )

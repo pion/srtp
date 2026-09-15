@@ -11,7 +11,7 @@ import (
 	"time"
 
 	"github.com/pion/rtp"
-	"github.com/pion/transport/v4/packetio"
+	"github.com/pion/transport/v5/packetio"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -40,7 +40,7 @@ func TestPeek(t *testing.T) {
 	secondBuffer := []byte{0xBB, 0xBB, 0xBB}
 	thirdBuffer := []byte{0xCC, 0xCC, 0xCC}
 
-	buffer := packetio.NewBuffer()
+	buffer := &packetBuffer{Buffer: packetio.NewBuffer()}
 	stream := &ReadStreamSRTP{buffer: buffer}
 
 	t.Run("Short Peek", func(t *testing.T) {
@@ -141,7 +141,7 @@ func TestBufferFactory(t *testing.T) {
 	bf := func(_ packetio.BufferPacketType, _ uint32) io.ReadWriteCloser {
 		wg.Done()
 
-		return packetio.NewBuffer()
+		return &packetBuffer{Buffer: packetio.NewBuffer()}
 	}
 	rtpSession, err := NewSessionSRTP(conn, &Config{
 		Keys: SessionKeys{

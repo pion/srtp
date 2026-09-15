@@ -11,11 +11,26 @@ import (
 	"time"
 
 	"github.com/pion/rtp"
-	"github.com/pion/transport/v4/packetio"
+	"github.com/pion/transport/v5/packetio"
 )
 
 // Limit the buffer size to 1MB.
 const srtpBufferSize = 1000 * 1000
+
+// packetBuffer wraps packetio.Buffer to implement io.ReadWriteCloser.
+type packetBuffer struct {
+	*packetio.Buffer
+}
+
+func (b *packetBuffer) Read(buf []byte) (int, error) {
+	n, _, err := b.Buffer.Read(buf, nil)
+
+	return n, err
+}
+
+func (b *packetBuffer) Write(buf []byte) (int, error) {
+	return b.Buffer.Write(buf, nil)
+}
 
 // ReadStreamSRTP handles decryption for a single RTP SSRC.
 type ReadStreamSRTP struct {
@@ -57,7 +72,7 @@ func (r *ReadStreamSRTP) init(child streamSession, ssrc uint32) error {
 	if r.session.bufferFactory != nil {
 		r.buffer = r.session.bufferFactory(packetio.RTPBufferPacket, ssrc)
 	} else {
-		buff := packetio.NewBuffer()
+		buff := &packetBuffer{Buffer: packetio.NewBuffer()}
 		buff.SetLimitSize(srtpBufferSize)
 		r.buffer = buff
 	}

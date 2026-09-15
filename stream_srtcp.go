@@ -10,7 +10,7 @@ import (
 	"time"
 
 	"github.com/pion/rtcp"
-	"github.com/pion/transport/v4/packetio"
+	"github.com/pion/transport/v5/packetio"
 )
 
 // Limit the buffer size to 100KB.
@@ -122,7 +122,7 @@ func (r *ReadStreamSRTCP) init(child streamSession, ssrc uint32) error {
 		r.buffer = r.session.bufferFactory(packetio.RTCPBufferPacket, ssrc)
 	} else {
 		// Create a buffer and limit it to 100KB
-		buff := packetio.NewBuffer()
+		buff := &packetBuffer{Buffer: packetio.NewBuffer()}
 		buff.SetLimitSize(srtcpBufferSize)
 		r.buffer = buff
 	}
