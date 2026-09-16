@@ -32,6 +32,19 @@ func (b *packetBuffer) Write(buf []byte) (int, error) {
 	return b.Buffer.Write(buf, nil)
 }
 
+func (b *packetBuffer) ReadWithAttributes(buf []byte, attrs packetio.Attributes) (int, packetio.Attributes, error) {
+	return b.Buffer.Read(buf, attrs)
+}
+
+func (b *packetBuffer) WriteWithAttributes(buf []byte, attrs packetio.Attributes) (int, error) {
+	return b.Buffer.Write(buf, attrs)
+}
+
+type peekedPacket struct {
+	payload    []byte
+	attributes packetio.Attributes
+}
+
 // ReadStreamSRTP handles decryption for a single RTP SSRC.
 type ReadStreamSRTP struct {
 	mu sync.Mutex
@@ -43,7 +56,7 @@ type ReadStreamSRTP struct {
 	isInited bool
 
 	buffer        io.ReadWriteCloser
-	peekedPackets [][]byte
+	peekedPackets []peekedPacket
 }
 
 // Used by getOrCreateReadStream.
@@ -80,8 +93,8 @@ func (r *ReadStreamSRTP) init(child streamSession, ssrc uint32) error {
 	return nil
 }
 
-func (r *ReadStreamSRTP) write(buf []byte) (n int, err error) {
-	n, err = r.buffer.Write(buf)
+func (r *ReadStreamSRTP) write(buf []byte, attrs packetio.Attributes) (n int, err error) {
+	n, err = writeWithAttributes(r.buffer, buf, attrs)
 
 	if errors.Is(err, packetio.ErrFull) {
 		// Silently drop data when the buffer is full.
@@ -94,9 +107,10 @@ func (r *ReadStreamSRTP) write(buf []byte) (n int, err error) {
 // Peek reads and decrypts full RTP packet from the nextConn.
 // It is then buffered so that a call to `Read` will return it.
 func (r *ReadStreamSRTP) Peek(buf []byte) (n int, err error) {
-	n, err = r.buffer.Read(buf)
+	var attrs packetio.Attributes
+	n, attrs, err = readWithAttributes(r.buffer, buf, nil)
 	if err == nil {
-		r.peekedPackets = append(r.peekedPackets, slices.Clone(buf[:n]))
+		r.peekedPackets = append(r.peekedPackets, peekedPacket{slices.Clone(buf[:n]), attrs})
 	}
 
 	return
@@ -104,19 +118,30 @@ func (r *ReadStreamSRTP) Peek(buf []byte) (n int, err error) {
 
 // Read reads and decrypts full RTP packet from the nextConn.
 func (r *ReadStreamSRTP) Read(buf []byte) (int, error) {
+	n, _, err := r.ReadWithAttributes(buf, nil)
+
+	return n, err
+}
+
+// ReadWithAttributes reads a decrypted RTP packet and its attributes.
+// It replaces attrs with the packet's attributes, reusing its storage when possible.
+func (r *ReadStreamSRTP) ReadWithAttributes(buf []byte, attrs packetio.Attributes) (int, packetio.Attributes, error) {
 	if len(r.peekedPackets) != 0 {
-		if len(r.peekedPackets[0]) > len(buf) {
-			return 0, io.ErrShortBuffer
+		clear(attrs)
+		packet := r.peekedPackets[0]
+		if len(packet.payload) > len(buf) {
+			return 0, attrs[:0], io.ErrShortBuffer
 		}
 
-		n := len(r.peekedPackets[0])
-		copy(buf, r.peekedPackets[0])
+		n := copy(buf, packet.payload)
+		attrs = append(attrs[:0], packet.attributes...)
+		r.peekedPackets[0] = peekedPacket{}
 		r.peekedPackets = r.peekedPackets[1:]
 
-		return n, nil
+		return n, attrs, nil
 	}
 
-	return r.buffer.Read(buf)
+	return readWithAttributes(r.buffer, buf, attrs)
 }
 
 // ReadRTP reads and decrypts full RTP packet and its header from the nextConn.

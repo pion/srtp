@@ -10,6 +10,7 @@ import (
 
 	"github.com/pion/logging"
 	"github.com/pion/rtcp"
+	"github.com/pion/transport/v5/packetio"
 )
 
 const defaultSessionSRTCPReplayProtectionWindow = 64
@@ -160,7 +161,7 @@ func destinationSSRC(pkts ...rtcp.Packet) []uint32 {
 }
 
 //nolint:cyclop
-func (s *SessionSRTCP) decrypt(buf []byte) error {
+func (s *SessionSRTCP) decrypt(buf []byte, attrs packetio.Attributes) error {
 	decrypted, err := s.remoteContext.DecryptRTCP(buf, buf, nil)
 	if err != nil {
 		return err
@@ -210,7 +211,7 @@ func (s *SessionSRTCP) decrypt(buf []byte) error {
 				return errFailedTypeAssertion
 			}
 
-			_, err = readStream.write(marshaled)
+			_, err = readStream.write(marshaled, attrs)
 			if err != nil {
 				return err
 			}

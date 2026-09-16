@@ -10,6 +10,7 @@ import (
 
 	"github.com/pion/logging"
 	"github.com/pion/rtp"
+	"github.com/pion/transport/v5/packetio"
 )
 
 const defaultSessionSRTPReplayProtectionWindow = 64
@@ -186,7 +187,7 @@ func (s *SessionSRTP) setWriteDeadline(t time.Time) error {
 	return s.session.nextConn.SetWriteDeadline(t)
 }
 
-func (s *SessionSRTP) decrypt(buf []byte) error {
+func (s *SessionSRTP) decrypt(buf []byte, attrs packetio.Attributes) error {
 	header := &s.readHeader
 
 	// Save the CSRC and extension slices in case the packet fails to decrypt
@@ -233,7 +234,7 @@ func (s *SessionSRTP) decrypt(buf []byte) error {
 		return errFailedTypeAssertion
 	}
 
-	_, err = readStream.write(decrypted)
+	_, err = readStream.write(decrypted, attrs)
 	if err != nil {
 		return err
 	}

@@ -459,7 +459,7 @@ func TestSessionSRTCPDecryptInvalidRTCP(t *testing.T) {
 	invalidRTCP := []byte{0x81, 0xc8, 0x00, 0x0c, 0x90, 0x2f, 0x9e, 0x2e}
 	encrypted, err := aSession.session.localContext.EncryptRTCP(nil, invalidRTCP, nil)
 	assert.NoError(t, err)
-	assert.Error(t, bSession.decrypt(encrypted))
+	assert.Error(t, bSession.decrypt(encrypted, nil))
 
 	assert.NoError(t, aSession.Close())
 	assert.NoError(t, bSession.Close())
@@ -497,7 +497,7 @@ func TestSessionSRTCPDecryptRemarshalFailure(t *testing.T) {
 
 	encrypted, err := aSession.session.localContext.EncryptRTCP(nil, compound, nil)
 	assert.NoError(t, err)
-	assert.Error(t, bSession.decrypt(encrypted))
+	assert.Error(t, bSession.decrypt(encrypted, nil))
 
 	readBuffer := make([]byte, len(pli))
 	n, _, err := bReadStream.ReadRTCP(readBuffer)
@@ -522,7 +522,7 @@ func TestSessionSRTCPDecryptClosedSession(t *testing.T) {
 	encrypted, err := encryptSRTCP(aSession.session.localContext, &rtcp.PictureLossIndication{MediaSSRC: 5000})
 	assert.NoError(t, err)
 	// The session is closed, decrypt drops the packet without an error.
-	assert.NoError(t, bSession.decrypt(encrypted))
+	assert.NoError(t, bSession.decrypt(encrypted, nil))
 
 	assert.NoError(t, aSession.Close())
 }
@@ -542,7 +542,7 @@ func TestSessionSRTCPDecryptWrongStreamType(t *testing.T) {
 
 	encrypted, err := encryptSRTCP(aSession.session.localContext, &rtcp.PictureLossIndication{MediaSSRC: 5000})
 	assert.NoError(t, err)
-	assert.ErrorIs(t, bSession.decrypt(encrypted), errFailedTypeAssertion)
+	assert.ErrorIs(t, bSession.decrypt(encrypted, nil), errFailedTypeAssertion)
 
 	bSession.session.readStreamsLock.Lock()
 	delete(bSession.session.readStreams, 5000)
@@ -569,7 +569,7 @@ func TestSessionSRTCPDecryptClosedReadStream(t *testing.T) {
 
 	encrypted, err := encryptSRTCP(aSession.session.localContext, &rtcp.PictureLossIndication{MediaSSRC: 5000})
 	assert.NoError(t, err)
-	assert.Error(t, bSession.decrypt(encrypted))
+	assert.Error(t, bSession.decrypt(encrypted, nil))
 
 	assert.NoError(t, bReadStream.Close())
 	assert.NoError(t, aSession.Close())

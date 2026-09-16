@@ -484,7 +484,7 @@ func TestSessionSRTPRejectedPacketDoesNotGrowRetainedHeader(t *testing.T) {
 		receiver.readHeader.CSRC = make([]uint32, 0, initialCapacity)
 		receiver.readHeader.Extensions = make([]rtp.Extension, 0, initialCapacity)
 
-		assert.Error(t, receiver.decrypt(packet))
+		assert.Error(t, receiver.decrypt(packet, nil))
 		assert.Equal(t, initialCapacity, cap(receiver.readHeader.CSRC))
 		assert.Equal(t, initialCapacity, cap(receiver.readHeader.Extensions))
 	}
