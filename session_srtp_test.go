@@ -4,6 +4,7 @@
 package srtp
 
 import (
+	"bytes"
 	"encoding/binary"
 	"errors"
 	"io"
@@ -945,4 +946,77 @@ func TestSessionSRTPUpdateLocalRemoteOptionsError(t *testing.T) {
 
 	assert.NoError(t, aSession.Close())
 	assert.NoError(t, bSession.Close())
+}
+
+func TestSessionSRTPUpdateKey(t *testing.T) {
+	for _, profile := range []ProtectionProfile{ProtectionProfileAes128CmHmacSha1_80, ProtectionProfileAeadAes128Gcm} {
+		t.Run(profile.String(), func(t *testing.T) {
+			session, peer, _ := buildSessionSRTP(t)
+			t.Cleanup(func() {
+				assert.NoError(t, peer.Close())
+				assert.NoError(t, session.Close())
+			})
+			stream, err := session.OpenReadStream(5000)
+			assert.NoError(t, err)
+			t.Cleanup(func() { assert.NoError(t, stream.Close()) })
+			plain, err := (&rtp.Packet{
+				Header:  rtp.Header{Version: 2, SSRC: 5000, SequenceNumber: 1},
+				Payload: []byte{1, 2, 3},
+			}).Marshal()
+			assert.NoError(t, err)
+			session.localContext.SetROC(5000, 3)
+			session.remoteContext.SetROC(5000, 3)
+			oldPacket, err := session.remoteContext.EncryptRTP(nil, plain, nil)
+			assert.NoError(t, err)
+			assert.NoError(t, session.UpdateOptions(Cryptex(CryptexModeEnabled)))
+
+			keys := keyTestKeys(t, profile)
+			invalid := keys
+			invalid.RemoteMasterSalt = nil
+			local, remote := session.localContext, session.remoteContext
+			assert.Error(t, session.UpdateKey(invalid, profile))
+			assert.Same(t, local, session.localContext)
+			assert.Same(t, remote, session.remoteContext)
+
+			assert.NoError(t, session.UpdateKey(keys, profile))
+			assert.Same(t, stream, session.readStreams[5000])
+			assert.Error(t, session.decrypt(oldPacket, nil))
+			assert.Equal(t, CryptexModeEnabled, session.localContext.cryptexMode)
+			assert.Equal(t, CryptexModeEnabled, session.remoteContext.cryptexMode)
+
+			sender, err := CreateContext(keys.RemoteMasterKey, keys.RemoteMasterSalt, profile)
+			assert.NoError(t, err)
+			packet, err := sender.EncryptRTP(nil, plain, nil)
+			assert.NoError(t, err)
+			assert.NoError(t, session.decrypt(bytes.Clone(packet), nil))
+			assert.Error(t, session.decrypt(bytes.Clone(packet), nil))
+			buf := make([]byte, 1500)
+			n, err := stream.Read(buf)
+			assert.NoError(t, err)
+			assert.Equal(t, plain, buf[:n])
+
+			receiver, err := CreateContext(keys.LocalMasterKey, keys.LocalMasterSalt, profile)
+			assert.NoError(t, err)
+			packet, err = session.localContext.EncryptRTP(nil, plain, nil)
+			assert.NoError(t, err)
+			decoded, err := receiver.DecryptRTP(nil, packet, nil)
+			assert.NoError(t, err)
+			assert.Equal(t, plain, decoded)
+		})
+	}
+}
+
+func keyTestKeys(t *testing.T, profile ProtectionProfile) SessionKeys {
+	t.Helper()
+	keyLen, err := profile.KeyLen()
+	assert.NoError(t, err)
+	saltLen, err := profile.SaltLen()
+	assert.NoError(t, err)
+
+	return SessionKeys{
+		LocalMasterKey:   bytes.Repeat([]byte{1}, keyLen),
+		LocalMasterSalt:  bytes.Repeat([]byte{1}, saltLen),
+		RemoteMasterKey:  bytes.Repeat([]byte{2}, keyLen),
+		RemoteMasterSalt: bytes.Repeat([]byte{2}, saltLen),
+	}
 }

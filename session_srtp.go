@@ -269,3 +269,8 @@ func (s *SessionSRTP) UpdateRemoteOptions(opts ...ContextOption) error {
 
 	return s.remoteContext.UpdateOptions(opts...)
 }
+
+// UpdateKey resets packet state with fresh keys.
+func (s *SessionSRTP) UpdateKey(keys SessionKeys, profile ProtectionProfile) error {
+	return s.session.updateKey(keys, profile)
+}

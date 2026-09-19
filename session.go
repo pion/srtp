@@ -169,3 +169,24 @@ func (s *session) start(
 
 	return nil
 }
+
+// updateKey validates both directions before replacing either context.
+func (s *session) updateKey(keys SessionKeys, profile ProtectionProfile) error {
+	s.localContextMutex.Lock()
+	defer s.localContextMutex.Unlock()
+	s.remoteContextMutex.Lock()
+	defer s.remoteContextMutex.Unlock()
+
+	local, err := s.localContext.contextWithKey(keys.LocalMasterKey, keys.LocalMasterSalt, profile)
+	if err != nil {
+		return err
+	}
+	remote, err := s.remoteContext.contextWithKey(keys.RemoteMasterKey, keys.RemoteMasterSalt, profile)
+	if err != nil {
+		return err
+	}
+
+	s.localContext, s.remoteContext = local, remote
+
+	return nil
+}

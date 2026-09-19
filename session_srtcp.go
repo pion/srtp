@@ -162,7 +162,9 @@ func destinationSSRC(pkts ...rtcp.Packet) []uint32 {
 
 //nolint:cyclop
 func (s *SessionSRTCP) decrypt(buf []byte, attrs packetio.Attributes) error {
+	s.session.remoteContextMutex.Lock()
 	decrypted, err := s.remoteContext.DecryptRTCP(buf, buf, nil)
+	s.session.remoteContextMutex.Unlock()
 	if err != nil {
 		return err
 	}
@@ -219,4 +221,9 @@ func (s *SessionSRTCP) decrypt(buf []byte, attrs packetio.Attributes) error {
 	}
 
 	return marshalErrs
+}
+
+// UpdateKey resets packet state with fresh keys.
+func (s *SessionSRTCP) UpdateKey(keys SessionKeys, profile ProtectionProfile) error {
+	return s.session.updateKey(keys, profile)
 }

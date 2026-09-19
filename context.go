@@ -179,6 +179,23 @@ func CreateContext(
 	return c, nil
 }
 
+// contextWithKey creates a fresh context with the current settings.
+func (c *Context) contextWithKey(masterKey, masterSalt []byte, profile ProtectionProfile) (*Context, error) {
+	return CreateContext(masterKey, masterSalt, profile, func(next *Context) error {
+		next.newSRTPReplayDetector = c.newSRTPReplayDetector
+		next.newSRTCPReplayDetector = c.newSRTCPReplayDetector
+		next.sendMKI = bytes.Clone(c.sendMKI)
+		next.encryptSRTP = c.encryptSRTP
+		next.encryptSRTCP = c.encryptSRTCP
+		next.rccMode = c.rccMode
+		next.rocTransmitRate = c.rocTransmitRate
+		next.authTagRTPLen = c.authTagRTPLen
+		next.cryptexMode = c.cryptexMode
+
+		return nil
+	})
+}
+
 // AddCipherForMKI adds new MKI with associated masker key and salt.
 // Context must be created with MasterKeyIndicator option
 // to enable MKI support. MKI must be unique and have the same length as the one used for creating Context.
