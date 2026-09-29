@@ -30,7 +30,11 @@ type session struct {
 	acceptStreamTimeout time.Time
 
 	started chan any
-	closed  chan any
+	// closing is closed when close is called, so that the read loop does not
+	// stay blocked announcing a stream that nobody accepts.
+	closing   chan any
+	closeOnce sync.Once
+	closed    chan any
 
 	readStreamsClosed bool
 	readStreams       map[uint32]readStream
@@ -104,10 +108,23 @@ func (s *session) removeReadStream(ssrc uint32) {
 	delete(s.readStreams, ssrc)
 }
 
+// announceStream hands a new stream to AcceptStream. It returns false if the
+// session was closed before the stream was accepted.
+func (s *session) announceStream(r readStream) bool {
+	select {
+	case s.newStream <- r:
+		return true
+	case <-s.closing:
+		return false
+	}
+}
+
 func (s *session) close() error {
 	if s.nextConn == nil {
 		return nil
-	} else if err := s.nextConn.Close(); err != nil {
+	}
+	s.closeOnce.Do(func() { close(s.closing) })
+	if err := s.nextConn.Close(); err != nil {
 		return err
 	}
 

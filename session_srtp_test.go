@@ -1020,3 +1020,36 @@ func keyTestKeys(t *testing.T, profile ProtectionProfile) SessionKeys {
 		RemoteMasterSalt: bytes.Repeat([]byte{2}, saltLen),
 	}
 }
+
+func TestSessionSRTPCloseWithUnacceptedStream(t *testing.T) {
+	lim := test.TimeOut(time.Second * 10)
+	defer lim.Stop()
+
+	aSession, bSession := buildSessionSRTPPair(t)
+
+	pkt := &rtp.Packet{
+		Payload: []byte{0x00, 0x01, 0x02, 0x03},
+		Header:  rtp.Header{SSRC: 0x12345678, SequenceNumber: 1},
+	}
+	encrypted, err := encryptSRTP(aSession.session.localContext, pkt)
+	assert.NoError(t, err)
+
+	// Nobody calls AcceptStream on bSession, so the read loop blocks while
+	// announcing the new stream.
+	_, err = aSession.session.nextConn.Write(encrypted)
+	assert.NoError(t, err)
+
+	closed := make(chan struct{})
+	go func() {
+		defer close(closed)
+		assert.NoError(t, bSession.Close())
+	}()
+
+	select {
+	case <-closed:
+	case <-time.After(2 * time.Second):
+		assert.Fail(t, "Close blocked on a stream that was never accepted")
+	}
+
+	assert.NoError(t, aSession.Close())
+}

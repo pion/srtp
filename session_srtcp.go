@@ -58,6 +58,7 @@ func NewSessionSRTCP(conn net.Conn, config *Config) (*SessionSRTCP, error) { //n
 			newStream:           make(chan readStream),
 			acceptStreamTimeout: config.AcceptStreamTimeout,
 			started:             make(chan any),
+			closing:             make(chan any),
 			closed:              make(chan any),
 			bufferFactory:       config.BufferFactory,
 			log:                 loggerFactory.NewLogger("srtp"),
@@ -205,7 +206,9 @@ func (s *SessionSRTCP) decrypt(buf []byte, attrs packetio.Attributes) error {
 				if !s.session.acceptStreamTimeout.IsZero() {
 					_ = s.session.nextConn.SetReadDeadline(time.Time{})
 				}
-				s.session.newStream <- r // Notify AcceptStream
+				if !s.session.announceStream(r) {
+					return nil // Session has been closed
+				}
 			}
 
 			readStream, ok := r.(*ReadStreamSRTCP)
