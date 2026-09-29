@@ -756,3 +756,29 @@ func errIsTimeout(err error) bool {
 
 	return false
 }
+
+func TestSessionSRTCPReadStreamDoubleClose(t *testing.T) {
+	lim := test.TimeOut(time.Second * 5)
+	defer lim.Stop()
+
+	const testSSRC = 5000
+	aSession, bSession := buildSessionSRTCPPair(t)
+
+	first, err := bSession.OpenReadStream(testSSRC)
+	assert.NoError(t, err)
+	assert.NoError(t, first.Close())
+
+	second, err := bSession.OpenReadStream(testSSRC)
+	assert.NoError(t, err)
+	assert.NotSame(t, first, second)
+
+	// A second Close on the stale stream must not remove its replacement.
+	assert.ErrorIs(t, first.Close(), errStreamAlreadyClosed)
+
+	current, err := bSession.OpenReadStream(testSSRC)
+	assert.NoError(t, err)
+	assert.Same(t, second, current)
+
+	assert.NoError(t, aSession.Close())
+	assert.NoError(t, bSession.Close())
+}

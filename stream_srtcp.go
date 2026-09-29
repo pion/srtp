@@ -102,6 +102,7 @@ func (r *ReadStreamSRTCP) Close() error {
 			return err
 		}
 
+		close(r.isClosed)
 		r.session.removeReadStream(r.ssrc)
 
 		return nil
