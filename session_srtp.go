@@ -234,12 +234,7 @@ func (s *SessionSRTP) decrypt(buf []byte, attrs packetio.Attributes) error {
 		return errFailedTypeAssertion
 	}
 
-	_, err = readStream.write(decrypted, attrs)
-	if err != nil {
-		return err
-	}
-
-	return nil
+	return readStream.write(decrypted, attrs)
 }
 
 // UpdateOptions applies opts to both the local and remote Context. Unlike Context.UpdateOptions,

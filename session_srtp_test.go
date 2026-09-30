@@ -17,6 +17,7 @@ import (
 	"github.com/pion/rtp"
 	"github.com/pion/transport/v5/test"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestSessionSRTPBadInit(t *testing.T) {
@@ -183,6 +184,131 @@ func TestSessionSRTPOpenReadStream(t *testing.T) {
 
 	assert.NoError(t, aSession.Close())
 	assert.NoError(t, bSession.Close())
+}
+
+func TestSessionSRTPSetRTX(t *testing.T) {
+	t.Run("new stream", func(t *testing.T) { testSessionSRTPSetRTX(t, false) })
+	t.Run("existing stream", func(t *testing.T) { testSessionSRTPSetRTX(t, true) })
+}
+
+func testSessionSRTPSetRTX(t *testing.T, existing bool) {
+	t.Helper()
+	lim := test.TimeOut(5 * time.Second)
+	defer lim.Stop()
+
+	sender, receiver := buildSessionSRTPPair(t)
+	defer func() {
+		assert.NoError(t, sender.Close())
+		assert.NoError(t, receiver.Close())
+	}()
+
+	const primarySSRC, rtxSSRC = uint32(5000), uint32(5001)
+	stream, err := receiver.OpenReadStream(primarySSRC)
+	require.NoError(t, err)
+	require.NoError(t, stream.SetReadDeadline(time.Now().Add(3*time.Second)))
+	writer, err := sender.OpenWriteStream()
+	require.NoError(t, err)
+
+	if existing {
+		rtx, openErr := receiver.OpenReadStream(rtxSSRC)
+		require.NoError(t, openErr)
+		_, err = writer.WriteRTP(&rtp.Header{SSRC: rtxSSRC, PayloadType: 97, SequenceNumber: 1}, []byte{0, 42, 0xAA})
+		require.NoError(t, err)
+		_, err = rtx.Peek(make([]byte, 1500))
+		require.NoError(t, err)
+		// A caller may use a deadline to stop reading before handing over the stream.
+		require.NoError(t, rtx.SetReadDeadline(time.Now().Add(-time.Second)))
+	}
+
+	// Start reading before setting RTX. No primary RTP is needed to wake the read.
+	started, done := make(chan struct{}), make(chan struct{})
+	go func() {
+		defer close(done)
+		buffer := make([]byte, 1500)
+		close(started)
+		n, header, readErr := stream.ReadRTP(buffer)
+		if assert.NoError(t, readErr) {
+			assert.Equal(t, rtxSSRC, header.SSRC)
+			assert.Equal(t, uint8(97), header.PayloadType)
+			assert.Equal(t, []byte{0, 42, 0xAA}, buffer[header.MarshalSize():n])
+		}
+	}()
+	<-started
+	require.NoError(t, stream.SetRTX(rtxSSRC))
+	require.NoError(t, stream.SetRTX(rtxSSRC))
+	require.ErrorIs(t, stream.SetRTX(rtxSSRC+1), errStreamAlreadyInited)
+	assert.Equal(t, primarySSRC, stream.GetSSRC())
+	_, err = writer.WriteRTP(&rtp.Header{SSRC: rtxSSRC, PayloadType: 97, SequenceNumber: 1}, []byte{0, 42, 0xAA})
+	require.NoError(t, err)
+	<-done
+
+	// The same sequence number on the primary SSRC is not an RTX replay.
+	buffer := make([]byte, 1500)
+	_, err = writer.WriteRTP(&rtp.Header{SSRC: primarySSRC, SequenceNumber: 1}, []byte{0xBB})
+	require.NoError(t, err)
+	_, header, err := stream.ReadRTP(buffer)
+	require.NoError(t, err)
+	assert.Equal(t, primarySSRC, header.SSRC)
+	assert.Equal(t, uint16(1), header.SequenceNumber)
+
+	// Replays on both SSRCs must be discarded before reaching the shared buffer.
+	for _, ssrc := range []uint32{primarySSRC, rtxSSRC} {
+		_, err = writer.WriteRTP(&rtp.Header{SSRC: ssrc, SequenceNumber: 1}, []byte{0xCC})
+		require.NoError(t, err)
+	}
+	_, err = writer.WriteRTP(&rtp.Header{SSRC: rtxSSRC, SequenceNumber: 2}, []byte{0, 43, 0xDD})
+	require.NoError(t, err)
+	_, header, err = stream.ReadRTP(buffer)
+	require.NoError(t, err)
+	assert.Equal(t, rtxSSRC, header.SSRC)
+	assert.Equal(t, uint16(2), header.SequenceNumber)
+
+	other, err := receiver.OpenReadStream(5002)
+	require.NoError(t, err)
+	require.ErrorIs(t, other.SetRTX(rtxSSRC), errStreamAlreadyInited)
+	require.NoError(t, other.Close())
+	require.NoError(t, stream.Close())
+	require.ErrorIs(t, stream.SetRTX(5003), errStreamAlreadyClosed)
+	for _, ssrc := range []uint32{primarySSRC, rtxSSRC} {
+		reopened, openErr := receiver.OpenReadStream(ssrc)
+		require.NoError(t, openErr)
+		assert.NotSame(t, stream, reopened)
+		require.NoError(t, stream.Close())
+		same, openErr := receiver.OpenReadStream(ssrc)
+		require.NoError(t, openErr)
+		assert.Same(t, reopened, same)
+		require.NoError(t, reopened.Close())
+	}
+}
+
+func TestSessionSRTPSetRTXShutdown(t *testing.T) {
+	for _, peerCloses := range []bool{false, true} {
+		name := "local close"
+		if peerCloses {
+			name = "peer close"
+		}
+		t.Run(name, func(t *testing.T) {
+			report := test.CheckRoutines(t)
+			sender, receiver := buildSessionSRTPPair(t)
+			stream, err := receiver.OpenReadStream(5000)
+			require.NoError(t, err)
+			defer func() {
+				assert.NoError(t, stream.Close())
+				assert.NoError(t, sender.Close())
+				assert.NoError(t, receiver.Close())
+			}()
+			_, err = receiver.OpenReadStream(5001)
+			require.NoError(t, err)
+			require.NoError(t, stream.SetRTX(5001))
+			if peerCloses {
+				require.NoError(t, sender.Close())
+			} else {
+				require.NoError(t, receiver.Close())
+			}
+			// Check before stream.Close can clean up a leaked forwarding goroutine.
+			report()
+		})
+	}
 }
 
 func TestSessionSRTPMultiSSRC(t *testing.T) {

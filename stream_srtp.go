@@ -45,15 +45,19 @@ type peekedPacket struct {
 	attributes packetio.Attributes
 }
 
-// ReadStreamSRTP handles decryption for a single RTP SSRC.
+// ReadStreamSRTP receives decrypted RTP for an SSRC and its optional RTX SSRC.
 type ReadStreamSRTP struct {
 	mu sync.Mutex
 
-	isClosed chan bool
+	isClosed bool
 
 	session  *SessionSRTP
 	ssrc     uint32
 	isInited bool
+
+	rtxSSRC   *uint32
+	rtxStream *ReadStreamSRTP
+	isRTX     bool
 
 	buffer        io.ReadWriteCloser
 	peekedPackets []peekedPacket
@@ -79,7 +83,6 @@ func (r *ReadStreamSRTP) init(child streamSession, ssrc uint32) error {
 	r.session = sessionSRTP
 	r.ssrc = ssrc
 	r.isInited = true
-	r.isClosed = make(chan bool)
 
 	// Create a buffer with a 1MB limit
 	if r.session.bufferFactory != nil {
@@ -93,15 +96,15 @@ func (r *ReadStreamSRTP) init(child streamSession, ssrc uint32) error {
 	return nil
 }
 
-func (r *ReadStreamSRTP) write(buf []byte, attrs packetio.Attributes) (n int, err error) {
-	n, err = writeWithAttributes(r.buffer, buf, attrs)
+func (r *ReadStreamSRTP) write(buf []byte, attrs packetio.Attributes) error {
+	_, err := writeWithAttributes(r.buffer, buf, attrs)
 
 	if errors.Is(err, packetio.ErrFull) {
 		// Silently drop data when the buffer is full.
-		return len(buf), nil
+		return nil
 	}
 
-	return n, err
+	return err
 }
 
 // Peek reads and decrypts full RTP packet from the nextConn.
@@ -173,6 +176,65 @@ func (r *ReadStreamSRTP) SetReadDeadline(t time.Time) error {
 	return nil
 }
 
+// SetRTX routes one repair SSRC to this stream without rewriting its packets.
+// Authentication and replay protection remain separate for each SSRC.
+// Repeating the same SSRC is a no-op; changing it is not supported.
+// If the repair stream already exists, stop reading it (including Peek) first.
+// Its read deadline is cleared and the session closes it on shutdown.
+// Closing this stream also closes the repair stream.
+func (r *ReadStreamSRTP) SetRTX(ssrc uint32) error { //nolint:cyclop
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	if !r.isInited {
+		return errStreamNotInited
+	}
+	session := r.session
+	session.readStreamsLock.Lock()
+	defer session.readStreamsLock.Unlock()
+
+	if session.readStreamsClosed || session.readStreams[r.ssrc] != r {
+		return errStreamAlreadyClosed
+	}
+	if r.rtxSSRC != nil && *r.rtxSSRC == ssrc {
+		return nil
+	}
+	if r.isRTX || r.rtxSSRC != nil || ssrc == r.ssrc {
+		return errStreamAlreadyInited
+	}
+	existing := session.readStreams[ssrc]
+	rtx, ok := existing.(*ReadStreamSRTP)
+	if existing != nil && (!ok || rtx.isRTX || rtx.rtxSSRC != nil) {
+		return errStreamAlreadyInited
+	}
+	if rtx != nil {
+		if err := rtx.SetReadDeadline(time.Time{}); err != nil {
+			return err
+		}
+	}
+	r.rtxSSRC, r.rtxStream = &ssrc, rtx
+	if rtx == nil {
+		session.readStreams[ssrc] = r
+
+		return nil
+	}
+	rtx.isRTX = true
+	go func() {
+		buffer := make([]byte, 8192)
+		for {
+			n, attributes, err := rtx.ReadWithAttributes(buffer, nil)
+			if err != nil {
+				return
+			}
+			if err = r.write(buffer[:n], attributes); err != nil {
+				return
+			}
+		}
+	}()
+
+	return nil
+}
+
 // Close removes the ReadStream from the session and cleans up any associated state.
 func (r *ReadStreamSRTP) Close() error {
 	r.mu.Lock()
@@ -182,19 +244,26 @@ func (r *ReadStreamSRTP) Close() error {
 		return errStreamNotInited
 	}
 
-	select {
-	case <-r.isClosed:
-		return errStreamAlreadyClosed
-	default:
-		err := r.buffer.Close()
-		if err != nil {
-			return err
-		}
-
-		r.session.removeReadStream(r.ssrc)
-
+	if r.isClosed {
 		return nil
 	}
+
+	err := r.buffer.Close()
+	if err != nil {
+		return err
+	}
+	if r.rtxStream != nil {
+		if err = r.rtxStream.Close(); err != nil {
+			return err
+		}
+	} else if r.rtxSSRC != nil {
+		r.session.removeReadStream(*r.rtxSSRC)
+	}
+
+	r.session.removeReadStream(r.ssrc)
+	r.isClosed = true
+
+	return nil
 }
 
 // GetSSRC returns the SSRC we are demuxing for.
