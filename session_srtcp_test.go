@@ -444,6 +444,63 @@ func TestSessionSRTCPCompoundPacketWithEmptyDestinationSSRC(t *testing.T) {
 	assert.NoError(t, bSession.Close())
 	assert.NoError(t, bReadStreamSR.Close())
 	assert.NoError(t, bReadStreamRR.Close())
+
+	// Each packet must have been delivered only once to each destination.
+	readBuffer := make([]byte, 200)
+	_, err = bReadStreamSR.Read(readBuffer)
+	assert.ErrorIs(t, err, io.EOF)
+	_, err = bReadStreamRR.Read(readBuffer)
+	assert.ErrorIs(t, err, io.EOF)
+}
+
+func TestSessionSRTCPDuplicateDestinations(t *testing.T) {
+	lim := test.TimeOut(time.Second * 5)
+	defer lim.Stop()
+
+	report := test.CheckRoutines(t)
+	defer report()
+
+	xr := &rtcp.ExtendedReport{SenderSSRC: 1234, Reports: []rtcp.ReportBlock{
+		&rtcp.LossRLEReportBlock{SSRC: 5000, Chunks: []rtcp.Chunk{0x4006, 0x0006}},
+		&rtcp.DuplicateRLEReportBlock{SSRC: 5000, Chunks: []rtcp.Chunk{0x4006, 0x0006}},
+	}}
+	pli := &rtcp.PictureLossIndication{MediaSSRC: 5000}
+	compound, err := rtcp.Marshal([]rtcp.Packet{xr, pli})
+	assert.NoError(t, err)
+
+	aSession, bSession := buildSessionSRTCPPair(t)
+	senderStream, err := bSession.OpenReadStream(1234)
+	assert.NoError(t, err)
+	reportStream, err := bSession.OpenReadStream(5000)
+	assert.NoError(t, err)
+
+	encrypted, err := aSession.session.localContext.EncryptRTCP(nil, compound, nil)
+	assert.NoError(t, err)
+	assert.NoError(t, bSession.decrypt(encrypted, nil))
+	assert.NoError(t, aSession.Close())
+	assert.NoError(t, bSession.Close())
+
+	for _, testCase := range []struct {
+		stream   *ReadStreamSRTCP
+		expected []rtcp.Packet
+	}{
+		{senderStream, []rtcp.Packet{xr}},
+		// Repeated SSRCs within the XR must not duplicate delivery, but
+		// the separate PLI for that SSRC must still be delivered.
+		{reportStream, []rtcp.Packet{xr, pli}},
+	} {
+		assert.NoError(t, testCase.stream.Close())
+		readBuffer := make([]byte, 200)
+		for _, packet := range testCase.expected {
+			expected, marshalErr := packet.Marshal()
+			assert.NoError(t, marshalErr)
+			n, readErr := testCase.stream.Read(readBuffer)
+			assert.NoError(t, readErr)
+			assert.Equal(t, expected, readBuffer[:n])
+		}
+		_, readErr := testCase.stream.Read(readBuffer)
+		assert.ErrorIs(t, readErr, io.EOF)
+	}
 }
 
 func TestSessionSRTCPDecryptInvalidRTCP(t *testing.T) {
@@ -465,48 +522,78 @@ func TestSessionSRTCPDecryptInvalidRTCP(t *testing.T) {
 	assert.NoError(t, bSession.Close())
 }
 
-func TestSessionSRTCPDecryptRemarshalFailure(t *testing.T) {
+func TestSessionSRTCPDecryptDestinationParseFailure(t *testing.T) {
 	lim := test.TimeOut(time.Second * 5)
 	defer lim.Stop()
 
 	report := test.CheckRoutines(t)
 	defer report()
 
-	aSession, bSession := buildSessionSRTCPPair(t)
-
-	bReadStream, err := bSession.OpenReadStream(5000)
-	assert.NoError(t, err)
-
-	// Application defined packet whose data is too large to remarshal
-	// (rtcp.ApplicationDefined.Marshal allows less data than a maximum
-	// length header can describe).
-	oversizedAppPacket := make([]byte, 65540)
-	oversizedAppPacket[0] = 0x80 // version 2
-	oversizedAppPacket[1] = 0xcc // packet type 204 (application defined)
-	oversizedAppPacket[2] = 0x40 // length 0x4000, i.e. (0x4000+1)*4 == 65540 bytes
-	oversizedAppPacket[3] = 0x00
-	copy(oversizedAppPacket[8:12], "name")
-
-	// A packet that fails to remarshal is skipped, the remaining packets in
-	// the compound are still forwarded.
+	// Valid framing, but the CNAME length exceeds the packet. Destination
+	// parsing appends SSRC 6000 before discovering the malformed item.
+	invalidSDES := []byte{
+		0x81, 0xca, 0x00, 0x02,
+		0x00, 0x00, 0x17, 0x70,
+		0x01, 0xff, 0x00, 0x00,
+	}
 	pli, err := (&rtcp.PictureLossIndication{MediaSSRC: 5000}).Marshal()
 	assert.NoError(t, err)
-	compound := make([]byte, 0, len(oversizedAppPacket)+len(pli))
-	compound = append(compound, oversizedAppPacket...)
-	compound = append(compound, pli...)
+	unknown := []byte{0x80, 0xdd, 0x00, 0x01, 0x01, 0x02, 0x03, 0x04}
 
-	encrypted, err := aSession.session.localContext.EncryptRTCP(nil, compound, nil)
-	assert.NoError(t, err)
-	assert.Error(t, bSession.decrypt(encrypted, nil))
+	for _, testCase := range []struct {
+		name     string
+		packets  [][]byte
+		expected [][]byte
+	}{
+		{
+			name:     "continue after parse failure",
+			packets:  [][]byte{invalidSDES, pli},
+			expected: [][]byte{pli},
+		},
+		{
+			name:     "discard partial fallback destinations",
+			packets:  [][]byte{pli, invalidSDES, unknown},
+			expected: [][]byte{pli, unknown},
+		},
+	} {
+		t.Run(testCase.name, func(t *testing.T) {
+			aSession, bSession := buildSessionSRTCPPair(t)
 
-	readBuffer := make([]byte, len(pli))
-	n, _, err := bReadStream.ReadRTCP(readBuffer)
-	assert.NoError(t, err)
-	assert.Equal(t, pli, readBuffer[:n])
+			// Pre-open both streams so incorrect routing fails an assertion
+			// instead of blocking while waiting for AcceptStream.
+			readStream, err := bSession.OpenReadStream(5000)
+			assert.NoError(t, err)
+			invalidReadStream, err := bSession.OpenReadStream(6000)
+			assert.NoError(t, err)
 
-	assert.NoError(t, aSession.Close())
-	assert.NoError(t, bSession.Close())
-	assert.NoError(t, bReadStream.Close())
+			var compound []byte
+			for _, packet := range testCase.packets {
+				compound = append(compound, packet...)
+			}
+			encrypted, err := aSession.session.localContext.EncryptRTCP(nil, compound, nil)
+			assert.NoError(t, err)
+			assert.Error(t, bSession.decrypt(encrypted, nil))
+
+			// Closing the buffers allows checking for unexpected packets
+			// without blocking after the queued packets have been read.
+			assert.NoError(t, readStream.Close())
+			assert.NoError(t, invalidReadStream.Close())
+
+			readBuffer := make([]byte, 200)
+			for _, expected := range testCase.expected {
+				n, readErr := readStream.Read(readBuffer)
+				assert.NoError(t, readErr)
+				assert.Equal(t, expected, readBuffer[:n])
+			}
+			_, err = readStream.Read(readBuffer)
+			assert.ErrorIs(t, err, io.EOF)
+			_, err = invalidReadStream.Read(readBuffer)
+			assert.ErrorIs(t, err, io.EOF)
+
+			assert.NoError(t, aSession.Close())
+			assert.NoError(t, bSession.Close())
+		})
+	}
 }
 
 func TestSessionSRTCPDecryptClosedSession(t *testing.T) {
@@ -725,6 +812,96 @@ func TestSessionSRTCPFailedAuthDoesNotGrowStreams(t *testing.T) {
 
 	assert.NoError(t, aSession.Close())
 	assert.NoError(t, bSession.Close())
+}
+
+func TestSessionSRTCPReadWriteDoesNotAllocate(t *testing.T) {
+	const testSSRC = 5000
+
+	packets := []rtcp.Packet{
+		&rtcp.SenderReport{SSRC: testSSRC},
+		&rtcp.SourceDescription{Chunks: []rtcp.SourceDescriptionChunk{
+			{Source: testSSRC, Items: []rtcp.SourceDescriptionItem{{Type: rtcp.SDESCNAME, Text: "test"}}},
+		}},
+		&rtcp.RawPacket{0x80, 0xdd, 0x00, 0x01, 0x01, 0x02, 0x03, 0x04},
+	}
+
+	for name, replayOptions := range map[string][]ContextOption{
+		"NoReplayProtection": {SRTCPNoReplayProtection()},
+		"ReplayProtection":   {SRTCPReplayProtection(64)},
+	} {
+		t.Run(name, func(t *testing.T) {
+			lim := test.TimeOut(time.Second * 5)
+			defer lim.Stop()
+
+			report := test.CheckRoutines(t)
+			defer report()
+
+			testPayload, err := rtcp.Marshal(packets)
+			assert.NoError(t, err)
+			readBuffer := make([]byte, len(testPayload))
+
+			// Use GCM as in TestSessionSRTPReadWriteDoesNotAllocate to avoid
+			// the CTR pool's allocations under the race detector.
+			config := &Config{
+				Profile: ProtectionProfileAeadAes128Gcm,
+				Keys: SessionKeys{
+					[]byte{0xE1, 0xF9, 0x7A, 0x0D, 0x3E, 0x01, 0x8B, 0xE0, 0xD6, 0x4F, 0xA3, 0x2C, 0x06, 0xDE, 0x41, 0x39},
+					[]byte{0x0E, 0xC6, 0x75, 0xAD, 0x49, 0x8A, 0xFE, 0xEB, 0xB6, 0x96, 0x0B, 0x3A},
+					[]byte{0xE1, 0xF9, 0x7A, 0x0D, 0x3E, 0x01, 0x8B, 0xE0, 0xD6, 0x4F, 0xA3, 0x2C, 0x06, 0xDE, 0x41, 0x39},
+					[]byte{0x0E, 0xC6, 0x75, 0xAD, 0x49, 0x8A, 0xFE, 0xEB, 0xB6, 0x96, 0x0B, 0x3A},
+				},
+				LocalOptions:  replayOptions,
+				RemoteOptions: replayOptions,
+			}
+			aPipe, bPipe := net.Pipe()
+			aSession, err := NewSessionSRTCP(aPipe, config)
+			assert.NoError(t, err)
+			bSession, err := NewSessionSRTCP(bPipe, config)
+			assert.NoError(t, err)
+
+			bReadStream, err := bSession.OpenReadStream(testSSRC)
+			assert.NoError(t, err)
+			aWriteStream, err := aSession.OpenWriteStream()
+			assert.NoError(t, err)
+
+			roundTrip := func() (int, error) {
+				if _, err := aWriteStream.Write(testPayload); err != nil {
+					return 0, err
+				}
+
+				var total int
+				for range packets {
+					n, readErr := bReadStream.Read(readBuffer[total:])
+					if readErr != nil {
+						return 0, readErr
+					}
+					total += n
+				}
+
+				return total, nil
+			}
+
+			for range 100 {
+				_, err := roundTrip()
+				assert.NoError(t, err)
+			}
+
+			var roundTripErr error
+			allocs := testing.AllocsPerRun(1000, func() {
+				if _, err := roundTrip(); err != nil {
+					roundTripErr = err
+				}
+			})
+
+			assert.NoError(t, roundTripErr)
+			assert.Zero(t, allocs)
+			assert.Equal(t, testPayload, readBuffer)
+
+			assert.NoError(t, aSession.Close())
+			assert.NoError(t, bSession.Close())
+			assert.NoError(t, bReadStream.Close())
+		})
+	}
 }
 
 func encryptSRTCP(context *Context, pkt rtcp.Packet) ([]byte, error) {
