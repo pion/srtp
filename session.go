@@ -144,14 +144,6 @@ func (s *session) start(
 			s.readStreamsLock.Lock()
 			s.readStreamsClosed = true
 			s.readStreamsLock.Unlock()
-			// The map is now immutable. Stop the readers owned by SetRTX.
-			for _, stream := range s.readStreams {
-				if rtx, ok := stream.(*ReadStreamSRTP); ok && rtx.isRTX {
-					if closeErr := rtx.Close(); closeErr != nil {
-						s.log.Error(closeErr.Error())
-					}
-				}
-			}
 			close(s.closed)
 		}()
 
