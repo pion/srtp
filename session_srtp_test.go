@@ -281,6 +281,41 @@ func testSessionSRTPSetRTX(t *testing.T, existing bool) {
 	}
 }
 
+func TestSessionSRTPSelectRTXWithoutReaderGoroutine(t *testing.T) {
+	checkRoutines := test.CheckRoutines(t)
+	session := &SessionSRTP{session: session{readStreams: map[uint32]readStream{}}}
+	primary, err := session.OpenReadStream(5000)
+	require.NoError(t, err)
+	defer func() { assert.NoError(t, primary.Close()) }()
+	repair, err := session.OpenReadStream(5001)
+	require.NoError(t, err)
+	require.NoError(t, repair.write([]byte{2}, nil))
+	require.NoError(t, primary.SetRTX(5001))
+	require.NoError(t, primary.write([]byte{1}, nil))
+	require.NoError(t, primary.SetReadDeadline(time.Now().Add(time.Second)))
+	selected, err := primary.NextStream()
+	require.NoError(t, err)
+	assert.Same(t, repair, selected)
+	// Selection does not consume anything. A per-SSRC reader can advance independently.
+	buffer := make([]byte, 1500)
+	n, err := primary.SourceReader().Read(buffer)
+	require.NoError(t, err)
+	assert.Equal(t, []byte{1}, buffer[:n])
+	selected, err = primary.NextStream()
+	require.NoError(t, err)
+	assert.Same(t, repair, selected)
+	n, err = repair.SourceReader().Read(buffer)
+	require.NoError(t, err)
+	assert.Equal(t, []byte{2}, buffer[:n])
+	// The combined reader shares consumption with both source handles.
+	require.NoError(t, repair.write([]byte{3}, nil))
+	n, err = primary.Read(buffer)
+	require.NoError(t, err)
+	assert.Equal(t, []byte{3}, buffer[:n])
+	// Check while the streams are open, before cleanup can stop a forwarding reader.
+	checkRoutines()
+}
+
 func TestSessionSRTPSetRTXShutdown(t *testing.T) {
 	for _, peerCloses := range []bool{false, true} {
 		name := "local close"

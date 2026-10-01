@@ -40,11 +40,11 @@ func TestPeek(t *testing.T) {
 	secondBuffer := []byte{0xBB, 0xBB, 0xBB}
 	thirdBuffer := []byte{0xCC, 0xCC, 0xCC}
 
-	buffer := &packetBuffer{Buffer: packetio.NewBuffer()}
-	stream := &ReadStreamSRTP{buffer: buffer}
+	stream := &ReadStreamSRTP{}
+	assert.NoError(t, stream.init(&SessionSRTP{}, 1234))
 
 	t.Run("Short Peek", func(t *testing.T) {
-		_, err := buffer.Write(firstBuffer)
+		err := stream.write(firstBuffer, nil)
 		assert.NoError(t, err)
 
 		readBuff := make([]byte, 1)
@@ -53,7 +53,7 @@ func TestPeek(t *testing.T) {
 	})
 
 	t.Run("Short Read", func(t *testing.T) {
-		_, err := buffer.Write(firstBuffer)
+		err := stream.write(firstBuffer, nil)
 		assert.NoError(t, err)
 
 		readBuff := make([]byte, 6)
@@ -74,7 +74,7 @@ func TestPeek(t *testing.T) {
 	})
 
 	t.Run("Single Peek", func(t *testing.T) {
-		_, err := buffer.Write(firstBuffer)
+		err := stream.write(firstBuffer, nil)
 		assert.NoError(t, err)
 
 		readBuff := make([]byte, 6)
@@ -91,13 +91,13 @@ func TestPeek(t *testing.T) {
 	})
 
 	t.Run("Multi Peek", func(t *testing.T) {
-		_, err := buffer.Write(firstBuffer)
+		err := stream.write(firstBuffer, nil)
 		assert.NoError(t, err)
 
-		_, err = buffer.Write(secondBuffer)
+		err = stream.write(secondBuffer, nil)
 		assert.NoError(t, err)
 
-		_, err = buffer.Write(thirdBuffer)
+		err = stream.write(thirdBuffer, nil)
 		assert.NoError(t, err)
 
 		readBuff := make([]byte, 6)
