@@ -6,6 +6,7 @@ package srtp
 import (
 	"errors"
 	"net"
+	"slices"
 	"time"
 
 	"github.com/pion/logging"
@@ -22,6 +23,18 @@ const defaultSessionSRTCPReplayProtectionWindow = 64
 type SessionSRTCP struct {
 	session
 	writeStream *WriteStreamSRTCP
+
+	// rawPackets is a scratch slice used in decrypt to avoid allocations, and should only
+	// be used by decrypt() and not aliased or otherwise returned to a caller.
+	rawPackets []rtcp.RawPacket
+
+	// destinationSSRCs is a scratch slice used internally in decrypt to avoid allocations.
+	destinationSSRCs []uint32
+
+	// compoundSSRCs is a scratch slice used internally in decrypt to avoid allocations. It
+	// is lazily populated upon receiving an unknown RTCP type with the SSRCs of all known
+	// types in a compound RTCP packet.
+	compoundSSRCs []uint32
 }
 
 // NewSessionSRTCP creates a SRTCP session using conn as the underlying transport.
@@ -143,23 +156,45 @@ func (s *SessionSRTCP) setWriteDeadline(t time.Time) error {
 	return s.session.nextConn.SetWriteDeadline(t)
 }
 
-// create a list of Destination SSRCs that's a superset of all Destinations in the given packets.
-func destinationSSRC(pkts ...rtcp.Packet) []uint32 {
-	ssrcSet := make(map[uint32]struct{})
+// dedupeSSRCs sorts and removes duplicate SSRCs in place, preserving capacity.
+func dedupeSSRCs(ssrcs []uint32) []uint32 {
+	// Note: sort + compact was chosen over the more obvious choice
+	// of using a map to dedupe for two reasons:
+	//  - It is more performant on small slices (length under ~100,
+	//    which will be almost all inputs)
+	//  - To avoid allocations, the map would need to be reused, and
+	//    if it ever grew large then subsequent small dedupes would
+	//    have degraded performance due to needing to clear a larger
+	//    map.
+	if len(ssrcs) < 2 {
+		return ssrcs
+	}
+	slices.Sort(ssrcs)
+
+	return slices.Compact(ssrcs)
+}
+
+// appendDestinationSSRCs appends destinations from packets whose SSRCs can be parsed.
+func appendDestinationSSRCs(dst []uint32, pkts []rtcp.RawPacket) []uint32 {
 	for _, pkt := range pkts {
-		for _, ssrc := range pkt.DestinationSSRC() {
-			ssrcSet[ssrc] = struct{}{}
+		ssrcCount := len(dst)
+		var err error
+		dst, err = pkt.ParseDestinationSSRC(dst)
+		if err != nil {
+			// A failed parse may have appended partial destinations.
+			dst = dst[:ssrcCount]
 		}
 	}
 
-	out := make([]uint32, 0, len(ssrcSet))
-	for ssrc := range ssrcSet {
-		out = append(out, ssrc)
-	}
+	dst = dedupeSSRCs(dst)
 
-	return out
+	return dst
 }
 
+// decrypt is called synchronously by the session's read loop and must not
+// be called concurrently. It reuses scratch buffers that are not protected
+// by a mutex.
+//
 //nolint:cyclop
 func (s *SessionSRTCP) decrypt(buf []byte, attrs packetio.Attributes) error {
 	s.session.remoteContextMutex.Lock()
@@ -169,32 +204,34 @@ func (s *SessionSRTCP) decrypt(buf []byte, attrs packetio.Attributes) error {
 		return err
 	}
 
-	pkts, err := rtcp.Unmarshal(decrypted)
+	s.rawPackets, err = rtcp.AppendRawPackets(s.rawPackets[:0], decrypted)
 	if err != nil {
 		return err
 	}
+	pkts := s.rawPackets
 
-	var compoundSSRCs []uint32
-	var marshalErrs error
+	compoundSSRCsComputed := false
+	var parseErrs error
 	for _, pkt := range pkts {
-		marshaled, err := pkt.Marshal()
+		s.destinationSSRCs, err = pkt.ParseDestinationSSRC(s.destinationSSRCs[:0])
 		if err != nil {
-			// Skip the packet that failed to remarshal so the remaining
-			// packets in the compound are still forwarded.
-			marshalErrs = errors.Join(marshalErrs, err)
+			// Skip packets whose destination SSRCs could not be parsed so
+			// the remaining packets in the compound are still forwarded.
+			parseErrs = errors.Join(parseErrs, err)
 
 			continue
 		}
 
-		destinations := destinationSSRC(pkt)
+		destinations := dedupeSSRCs(s.destinationSSRCs)
 		if len(destinations) == 0 {
 			// Packets without a destination of their own (e.g. unknown packet
 			// types parsed as rtcp.RawPacket) are delivered to every stream the
 			// compound packet is addressed to instead of being dropped.
-			if compoundSSRCs == nil {
-				compoundSSRCs = destinationSSRC(pkts...)
+			if !compoundSSRCsComputed {
+				s.compoundSSRCs = appendDestinationSSRCs(s.compoundSSRCs[:0], pkts)
+				compoundSSRCsComputed = true
 			}
-			destinations = compoundSSRCs
+			destinations = s.compoundSSRCs
 		}
 
 		for _, ssrc := range destinations {
@@ -213,14 +250,14 @@ func (s *SessionSRTCP) decrypt(buf []byte, attrs packetio.Attributes) error {
 				return errFailedTypeAssertion
 			}
 
-			_, err = readStream.write(marshaled, attrs)
+			_, err = readStream.write(pkt, attrs)
 			if err != nil {
 				return err
 			}
 		}
 	}
 
-	return marshalErrs
+	return parseErrs
 }
 
 // UpdateKey resets packet state with fresh keys.
