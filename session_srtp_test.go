@@ -28,6 +28,27 @@ func TestSessionSRTPBadInit(t *testing.T) {
 	assert.Error(t, err, "NewSessionSRTP should error if no net was provided")
 }
 
+func TestSessionSRTPCloseWithoutAcceptStream(t *testing.T) {
+	lim := test.TimeOut(5 * time.Second)
+	defer lim.Stop()
+
+	report := test.CheckRoutines(t)
+	defer report()
+
+	sender, receiver := buildSessionSRTPPair(t)
+	defer func() { require.NoError(t, sender.Close()) }()
+
+	writer, err := sender.OpenWriteStream()
+	require.NoError(t, err)
+	_, err = writer.WriteRTP(&rtp.Header{
+		Version: 2,
+		SSRC:    5000,
+	}, []byte{0x00, 0x01, 0x03, 0x04})
+	require.NoError(t, err)
+
+	require.NoError(t, receiver.Close())
+}
+
 func buildSessionSRTP(t *testing.T) (*SessionSRTP, net.Conn, *Config) { //nolint:dupl
 	t.Helper()
 
