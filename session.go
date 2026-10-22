@@ -111,6 +111,9 @@ func (s *session) close() error {
 		return err
 	}
 
+	for range s.newStream {
+	}
+
 	<-s.closed
 
 	return nil
