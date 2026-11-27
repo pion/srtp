@@ -25,8 +25,64 @@ type ReadStreamSRTCP struct {
 	session  *SessionSRTCP
 	ssrc     uint32
 	isInited bool
+	rtxSSRC  *uint32
 
 	buffer io.ReadWriteCloser
+}
+
+// SetRTX makes RTCP addressed to ssrc arrive on this stream as well, so one
+// reader sees feedback for both the media SSRC and its RTX SSRC.
+// Repeating the same SSRC is a no-op; changing it is not supported.
+func (r *ReadStreamSRTCP) SetRTX(ssrc uint32) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	if !r.isInited {
+		return errStreamNotInited
+	}
+	session := r.session
+	session.readStreamsLock.Lock()
+	defer session.readStreamsLock.Unlock()
+
+	if session.readStreamsClosed || session.readStreams[r.ssrc] != r {
+		return errStreamAlreadyClosed
+	}
+	if r.rtxSSRC != nil && *r.rtxSSRC == ssrc {
+		return errStreamAlreadyInited
+	}
+	if r.rtxSSRC != nil || ssrc == r.ssrc {
+		return errStreamAlreadyInited
+	}
+	if existing, exists := session.readStreams[ssrc]; exists {
+		old, ok := existing.(*ReadStreamSRTCP)
+		if !ok {
+			return errStreamAlreadyInited
+		}
+
+		// decrypt made this stream before SetRTX ran. Move the packets it
+		// already holds into this stream, then retire it. Only read while
+		// Count() reports packets, so Read never blocks here.
+		if counter, ok := old.buffer.(interface{ Count() int }); ok {
+			buf := make([]byte, 8192)
+			for counter.Count() > 0 {
+				n, attrs, err := old.ReadWithAttributes(buf, nil)
+				if err != nil {
+					break
+				}
+				if _, err = r.write(buf[:n], attrs); err != nil {
+					return err
+				}
+			}
+		}
+		if err := old.buffer.Close(); err != nil {
+			return err
+		}
+	}
+
+	session.readStreams[ssrc] = r
+	r.rtxSSRC = &ssrc
+
+	return nil
 }
 
 func (r *ReadStreamSRTCP) write(buf []byte, attrs packetio.Attributes) (n int, err error) {
@@ -103,7 +159,9 @@ func (r *ReadStreamSRTCP) Close() error {
 		}
 
 		r.session.removeReadStream(r.ssrc)
-
+		if r.rtxSSRC != nil {
+			r.session.removeReadStream(*r.rtxSSRC)
+		}
 		return nil
 	}
 }

@@ -35,6 +35,11 @@ type SessionSRTCP struct {
 	// is lazily populated upon receiving an unknown RTCP type with the SSRCs of all known
 	// types in a compound RTCP packet.
 	compoundSSRCs []uint32
+
+	// writtenStreams is a scratch slice used internally in decrypt: the streams
+	// that already received the current packet, so a stream that is registered
+	// under two SSRCs (see SetRTX) gets it once.
+	writtenStreams []*ReadStreamSRTCP
 }
 
 // NewSessionSRTCP creates a SRTCP session using conn as the underlying transport.
@@ -213,6 +218,8 @@ func (s *SessionSRTCP) decrypt(buf []byte, attrs packetio.Attributes) error {
 	compoundSSRCsComputed := false
 	var parseErrs error
 	for _, pkt := range pkts {
+		clear(s.writtenStreams)
+		s.writtenStreams = s.writtenStreams[:0]
 		s.destinationSSRCs, err = pkt.ParseDestinationSSRC(s.destinationSSRCs[:0])
 		if err != nil {
 			// Skip packets whose destination SSRCs could not be parsed so
@@ -245,11 +252,21 @@ func (s *SessionSRTCP) decrypt(buf []byte, attrs packetio.Attributes) error {
 				s.session.newStream <- r // Notify AcceptStream
 			}
 
+			r, _ = s.session.getOrCreateReadStream(ssrc, s, newReadStreamSRTCP)
+			if r == nil {
+				return nil
+			}
+
 			readStream, ok := r.(*ReadStreamSRTCP)
 			if !ok {
 				return errFailedTypeAssertion
 			}
 
+			if slices.Contains(s.writtenStreams, readStream) {
+				continue //already delivered through its other SSRC
+			}
+
+			s.writtenStreams = append(s.writtenStreams, readStream)
 			_, err = readStream.write(pkt, attrs)
 			if err != nil {
 				return err
