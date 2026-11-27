@@ -59,20 +59,19 @@ func (r *ReadStreamSRTCP) SetRTX(ssrc uint32) error {
 			return errStreamAlreadyInited
 		}
 
-		// decrypt made this inbox before SetRTX ran. Move what is already in
-		// it into this stream, then retire it. An expired deadline makes the
-		// read return at once when the old inbox is empty.
-		if err := old.SetReadDeadline(time.Unix(1, 0)); err != nil {
-			return err
-		}
-		buf := make([]byte, 8192)
-		for {
-			n, attrs, err := old.ReadWithAttributes(buf, nil)
-			if err != nil {
-				break // empty (timeout) or closed
-			}
-			if _, err = r.write(buf[:n], attrs); err != nil {
-				return err
+		// decrypt made this stream before SetRTX ran. Move the packets it
+		// already holds into this stream, then retire it. Only read while
+		// Count() reports packets, so Read never blocks here.
+		if counter, ok := old.buffer.(interface{ Count() int }); ok {
+			buf := make([]byte, 8192)
+			for counter.Count() > 0 {
+				n, attrs, err := old.ReadWithAttributes(buf, nil)
+				if err != nil {
+					break
+				}
+				if _, err = r.write(buf[:n], attrs); err != nil {
+					return err
+				}
 			}
 		}
 		if err := old.buffer.Close(); err != nil {

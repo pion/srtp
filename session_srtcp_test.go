@@ -1005,3 +1005,52 @@ func TestSessionSRTCPSetRTX(t *testing.T) {
 	require.NoError(t, err)
 	assert.NotSame(t, stream, again)
 }
+
+func TestSessionSRTCPSetRTXExistingStream(t *testing.T) {
+	lim := test.TimeOut(5 * time.Second)
+	defer lim.Stop()
+
+	sender, receiver := buildSessionSRTCPPair(t)
+	defer func() {
+		assert.NoError(t, sender.Close())
+		assert.NoError(t, receiver.Close())
+	}()
+
+	const primarySSRC, rtxSSRC = uint32(5000), uint32(5001)
+
+	stream, err := receiver.OpenReadStream(primarySSRC)
+	require.NoError(t, err)
+
+	// A stream for the RTX SSRC exists already, like the one decrypt creates
+	// for an unknown SSRC, and it holds a packet.
+	existing, err := receiver.OpenReadStream(rtxSSRC)
+	require.NoError(t, err)
+
+	writer, err := sender.OpenWriteStream()
+	require.NoError(t, err)
+	raw, err := rtcp.Marshal([]rtcp.Packet{
+		&rtcp.PictureLossIndication{SenderSSRC: 1, MediaSSRC: rtxSSRC},
+	})
+	require.NoError(t, err)
+	_, err = writer.Write(raw)
+	require.NoError(t, err)
+
+	require.Eventually(t, func() bool {
+		counter, ok := existing.buffer.(interface{ Count() int })
+
+		return ok && counter.Count() > 0
+	}, time.Second, time.Millisecond)
+
+	require.NoError(t, stream.SetRTX(rtxSSRC))
+
+	require.NoError(t, stream.SetReadDeadline(time.Now().Add(2*time.Second)))
+	buf := make([]byte, 1500)
+	n, err := stream.Read(buf)
+	require.NoError(t, err)
+	pkts, err := rtcp.Unmarshal(buf[:n])
+	require.NoError(t, err)
+	require.Len(t, pkts, 1)
+	pli, ok := pkts[0].(*rtcp.PictureLossIndication)
+	require.True(t, ok)
+	assert.Equal(t, rtxSSRC, pli.MediaSSRC)
+}
