@@ -15,6 +15,7 @@ import (
 	"github.com/pion/rtcp"
 	"github.com/pion/transport/v5/test"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 const rtcpHeaderSize = 4
@@ -932,4 +933,75 @@ func errIsTimeout(err error) bool {
 	}
 
 	return false
+}
+
+func TestSessionSRTCPSetRTX(t *testing.T) {
+	lim := test.TimeOut(5 * time.Second)
+	defer lim.Stop()
+
+	sender, receiver := buildSessionSRTCPPair(t)
+	defer func() {
+		assert.NoError(t, sender.Close())
+		assert.NoError(t, receiver.Close())
+	}()
+
+	const primarySSRC, rtxSSRC = uint32(5000), uint32(5001)
+
+	stream, err := receiver.OpenReadStream(primarySSRC)
+	require.NoError(t, err)
+	defer stream.Close()
+
+	require.NoError(t, stream.SetReadDeadline(time.Now().Add(3*time.Second)))
+	require.NoError(t, stream.SetRTX(rtxSSRC))
+
+	writer, err := sender.OpenWriteStream()
+	require.NoError(t, err)
+
+	write := func(pkts ...rtcp.Packet) {
+		raw, err := rtcp.Marshal(pkts)
+		require.NoError(t, err)
+		_, err = writer.Write(raw)
+		require.NoError(t, err)
+	}
+
+	read := func() rtcp.Packet {
+		buf := make([]byte, 1500)
+		n, err := stream.Read(buf)
+		require.NoError(t, err)
+
+		pkts, err := rtcp.Unmarshal(buf[:n])
+		require.NoError(t, err)
+		require.Len(t, pkts, 1)
+
+		return pkts[0]
+	}
+
+	// One compound RTCP packet references both SSRCs.
+	write(
+		&rtcp.ReceiverReport{
+			SSRC: 1,
+			Reports: []rtcp.ReceptionReport{
+				{SSRC: primarySSRC},
+				{SSRC: rtxSSRC},
+			},
+		},
+		&rtcp.PictureLossIndication{
+			SenderSSRC: 1,
+			MediaSSRC:  primarySSRC,
+		},
+	)
+
+	// Both RTCP packets must arrive exactly once.
+	_, ok := read().(*rtcp.ReceiverReport)
+	require.True(t, ok)
+
+	_, ok = read().(*rtcp.PictureLossIndication)
+	require.True(t, ok)
+
+	// Closing the stream frees both SSRC mappings.
+	require.NoError(t, stream.Close())
+
+	again, err := receiver.OpenReadStream(rtxSSRC)
+	require.NoError(t, err)
+	assert.NotSame(t, stream, again)
 }
